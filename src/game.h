@@ -26,6 +26,7 @@ typedef struct {
     int title;                                   /* title screen */
     const char *menu_title, *menu_item[4], *menu_note; int menu_n, menu_sel;
     const char *dlg_who, *dlg_l1, *dlg_l2;       /* story dialogue page */
+    int cutscene;                                /* letterbox the dialogue */
 } GameHud;
 void hud_draw(u16 *fb);
 typedef struct { s16 x, y; u8 g, bank, scale, pad; } TxtObj;

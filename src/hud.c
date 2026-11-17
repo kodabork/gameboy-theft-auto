@@ -176,7 +176,8 @@ void hud_draw(u16 *fb)
         return;
     }
     if (g_hud.dlg_l1) {                          /* story dialogue */
-        shade_band(112, 156);
+        if (g_hud.cutscene) { rect(0, 0, 240, 12, COL_BLACK); rect(0, 113, 240, 47, COL_BLACK); }
+        else shade_band(112, 156);
         if (g_hud.dlg_who && g_hud.dlg_who[0]) text(8, 116, g_hud.dlg_who, COL_YELLOW, 1);
         text(8, 128, g_hud.dlg_l1, COL_WHITE, 1);
         if (g_hud.dlg_l2) text(8, 138, g_hud.dlg_l2, COL_WHITE, 1);
@@ -231,10 +232,10 @@ void hud_draw(u16 *fb)
     }
     /* messages */
     if (g_hud.msg_t > 0) {
-        if (g_hud.msg1) text_center(62, g_hud.msg1, COL_WHITE, 1);
-        if (g_hud.msg2) text_center(71, g_hud.msg2, COL_WHITE, 1);
+        if (g_hud.msg1) text_center(42, g_hud.msg1, COL_WHITE, 1);       /* up in the sky, off the road */
+        if (g_hud.msg2) text_center(51, g_hud.msg2, COL_WHITE, 1);
     }
-    if (g_hud.big_t > 0 && g_hud.big) text_center(38, g_hud.big, g_hud.big_color ? COL_YELLOW : COL_RED, 2);
+    if (g_hud.big_t > 0 && g_hud.big) text_center(64, g_hud.big, g_hud.big_color ? COL_YELLOW : COL_RED, 2);
 }
 
 /* ------------------------------------------------------------- radar */

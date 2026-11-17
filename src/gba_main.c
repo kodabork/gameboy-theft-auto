@@ -22,6 +22,9 @@ extern void irq_handler(void);
 
 EWRAM_BSS static Sprite sprs[MAX_SPRITES];
 volatile u8 flip_req;
+/* buttons are latched at every VBlank, so a quick tap is never lost between game frames */
+volatile u16 key_seen;
+void key_latch(void) { key_seen |= (u16)(~REG_KEYINPUT & 0x03FF); }
 /* tells emulators and flash carts that this cartridge has 32 KB of battery SRAM */
 __attribute__((used, aligned(4))) const char sram_tag[] = "SRAM_V113";
 
@@ -119,7 +122,8 @@ int main(void)
     for (int i = 0; i < 16; i++) PAL_OBJ[16 + i] = radar_pal[i];
     REG_DISPCNT = 0x0004 | 0x0400 | 0x1000 | 0x0040;   /* mode 4, BG2, OBJ, 1D */
     for (;;) {
-        u16 keys = (u16)(~REG_KEYINPUT & 0x03FF);
+        u16 keys = (u16)((~REG_KEYINPUT & 0x03FF) | key_seen);
+        key_seen = 0;
         if (((keys & ~prev) & KEY_START) && (keys & KEY_SELECT)) show_fps ^= 1;
         prev = keys;
         u16 now = REG_TM2D;

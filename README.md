@@ -16,7 +16,28 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
-## What's new in v0.18
+## What's new in v0.19
+- **New story and missions.** The races are gone; all nine jobs are now crime jobs, tied together by
+  one story (see the table below)
+- **Cutscenes.** Every job starts with an in-engine cutscene at its marker: letterbox bars, the
+  mission giver standing in the street facing Eddie, an establishing shot, then over-the-shoulder
+  cuts to whoever is talking. The game opens and ends the same way
+- **Objective text moved** up into the sky, off the road, and the checkpoint counter is gone
+- Button taps are latched every screen refresh, so a quick press in a cutscene or menu is never lost
+
+| # | Job | Giver | What you do | Pay |
+|---|-----|-------|-------------|-----|
+| 1 | Hot Wheels | Marta | Steal a yellow supercar and bring it to her garage | $500 |
+| 2 | Candy Run | Jinx | Collect a package at the docks; the cops see the handoff; get it to the club in 100 s | $800 |
+| 3 | The Bookkeeper | Moran | Kill the bookkeeper in the suit and get past his three bodyguards | $1,500 |
+| 4 | Wrong Corner | Moran | Burn the Eastside Kings' three cars on Moran's corner while they shoot back | $1,800 |
+| 5 | Dirty Blue | Shaw | Kill two honest cops at the old mill, then lose the 3-star heat | $2,200 |
+| 6 | Special Delivery | Moran | Drive a van of product to the east coast road in 90 s | $2,500 |
+| 7 | The Ledger | Jinx | Moran's men come for Jinx: kill all three, lose the cops, get to the safehouse | $3,000 |
+| 8 | Cash Run | Marta | Ride Shaw's SUV until he bails, then finish him (or just wreck the SUV) | $3,500 |
+| 9 | Last Call | Rudy | Take Moran and his guards down at the old pier, with cops on the way | $10,000 + ending |
+
+## v0.18
 - **Car crashes at high speed:** car movement is now split into small sub-steps whenever anything
   nearby is moving fast, with collisions checked after each one, so a fast car can no longer skip
   through another car between frames (tested: 0 pass-throughs in 120 high-speed crashes, versus 5

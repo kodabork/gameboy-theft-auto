@@ -75,6 +75,9 @@ irq_handler:
     ldr     r3, =sound_vblank
     mov     lr, pc
     bx      r3
+    ldr     r3, =key_latch          @ remember every button seen this frame
+    mov     lr, pc
+    bx      r3
     ldmfd   sp!, {lr}
     bx      lr
     .pool
