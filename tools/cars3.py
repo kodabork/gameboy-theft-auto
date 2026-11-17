@@ -61,18 +61,48 @@ SPECS = {
                 top=[(2.60, 0.80), (2.58, 1.02), (2.40, 1.12), (1.90, 1.24), (1.30, 1.84), (1.05, 2.06), (-2.55, 2.08), (-2.60, 2.00)],
                 belt=[(1.90, 1.24), (0.80, 1.30)], bot=[(2.60, 0.44), (2.30, 0.30), (-2.30, 0.30), (-2.60, 0.44)],
                 gh=0.95, nose=8.0, tail=16.0, lamp='rect', grille='slim', tail_l='vertical', sport=False, van=True),
+    # long-roof station wagon
+    'wagon': dict(L=4.95, W=1.82, wb=2.85, xf=1.40, wr=0.32, tw=0.21, zr=0.17, sharp=0.025,
+                  top=[(2.48, 0.58), (2.45, 0.76), (2.33, 0.80), (1.15, 0.90), (1.02, 0.91), (0.40, 1.42), (-2.15, 1.44), (-2.40, 1.36), (-2.48, 0.84)],
+                  belt=[(1.02, 0.91), (-2.40, 0.98)], bot=[(2.48, 0.30), (2.20, 0.20), (-2.20, 0.20), (-2.48, 0.34)],
+                  gh=0.86, nose=8.0, tail=12.0, lamp='rect', grille='slim', tail_l='vertical', sport=False, rails=True),
+    # 2-door tuner coupe with a big rear wing
+    'tuner': dict(L=4.25, W=1.74, wb=2.50, xf=1.20, wr=0.32, tw=0.23, zr=0.10, sharp=0.025,
+                  top=[(2.12, 0.50), (2.08, 0.66), (1.95, 0.70), (0.95, 0.80), (0.85, 0.81), (0.15, 1.26), (-0.65, 1.27), (-1.20, 0.96), (-2.08, 0.92), (-2.12, 0.76)],
+                  belt=[(0.85, 0.81), (-1.20, 0.95)], bot=[(2.12, 0.20), (1.95, 0.11), (-1.95, 0.11), (-2.12, 0.24)],
+                  gh=0.84, nose=5.0, tail=6.0, lamp='swept', grille='intake', tail_l='round', sport=True, wing=True),
+    # long luxury sedan with a formal roofline and upright grille
+    'luxury': dict(L=5.40, W=1.95, wb=3.20, xf=1.50, wr=0.35, tw=0.24, zr=0.18, sharp=0.025,
+                   top=[(2.70, 0.64), (2.68, 0.86), (2.55, 0.90), (1.30, 0.96), (1.18, 0.97), (0.50, 1.45), (-1.05, 1.47), (-1.40, 1.40), (-1.65, 1.05), (-2.65, 1.03), (-2.70, 0.86)],
+                   belt=[(1.18, 0.97), (-1.65, 1.06)], bot=[(2.70, 0.32), (2.40, 0.21), (-2.40, 0.21), (-2.70, 0.34)],
+                   gh=0.86, nose=10.0, tail=10.0, lamp='rect', grille='tall', tail_l='bar', sport=False),
+    # one-box minivan
+    'minivan': dict(L=5.05, W=1.95, wb=3.00, xf=1.25, wr=0.34, tw=0.22, zr=0.18, sharp=0.025,
+                    top=[(2.52, 0.66), (2.48, 0.86), (2.25, 0.94), (1.60, 1.04), (0.70, 1.70), (-2.30, 1.74), (-2.48, 1.62), (-2.52, 0.90)],
+                    belt=[(1.60, 1.04), (-2.45, 1.10)], bot=[(2.52, 0.34), (2.20, 0.21), (-2.20, 0.21), (-2.52, 0.36)],
+                    gh=0.88, nose=5.0, tail=12.0, lamp='swept', grille='slim', tail_l='vertical', sport=False, rails=True),
+    # small box truck: cab + tall cargo box
+    'boxtruck': dict(L=6.40, W=2.10, wb=3.70, xf=1.95, wr=0.40, tw=0.26, zr=0.40, sharp=0.02,
+                     top=[(3.20, 1.05), (3.18, 1.30), (3.00, 1.36), (2.55, 1.42), (2.15, 2.18), (1.75, 2.20), (1.65, 2.95), (-3.18, 2.97), (-3.20, 2.90)],
+                     belt=[(2.55, 1.42), (1.66, 1.46)], bot=[(3.20, 0.60), (2.80, 0.46), (-2.90, 0.50), (-3.20, 0.60)],
+                     gh=0.92, nose=10.0, tail=20.0, lamp='rect', grille='truck', tail_l='vertical', sport=False, box=True),
+    # 70s two-door land yacht: enormous hood, vinyl roof
+    'yacht': dict(L=5.70, W=2.00, wb=3.10, xf=1.75, wr=0.34, tw=0.23, zr=0.18, sharp=0.025,
+                  top=[(2.85, 0.66), (2.83, 0.86), (2.70, 0.90), (0.95, 0.98), (0.85, 0.99), (0.20, 1.36), (-0.75, 1.37), (-1.20, 1.04), (-2.80, 1.02), (-2.85, 0.84)],
+                  belt=[(0.85, 0.99), (-1.20, 1.05)], bot=[(2.85, 0.34), (2.50, 0.22), (-2.50, 0.22), (-2.85, 0.36)],
+                  gh=0.84, nose=12.0, tail=12.0, lamp='quad', grille='wide', tail_l='bar', sport=False, vinyl=True),
 }
 
 class Car3:
     step = 0.7
     iters = 190
 
-    def __init__(self, kind, paint, trim=None, stripe=None, taxi=False, police=False, sport_wheels=None):
+    def __init__(self, kind, paint, trim=None, stripe=None, taxi=False, police=False, sport_wheels=None, ambulance=False):
         S = dict(SPECS[kind])
         self.kind, self.S = kind, S
         self.paint = np.array(paint, f32)
         self.stripe = None if stripe is None else np.array(stripe, f32)
-        self.taxi, self.police = taxi, police
+        self.taxi, self.police, self.ambulance = taxi, police, ambulance
         self.sport = S['sport'] if sport_wheels is None else sport_wheels
         L = S['L']
         x0, x1 = -L / 2, L / 2
@@ -133,6 +163,18 @@ class Car3:
             inner = np.maximum(np.maximum(np.abs(x + 1.92) - 0.86, ay - (self.hw - 0.09)), (Tb - 0.50) - z)
             body = np.maximum(body, -inner)
         shell = np.minimum(body, green)
+        if S.get('wing'):                                  # rear wing on two uprights
+            dz = np.interp(-1.85, self.gx, self.gTb)
+            qw = np.stack([np.abs(x + 1.90) - 0.13, ay - (self.hw - 0.10), np.abs(z - (dz + 0.22)) - 0.018], -1)
+            wing = length(np.maximum(qw, 0)) + np.minimum(qw.max(-1), 0) - 0.01
+            qu = np.stack([np.abs(x + 1.90) - 0.05, np.abs(ay - self.hw * 0.62) - 0.025, np.abs(z - (dz + 0.11)) - 0.11], -1)
+            wing = np.minimum(wing, length(np.maximum(qu, 0)) + np.minimum(qu.max(-1), 0))
+            shell = np.minimum(shell, wing)
+        if S.get('rails'):                                 # roof rails
+            rx0, rx1 = self.cowl - 0.75, self.blx + 0.25
+            rzt = np.interp(np.clip(x, rx1, rx0), self.gx, self.gT)
+            qr = np.stack([np.maximum(x - rx0, rx1 - x), np.abs(ay - self.hw * (S['gh'] - 0.17)) - 0.02, np.abs(z - (rzt + 0.04)) - 0.02], -1)
+            shell = np.minimum(shell, length(np.maximum(qr, 0)) + np.minimum(qr.max(-1), 0))
         if S.get('scoop'):
             hz = np.interp(1.4, self.gx, self.gTb)
             qs = np.stack([np.abs(x - 1.35) - 0.30, ay - 0.22, np.abs(z - hz) - 0.06], -1)
@@ -197,11 +239,15 @@ class Car3:
             b_pillar = side & (np.abs(x - 0.78) < 0.05)
         if S.get('bed'):
             c_pillar = side & (x < -0.88)
+        if S.get('box'):
+            c_pillar = side & (x < 1.80); b_pillar = side & (np.abs(x - 2.0) < 0.001)
         edge_top = (T - z) < frame
         edge_bot = (z - Tb) < frame + 0.01
         winframe = g & side & (edge_top | edge_bot)
         glass = g & ~a_pillar & ~b_pillar & ~c_pillar & ~winframe
         alb[g & (a_pillar | b_pillar | winframe)] = (0.03, 0.03, 0.035); mat[g & (a_pillar | b_pillar | winframe)] = 5
+        if S.get('box'):                                   # the cargo box is all painted panel
+            boxp = g & (x < 1.80); glass &= ~boxp; c_pillar = c_pillar | boxp
         cp = g & c_pillar & ~glass
         alb[cp] = self.paint; mat[cp] = 0
         mat[glass] = 1; alb[glass] = (0.02, 0.025, 0.03)
@@ -322,6 +368,14 @@ class Car3:
             alb[doors] = (0.86, 0.86, 0.86)
             bar = car & (z > T - 0.02) & (np.abs(x - (bx + 0.10)) < 0.11) & (ay < self.hw * 0.62)
             alb[bar & (y > 0)] = (0.95, 0.12, 0.10); alb[bar & (y <= 0)] = (0.15, 0.30, 0.98); mat[bar] = 4
+        if S.get('vinyl'):
+            vr = car & (z > Tb + 0.02) & ~glass & (nz > -0.2)
+            alb[vr] = (0.05, 0.04, 0.035); mat[vr] = 5
+        if self.ambulance:
+            band = car & (np.abs(ny) > 0.4) & (np.abs(z - (Tb + (T - Tb) * 0.55 if S.get('box') else Tb - 0.25)) < 0.09)
+            alb[band] = (0.85, 0.10, 0.08)
+            lb = car & (z > T - 0.02) & (x > 1.0) & (x < 1.35) & (ay < self.hw * 0.75)
+            alb[lb & (y > 0)] = (0.95, 0.12, 0.10); alb[lb & (y <= 0)] = (0.95, 0.95, 0.95); mat[lb] = 4
         if self.taxi:
             sign = car & (z > T - 0.02) & (np.abs(x - (bx + 0.05)) < 0.16) & (ay < 0.20)
             alb[sign] = (0.96, 0.92, 0.70); mat[sign] = 4

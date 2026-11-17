@@ -79,8 +79,8 @@ def burnt(rgb):
     out = np.where(nn > 0.70, out * 0.4 + rust * (0.5 + lum), out)
     out = np.where(nn < 0.10, out * 0.5 + ash * 0.6, out)
     return out.astype(np.float32)
-for e, s_, w, up, dn in ELEV:
-    for i in range(32): add(wreck, i * 2 * np.pi / 32, e, s_, w, up, dn, post=burnt)
+for (e, s_, w, up, dn), na in zip(ELEV, (64, 64, 32, 32)):
+    for i in range(na): add(wreck, i * 2 * np.pi / na, e, s_, w, up, dn, post=burnt)
 print('wreck done', flush=True)
 
 rng = np.random.default_rng(5)

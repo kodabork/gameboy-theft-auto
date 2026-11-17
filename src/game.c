@@ -363,16 +363,17 @@ static void drive(Car *c, u16 keys, int dt)
    contact normal, bounce them with an impulse, and spin them when hit off-centre. */
 static void dims_of(int model, int *hl, int *hw)
 {
-    if (model >= CAR_VAN_WHITE)        { *hl = M(2.55); *hw = M(1.00); }
-    else if (model >= CAR_PICKUP_WHITE){ *hl = M(2.88); *hw = M(1.00); }
-    else if (model >= CAR_HATCH5_RED)  { *hl = M(2.13); *hw = M(0.91); }
-    else if (model >= CAR_POLICE)      { *hl = M(2.69); *hw = M(0.96); }   /* full-size sedan */
-    else if (model >= CAR_SUV_BLACK)   { *hl = M(2.41); *hw = M(0.95); }
-    else if (model >= CAR_SEDAN_SILVER){ *hl = M(2.69); *hw = M(0.96); }   /* full-size sedan + taxi */
-    else if (model >= CAR_SUPER_RED)   { *hl = M(2.21); *hw = M(0.96); }
-    else if (model >= CAR_HATCH_LIME)  { *hl = M(2.31); *hw = M(0.90); }
-    else if (model >= CAR_MUSCLE_ORANGE){ *hl = M(2.39); *hw = M(1.00); }
-    else                               { *hl = M(2.31); *hw = M(0.99); }
+    int k = model == CAR_WRECK ? (CAR_SEDAN_SILVER - CAR_COUPE_BLUE) / CAR_SET_FRAMES : (model - CAR_COUPE_BLUE) / CAR_SET_FRAMES;
+    if (k < 0 || k >= CAR_NSETS) k = 0;
+    *hl = car_dims[k][0]; *hw = car_dims[k][1];
+}
+
+/* sprite frame for a car: 64 view angles at the two nearest elevation levels, 32 at the others */
+static int car_frame(int model, int level, int rel)
+{
+    static const u8 off[4] = { 0, 64, 128, 160 };
+    if (level < 2) return model + off[level] + (((rel + 32) >> 6) & 63);
+    return model + off[level] + (((rel + 64) >> 7) & 31);
 }
 
 static int is_player_car(const Car *c) { return pl.in_car >= 0 && c == &cars[pl.in_car]; }
@@ -1444,9 +1445,10 @@ static void respawn_player(void)
 /* ------------------------------------------------------------ init */
 static void spawn_parked(void)
 {
-    static const u16 models[14] = { CAR_SEDAN_SILVER, CAR_COUPE_BLACK, CAR_SUV_BLACK, CAR_MUSCLE_ORANGE, CAR_HATCH_WHITE,
+    static const u16 models[20] = { CAR_SEDAN_SILVER, CAR_COUPE_BLACK, CAR_SUV_BLACK, CAR_MUSCLE_ORANGE, CAR_HATCH_WHITE,
                                     CAR_SEDAN_BLUE, CAR_MUSCLE_SILVER, CAR_HATCH_LIME, CAR_SUPER_RED, CAR_HATCH5_RED,
-                                    CAR_PICKUP_WHITE, CAR_PICKUP_BLUE, CAR_VAN_WHITE, CAR_HATCH5_GREEN };
+                                    CAR_PICKUP_WHITE, CAR_PICKUP_BLUE, CAR_VAN_WHITE, CAR_HATCH5_GREEN,
+                                    CAR_WAGON_BROWN, CAR_TUNER_GREEN, CAR_LUXURY_BLACK, CAR_MINIVAN_SILVER, CAR_YACHT_MAROON, CAR_BOXTRUCK_WHITE };
     int n = SLOT_PARKED0;
     for (int road = 0; road <= 8 && n < SLOT_PARKED_END; road++)
     for (int seg = 0; seg < 8 && n < SLOT_PARKED_END; seg++)
@@ -1459,7 +1461,7 @@ static void spawn_parked(void)
         int off = ROAD_C(road) + side * M(4.9);
         if (axis == 0) { c->x = Q8(along); c->y = Q8(off); c->head = Q8(side < 0 ? 0 : 2048); }
         else           { c->x = Q8(off); c->y = Q8(along); c->head = Q8(side > 0 ? 1024 : 3072); }
-        c->model = models[rnd() % 14]; c->ai = AI_NONE; c->speed = 0; c->active = 1; c->police = 0; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
+        c->model = models[rnd() % 20]; c->ai = AI_NONE; c->speed = 0; c->active = 1; c->police = 0; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
     }
 }
 
@@ -1552,12 +1554,12 @@ void game_init(void)
     Car *p = &cars[0];
     p->model = CAR_HATCH_LIME; p->ai = AI_NONE; p->speed = 0; p->vx = p->vy = 0; p->active = 1;
     p->x = pl.x; p->y = pl.y; p->head = 0;
-    static const u16 tm[8] = { CAR_TAXI, CAR_HATCH_WHITE, CAR_PICKUP_WHITE, CAR_SUV_BLACK, CAR_SEDAN_BLUE, CAR_VAN_WHITE, CAR_TAXI, CAR_HATCH5_GREEN };
+    static const u16 tm[16] = { CAR_TAXI, CAR_HATCH_WHITE, CAR_PICKUP_WHITE, CAR_SUV_BLACK, CAR_SEDAN_BLUE, CAR_VAN_WHITE, CAR_TAXI, CAR_HATCH5_GREEN,
+                                CAR_WAGON_BROWN, CAR_MINIVAN_SILVER, CAR_BOXTRUCK_WHITE, CAR_LUXURY_BLACK, CAR_TUNER_GREEN, CAR_YACHT_MAROON, CAR_AMBULANCE, CAR_SEDAN_SILVER };
     for (int i = 0; i < NTRAFFIC; i++) {
         Car *c = &cars[SLOT_TRAFFIC0 + i];
         spawn_traffic_near(c);
-        c->model = tm[i & 7];
-        if (i >= 8) c->model = tm[(i * 3) & 7];
+        c->model = tm[i & 15];
     }
     /* a few cars on the starting street */
     for (int i = 0; i < 3; i++) {
@@ -1740,8 +1742,9 @@ void game_update(u16 keys, int dt)
             int dts = far ? dt * 2 : dt;
             if (i >= SLOT_TRAFFIC0 && i < SLOT_TRAFFIC0 + NTRAFFIC && dist_approx((c->x >> 8) - pbx, (c->y >> 8) - pby) > M(150)) {
                 u16 m = c->model; spawn_traffic_near(c);
-                static const u16 fresh[6] = { CAR_TAXI, CAR_HATCH_WHITE, CAR_SEDAN_BLUE, CAR_PICKUP_WHITE, CAR_HATCH5_RED, CAR_SUV_WHITE };
-                c->model = m == CAR_WRECK ? fresh[rnd() % 6] : m;
+                static const u16 fresh[10] = { CAR_TAXI, CAR_HATCH_WHITE, CAR_SEDAN_BLUE, CAR_PICKUP_WHITE, CAR_HATCH5_RED, CAR_SUV_WHITE,
+                                               CAR_WAGON_BROWN, CAR_MINIVAN_SILVER, CAR_LUXURY_BLACK, CAR_BOXTRUCK_WHITE };
+                c->model = m == CAR_WRECK ? fresh[rnd() % 10] : m;
             }
             update_traffic(i, dts);
             move_car(c, dts);
@@ -2013,8 +2016,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         int dd = view_dist(x, y, &view);
         if (dd < 0 || dd > M(110)) continue;
         int rel = ((cars[i].head >> 8) - view) & 4095;
-        int idx = ((rel + 64) >> 7) & 31;
-        push(x, y, cars[i].model + elev_level(dd) * 32 + idx);
+        push(x, y, car_frame(cars[i].model, elev_level(dd), rel));
         if (cars[i].police && wanted > 0 && dd < M(90))
             push_h(x, y, FX_SIREN + ((frame_no >> 2) & 1), M(1.65));
     }

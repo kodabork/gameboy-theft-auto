@@ -16,7 +16,15 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
-## What's new in v0.15
+## What's new in v0.16
+- Smoother car rotation: cars now have 64 view angles up close (was 32), at the two nearest
+  camera elevations, so they turn smoothly instead of snapping
+- 7 new car types (26 car sets in all): long-roof station wagon, tuner coupe with a big rear wing,
+  long luxury sedan, minivan with roof rails, cab + cargo box truck, 70s land yacht with a vinyl
+  roof, and an ambulance. They all appear in traffic and parked around the city
+- Car collision sizes now come straight from each model's real dimensions
+
+## v0.15
 - Title screen artwork: an original slanted "sunset chrome" GTA wordmark with a heavy outline and
   drop shadow, and stylized menu labels (NEW GAME / CONTINUE / PRESS A), in place of the pixel font
 - All cars rebuilt from scratch (`tools/cars3.py`) in a pre-rendered handheld style: boxy shapes

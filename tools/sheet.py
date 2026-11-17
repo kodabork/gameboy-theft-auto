@@ -17,7 +17,7 @@ def frame(i):
                 px[x, y] = ((v & 31) << 3, ((v >> 5) & 31) << 3, ((v >> 10) & 31) << 3)
     return im
 hdr = open('src/assets.h').read()
-sets = re.findall(r'#define (CAR_\w+) (\d+)', hdr)
+sets = [t for t in re.findall(r'#define (CAR_\w+) (\d+)', hdr) if t[0] not in ('CAR_SET_FRAMES', 'CAR_NSETS')]
 angles = [int(a) for a in sys.argv[2].split(',')] if len(sys.argv) > 2 else [0, 4, 8, 12, 16, 20, 24]
 ims = [[frame(int(b) + a) for a in angles] for n, b in sets]
 cw = max(im.width for row in ims for im in row) + 4; ch = max(im.height for row in ims for im in row) + 4

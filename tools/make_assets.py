@@ -62,15 +62,28 @@ CARS = [('CAR_COUPE_BLUE', Car3('gt', (0.60, 0.04, 0.04))),
         ('CAR_HATCH5_GREEN', Car3('hatch5', (0.14, 0.26, 0.20))),
         ('CAR_PICKUP_WHITE', Car3('pickup', (0.80, 0.80, 0.78))),
         ('CAR_PICKUP_BLUE', Car3('pickup', (0.10, 0.18, 0.38))),
-        ('CAR_VAN_WHITE', Car3('van', (0.84, 0.84, 0.82)))]
+        ('CAR_VAN_WHITE', Car3('van', (0.84, 0.84, 0.82))),
+        ('CAR_WAGON_BROWN', Car3('wagon', (0.42, 0.30, 0.18))),
+        ('CAR_TUNER_GREEN', Car3('tuner', (0.20, 0.65, 0.25))),
+        ('CAR_LUXURY_BLACK', Car3('luxury', (0.03, 0.03, 0.035))),
+        ('CAR_MINIVAN_SILVER', Car3('minivan', (0.60, 0.61, 0.63))),
+        ('CAR_BOXTRUCK_WHITE', Car3('boxtruck', (0.90, 0.90, 0.88))),
+        ('CAR_YACHT_MAROON', Car3('yacht', (0.40, 0.05, 0.08))),
+        ('CAR_AMBULANCE', Car3('van', (0.93, 0.93, 0.92), ambulance=True))]
 # camera elevation levels: the game picks the one matching each car's real view angle
 ELEV = [(16, 0.040, 136, 62, 24), (11, 0.050, 112, 46, 20), (7, 0.065, 86, 30, 14), (4, 0.090, 62, 18, 10)]
 group_of = []
 def group(): group_of.append(len(frames))
+# frames per car set: 64 view angles at the two nearest elevations, 32 at the two far ones
+CAR_ANGLES = (64, 64, 32, 32)
+car_dims = []
 for name, car in CARS:
     begin(name)
-    for e, s_, w, up, dn in ELEV:
-        for i in range(32): add(car, i * 2 * np.pi / 32, np.radians(e), s_, w, up, dn, ss=2, outline=True)
+    tall = max(0, max(z for _, z in car.S['top']) - 2.2) if hasattr(car, 'S') else 0
+    for (e, s_, w, up, dn), na in zip(ELEV, CAR_ANGLES):
+        upx = up + int(np.ceil(tall / s_)) + (6 if tall else 0)
+        for i in range(na): add(car, i * 2 * np.pi / na, np.radians(e), s_, w, upx, dn, ss=2, outline=True)
+    if hasattr(car, 'S'): car_dims.append((int(round((car.S['L'] / 2 - 0.05) * 16)), int(round((car.S['W'] / 2) * 16))))
     print(name, round(time.time() - t0, 1), flush=True)
 group()
 # people: per view direction 18 frames = idle, walk 0-7, run 0-7, aim; then 8 knocked-down frames
@@ -206,11 +219,16 @@ def rgb15(c):
     return r | (g << 5) | (b << 10)
 L.append('  ' + ','.join(str(rgb15(c)) for c in pal_rgb) + ',')
 L.append('};')
+L.append('const unsigned char car_dims[%d][2] = {' % len(car_dims))
+L.append('  ' + ' '.join('{%d,%d},' % d for d in car_dims))
+L.append('};')
 open(OUT_C, 'w').write('\n'.join(L) + '\n')
 H = ['#ifndef ASSETS_H', '#define ASSETS_H',
      'typedef struct { unsigned char w, h; signed char ox; signed short oy; unsigned short upx; unsigned int off; } SprFrame;',
      'extern const SprFrame spr_frames[];', 'extern const unsigned short spr_palette[];',
-     'extern const unsigned char spr_pixels[];', '#define SPR_NCOL %d' % NCOL, '#define SPR_PAL_BASE 103']
+     'extern const unsigned char spr_pixels[];', '#define SPR_NCOL %d' % NCOL, '#define SPR_PAL_BASE 103',
+     'extern const unsigned char car_dims[][2];   /* half length, half width per car set (1/16 m) */',
+     '#define CAR_SET_FRAMES %d' % sum(CAR_ANGLES), '#define CAR_NSETS %d' % len(car_dims)]
 for name, base in sets: H.append('#define %s %d' % (name, base))
 H.append('#define SPR_NFRAMES %d' % len(table))
 H.append('#endif')
