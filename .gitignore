@@ -1,0 +1,8 @@
+# build output and ROM files (never commit commercial ROMs; the game ROM is built locally)
+build/
+*.gba
+*.elf
+*.o
+__pycache__/
+tools/gbaprof
+.DS_Store

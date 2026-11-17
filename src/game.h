@@ -1,0 +1,43 @@
+#ifndef GAME_H
+#define GAME_H
+#include "engine.h"
+
+#define KEY_A      0x0001
+#define KEY_B      0x0002
+#define KEY_SELECT 0x0004
+#define KEY_START  0x0008
+#define KEY_RIGHT  0x0010
+#define KEY_LEFT   0x0020
+#define KEY_UP     0x0040
+#define KEY_DOWN   0x0080
+#define KEY_R      0x0100
+#define KEY_L      0x0200
+
+typedef struct {
+    int speed_mph, in_car, near_car, nitro;
+    int hp, money, wanted, wanted_flash, weapon, ammo, hurt_t;
+    const char *weapon_name;
+    const char *msg1, *msg2; int msg_t;          /* mission / info text */
+    const char *big; int big_color, big_t;       /* centre-screen banner */
+    int countdown, race_cp, race_total;
+    int px, py, pang;                            /* radar centre + heading */
+    int bx[12], by[12], bc[12], nblips;          /* radar blips: 1 job, 2 goal, 3 target, 4 police */
+    int timer_s, pressure, car_hp;              /* car_hp: 0..100, -1 on foot */                       /* mission clock (s, -1 none), chase pressure % (-1 none) */
+    int title;                                   /* title screen */
+    const char *menu_title, *menu_item[4], *menu_note; int menu_n, menu_sel;
+    const char *dlg_who, *dlg_l1, *dlg_l2;       /* story dialogue page */
+} GameHud;
+void hud_draw(u16 *fb);
+typedef struct { s16 x, y; u8 g, bank, scale, pad; } TxtObj;
+#define MAX_TXT 96
+extern TxtObj g_txt[MAX_TXT]; extern int g_ntxt;
+void hud_glyph_tile(int g, u32 *tile); int hud_nglyphs(void); void radar_init(void);
+void radar_build(u32 *tiles4bpp);                /* 64x64, 4bpp, 1D tile order */
+extern GameHud g_hud;
+
+void game_init(void);
+void game_update(u16 keys, int dt);           /* keys: 1 = pressed; dt in 1/16384 s */
+int game_title_active(void);
+void game_build_scene(Camera *cam, Sprite *out, int *nout);
+
+#endif
