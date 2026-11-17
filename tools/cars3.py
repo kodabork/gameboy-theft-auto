@@ -253,8 +253,16 @@ class Car3:
         gwid = self.plan(x) * S['gh'] * (1 - 0.09 * np.clip((z - Tb) / np.maximum(T - Tb, 0.05), 0, 1) / S['gh'])
         screen = (car & (green <= body + 0.003) & (np.abs(slope) > 0.35) & (nz > 0.15)
                   & (z > Tb + 0.045) & (z < roof - 0.045) & (ay < gwid - 0.075))
+        # upright rear glass (hatchbacks, wagons, SUVs, vans, the pickup's cab): the cabin's back face
+        belt_r = float(np.interp(0.0, self.gx, self.gTb))            # same window line as the side glass
+        backface = ((car & (green <= body + 0.003) & (nx < -0.45) & (z > Tb + 0.06) & (z < roof - 0.05)
+                     & (ay < gwid - 0.085) & (x < 0))
+                    | (car & (nz < 0.6) & (nx < 0.2) & (x < -L2 + 0.35) & (z > belt_r + 0.07) & (z < roof - 0.05)
+                       & (ay < self.plan(np.maximum(x, -L2 + 0.35)) * S['gh'] - 0.10)))
+        if S.get('box'): backface &= False
+        screen = screen | backface
         glass = glass | screen
-        fr = car & (green <= body + 0.003) & (np.abs(slope) > 0.35) & (nz > 0.15) & (z > Tb + 0.02) & ~screen & ~glass
+        fr = car & (((green <= body + 0.003) & (np.abs(slope) > 0.35) & (nz > 0.15) & (z > Tb + 0.02)) | ((nz < 0.6) & (nx < 0.2) & (x < -L2 + 0.35) & (z > belt_r + 0.03) & (z < roof - 0.01) & (not S.get('box')))) & ~screen & ~glass
         alb[fr] = (0.03, 0.03, 0.035); mat[fr] = 5
         if S.get('box'):                                   # the cargo box is all painted panel
             boxp = g & (x < 1.80); glass &= ~boxp; c_pillar = c_pillar | boxp
@@ -445,7 +453,7 @@ class Car3:
         sp = np.clip((n * h).sum(-1), 0, 1)[:, None]
         m = mat[:, None]
         paint = base * 0.92 + envc * (0.13 + 0.80 * F) * ao + (1.0 * sp ** 150 + 0.18 * sp ** 14) * ao
-        glass = alb + envc * (0.22 + 0.70 * F) + 1.2 * sp ** 200
+        glass = alb + (envc * (0.04 + 0.45 * F) + 0.9 * sp ** 200) * np.clip(n[:, 2:3] * 1.4, 0.15, 1)
         rubber = base * 0.9 + 0.05 * sp ** 6
         alloy = base * 0.5 + envc * 0.45 * ao + 0.7 * sp ** 40
         chrome = alb * 0.15 + envc * 0.75 * ao + 0.9 * sp ** 60

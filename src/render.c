@@ -226,7 +226,7 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
 }
 
 typedef struct { s16 idx; s16 key; } SortEnt;
-static SortEnt vis[MAX_BUILDINGS];
+EWRAM_BSS static SortEnt vis[MAX_BUILDINGS];
 
 static void draw_buildings(void)
 {
@@ -391,16 +391,17 @@ static void draw_ground(void)
         const int ingrid = (unsigned)(gu >> 16) < lim && (unsigned)(gv >> 16) < lim && (unsigned)(gue >> 16) < lim && (unsigned)(gve >> 16) < lim;
         #define PAIR_BASE(b) do { if (ingrid) { int tx_ = gu >> 16, ty_ = gv >> 16; b = tile_pal[((ty_ & 127) << 7) | (tx_ & 127)]; \
             if (b >= 0xFE) b = lot_base[(ty_ >> 7) * 9 + (tx_ >> 7)][b & 1]; } else b = ground_base(gu, gv, lanes); } while (0)
-        if (z < 170 && y + 1 < SCR_H) {        /* closest rows: one sample per 2x2 pixels */
-            const int su2 = su * 2, sv2 = sv * 2, y1 = y + 1;
+        if (z < 256 && y + 1 < SCR_H) {        /* near rows: one sample per column, shared by two rows */
+            const int y1 = y + 1;
             const int fe1 = fogpair[z >> 5][0][y1 & 1], fo1 = fogpair[z >> 5][1][y1 & 1];
             const u32 pp0 = (u32)(fe * 0x0101) | ((u32)(fo * 0x0101) << 16), pp1 = (u32)(fe1 * 0x0101) | ((u32)(fo1 * 0x0101) << 16);
             u32 *r0 = (u32 *)row, *r1 = (u32 *)(row + SCR_W);
-            int bq = -1, base = 0;                       /* one sample per 4 columns: a texel here spans more than that */
-            for (int i = 0; i < SCR_W / 2; i++, gu += su2, gv += sv2) {
-                if (y1 < gmn[i]) continue;               /* both rows still wall in this column pair */
-                if ((i >> 1) != bq) { bq = i >> 1; PAIR_BASE(base); }
-                u32 bb = (u32)base * 0x01010101u, p0 = bb + pp0, p1 = bb + pp1;
+            for (int i = 0; i < SCR_W / 2; i++) {
+                if (y1 < gmn[i]) { gu += su * 2; gv += sv * 2; continue; }
+                int b0, b1;
+                PAIR_BASE(b0); gu += su; gv += sv;
+                PAIR_BASE(b1); gu += su; gv += sv;
+                u32 bb = (u32)b0 * 0x0101u | ((u32)b1 * 0x0101u << 16), p0 = bb + pp0, p1 = bb + pp1;
                 if (y >= gmx[i]) { r0[i] = p0; r1[i] = p1; continue; }
                 int x = i * 2, ga = gs[x], gb = gs[x + 1];
                 u16 *q0 = row + x, *q1 = q0 + SCR_W;
@@ -412,7 +413,7 @@ static void draw_ground(void)
             y++;
             continue;
         }
-        if (z < 512) {                         /* near and middle rows: one sample per two columns */
+        if (z < 256) {                         /* near rows: one sample per two columns */
             const int su2 = su * 2, sv2 = sv * 2;
             const u32 pp = (u32)(fe * 0x0101) | ((u32)(fo * 0x0101) << 16);
             u32 *rw = (u32 *)row;

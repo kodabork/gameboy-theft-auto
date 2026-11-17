@@ -1742,6 +1742,8 @@ void game_update(u16 keys, int dt)
     n_near = 0;
     for (int i = 0; i < ncars; i++)
         if (cars[i].active && dist_approx((cars[i].x >> 8) - pbx, (cars[i].y >> 8) - pby) < M(70)) near_cars[n_near++] = (u8)i;
+    EWRAM_BSS static int mdt[MAX_CARS];
+    for (int i = 0; i < ncars; i++) mdt[i] = 0;
     for (int i = 0; i < ncars; i++) {
         Car *c = &cars[i];
         if (!c->active) continue;
@@ -1757,7 +1759,7 @@ void game_update(u16 keys, int dt)
                 c->model = m == CAR_WRECK ? fresh[rnd() % 10] : m;
             }
             update_traffic(i, dts);
-            move_car(c, dts);
+            mdt[i] = dts;
             continue;
         }
         else if (c->ai == AI_POLICE) update_police(i, dt);
@@ -1768,9 +1770,29 @@ void game_update(u16 keys, int dt)
             if (i >= SLOT_POLICE0 && i < SLOT_POLICE0 + NPOLICE && (c->police || IS_WRECK(c)) && (wanted == 0 || IS_WRECK(c)) &&
                 dist_approx((c->x >> 8) - pbx, (c->y >> 8) - pby) > M(120)) c->active = 0;
         }
-        move_car(c, dt);
+        mdt[i] = dt;
     }
-    car_car_collisions();
+    /* move in sub-steps short enough that a fast car can't jump through another one between checks */
+    {
+        int vfast = 0;
+        for (int k = 0; k < n_near; k++) {
+            Car *c = &cars[near_cars[k]];
+            int vx, vy; car_vel(c, &vx, &vy);
+            int v = dist_approx(vx >> 8, vy >> 8);                 /* units per second */
+            if (v > vfast) vfast = v;
+        }
+        int step_len = vfast * dt / TICKS;                         /* units the fastest car moves this frame */
+        int n = step_len / M(0.6) + 1;
+        if (n > 8) n = 8;
+        for (int st = 0; st < n; st++) {
+            for (int i = 0; i < ncars; i++) {
+                if (!mdt[i] || !cars[i].active) continue;
+                int part = mdt[i] / n + (st == n - 1 ? mdt[i] % n : 0);
+                if (part > 0) move_car(&cars[i], part);
+            }
+            car_car_collisions();
+        }
+    }
     update_peds(dt);
     update_damage(dt);
     if (pl.in_car < 0) {

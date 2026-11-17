@@ -16,7 +16,17 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
-## What's new in v0.17
+## What's new in v0.18
+- **Car crashes at high speed:** car movement is now split into small sub-steps whenever anything
+  nearby is moving fast, with collisions checked after each one, so a fast car can no longer skip
+  through another car between frames (tested: 0 pass-throughs in 120 high-speed crashes, versus 5
+  before, and every crash now registers)
+- **Smoother ground:** the road near the camera is drawn at full horizontal detail again, so lane
+  lines and crosswalks no longer break into chunky blocks
+- **Rear windows on every car:** hatchbacks, wagons, SUVs, minivans and pickups now have dark rear
+  glass; upright glass no longer shows noisy sky reflections
+
+## v0.17
 - **Saving fixed.** Saves were being written, but a checksum mismatch made the game reject them on the
   next boot, so CONTINUE never appeared. Saves now load correctly. The game also autosaves after
   every completed job (manual saves still aren't allowed during a job or a police chase)
