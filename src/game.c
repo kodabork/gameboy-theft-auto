@@ -363,17 +363,24 @@ static void drive(Car *c, u16 keys, int dt)
    contact normal, bounce them with an impulse, and spin them when hit off-centre. */
 static void dims_of(int model, int *hl, int *hw)
 {
-    int k = model == CAR_WRECK ? (CAR_SEDAN_SILVER - CAR_COUPE_BLUE) / CAR_SET_FRAMES : (model - CAR_COUPE_BLUE) / CAR_SET_FRAMES;
+    /* set index = offset / CAR_SET_FRAMES, by reciprocal multiply (Thumb code has no fast divide) */
+    enum { RCP = ((1 << 22) + CAR_SET_FRAMES - 1) / CAR_SET_FRAMES };
+    int off = model == CAR_WRECK ? CAR_SEDAN_SILVER - CAR_COUPE_BLUE : model - CAR_COUPE_BLUE;
+    int k = off < 0 ? -1 : (int)(((unsigned)off * RCP) >> 22);
     if (k < 0 || k >= CAR_NSETS) k = 0;
     *hl = car_dims[k][0]; *hw = car_dims[k][1];
 }
 
-/* sprite frame for a car: 64 view angles at the two nearest elevation levels, 32 at the others */
+/* sprite frame for a car: 64 view angles at the two nearest elevation levels, 32 at the others.
+   Cars are left/right symmetric, so only headings 0..n/2 are stored; the rest are drawn mirrored
+   (bit 15 of the frame number = flip horizontally). */
 static int car_frame(int model, int level, int rel)
 {
-    static const u8 off[4] = { 0, 64, 128, 160 };
-    if (level < 2) return model + off[level] + (((rel + 32) >> 6) & 63);
-    return model + off[level] + (((rel + 64) >> 7) & 31);
+    static const u8 off[4] = { 0, 33, 66, 83 };
+    int n = level < 2 ? 64 : 32;
+    int i = level < 2 ? (((rel + 32) >> 6) & 63) : (((rel + 64) >> 7) & 31);
+    if (i <= n / 2) return model + off[level] + i;
+    return (model + off[level] + (n - i)) | 0x8000;
 }
 
 static int is_player_car(const Car *c) { return pl.in_car >= 0 && c == &cars[pl.in_car]; }
@@ -1168,8 +1175,9 @@ static const char *const mission_title[] = { "HOT WHEELS", "STREET RACE", "THE B
                                              "THE LEDGER", "CASH RUN", "COAST TO COAST", "LAST CALL" };
 
 static int gstate = 0;                        /* GS_* */
-typedef struct { u32 magic; u16 ver, mission; s32 money; s16 hp; u8 owned, weapon; s16 ammo[5]; s32 x, y; u32 sum; } SaveData;
+typedef struct { u32 magic; u16 ver, mission; s32 money; s16 hp; u8 owned, weapon; s16 ammo[5]; u16 pad; s32 x, y; u32 sum; } SaveData;
 static int save_read(SaveData *d);
+static void save_write(void);
 static int menu_sel, menu_note, title_t, has_save;
 enum { GS_TITLE, GS_PLAY, GS_PAUSE, GS_DIALOG };
 static void dialog(const Page *pg, int n, int then)
@@ -1219,6 +1227,7 @@ static void reward(int money, const char *text)
     time_left = -1;
     if (outro[mission]) dialog(outro[mission], 3, 0);
     mission++; mstate = 0;
+    save_write(); has_save = 1;                   /* autosave after every job */
 }
 
 static void mission_fail(const char *why)
@@ -1609,6 +1618,7 @@ static int save_read(SaveData *d)
 static void save_write(void)
 {
     SaveData d;
+    { u8 *z = (u8 *)&d; for (unsigned i = 0; i < sizeof d; i++) z[i] = 0; }   /* no stray padding bytes in the checksum */
     d.magic = SAVE_MAGIC; d.ver = 1; d.mission = (u16)mission; d.money = pl.money; d.hp = (s16)pl.hp;
     d.owned = pl.owned; d.weapon = pl.weapon;
     for (int i = 0; i < 5; i++) d.ammo[i] = pl.ammo[i];

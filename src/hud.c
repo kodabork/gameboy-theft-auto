@@ -260,14 +260,25 @@ IWRAM_ARM void radar_build(u32 *t)
     const int ox = (g_hud.px - TMAP_ORIGIN) << 11, oy = (g_hud.py - TMAP_ORIGIN) << 11;   /* units/32 << 16 */
     const int sxx = (SCALE * s) >> 3, sxy = -(SCALE * c) >> 3;     /* per +x radar px (>>14, <<11) */
     const int syx = -(SCALE * c) >> 3, syy = -(SCALE * s) >> 3;    /* per +y radar px */
+    /* disc spans per row: outer half-width and inner (non-rim) half-width; 8 pixels packed per word write */
+    static const u8 span_o[29] = { 28,27,27,27,27,27,27,27,26,26,26,25,25,24,24,23,22,22,21,20,19,18,17,15,14,12,10,7,0 };
+    static const s8 span_i[29] = { 27,26,26,26,26,26,26,26,25,25,25,24,24,23,23,22,21,20,20,19,18,16,15,14,12,10,7,0,-1 };
     for (int y = -R; y <= R; y++) {
-        int u = ox + y * syx - R * sxx, v = oy + y * syy - R * sxy;
-        for (int x = -R; x <= R; x++, u += sxx, v += sxy) {
-            int r2 = x * x + y * y;
-            if (r2 > R * R) continue;
-            if (r2 > (R - 1) * (R - 1)) { rpx(t, 32 + x, 32 + y, 4); continue; }
-            unsigned mx = (unsigned)u >> 16, my = (unsigned)v >> 16;
-            rpx(t, 32 + x, 32 + y, (mx < MM_W && my < MM_W) ? minimap[my * MM_W + mx] : 3);
+        int ay = y < 0 ? -y : y;
+        int xo = span_o[ay], xi = span_i[ay];
+        int u = ox + y * syx - xo * sxx, v = oy + y * syy - xo * sxy;
+        int py = 32 + y;
+        u32 *trow = t + (py >> 3) * 64 + (py & 7);
+        u32 acc = 0;
+        for (int x = -xo; x <= xo; x++, u += sxx, v += sxy) {
+            int px = 32 + x, col;
+            if (x < -xi || x > xi) col = 4;
+            else {
+                unsigned mx = (unsigned)u >> 16, my = (unsigned)v >> 16;
+                col = (mx < MM_W && my < MM_W) ? minimap[my * MM_W + mx] : 3;
+            }
+            acc |= (u32)col << ((px & 7) * 4);
+            if ((px & 7) == 7 || x == xo) { trow[(px >> 3) * 8] = acc; acc = 0; }
         }
     }
     /* blips (clamped to the rim) */

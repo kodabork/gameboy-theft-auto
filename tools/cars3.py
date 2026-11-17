@@ -96,6 +96,7 @@ SPECS = {
 class Car3:
     step = 0.7
     iters = 190
+    shadow_off = (0.15, 0.0)          # left/right symmetric, so mirrored frames stay correct
 
     def __init__(self, kind, paint, trim=None, stripe=None, taxi=False, police=False, sport_wheels=None, ambulance=False):
         S = dict(SPECS[kind])
@@ -246,6 +247,15 @@ class Car3:
         winframe = g & side & (edge_top | edge_bot)
         glass = g & ~a_pillar & ~b_pillar & ~c_pillar & ~winframe
         alb[g & (a_pillar | b_pillar | winframe)] = (0.03, 0.03, 0.035); mat[g & (a_pillar | b_pillar | winframe)] = 5
+        # windscreen and rear window: the sloped part of the cabin top, inside a painted frame
+        slope = np.interp(x, self.gx, np.gradient(self.gT, self.gx))
+        roof = float(self.gT.max())
+        gwid = self.plan(x) * S['gh'] * (1 - 0.09 * np.clip((z - Tb) / np.maximum(T - Tb, 0.05), 0, 1) / S['gh'])
+        screen = (car & (green <= body + 0.003) & (np.abs(slope) > 0.35) & (nz > 0.15)
+                  & (z > Tb + 0.045) & (z < roof - 0.045) & (ay < gwid - 0.075))
+        glass = glass | screen
+        fr = car & (green <= body + 0.003) & (np.abs(slope) > 0.35) & (nz > 0.15) & (z > Tb + 0.02) & ~screen & ~glass
+        alb[fr] = (0.03, 0.03, 0.035); mat[fr] = 5
         if S.get('box'):                                   # the cargo box is all painted panel
             boxp = g & (x < 1.80); glass &= ~boxp; c_pillar = c_pillar | boxp
         cp = g & c_pillar & ~glass
@@ -411,7 +421,10 @@ class Car3:
 
     # ------------------------------------------------------------ lighting
     def light(self, p, n, view, alb, mat):
-        Ls = nrm(np.array((0.45, 0.55, 0.70), f32))
+        # light from above and behind the camera, symmetric left/right in view space: a car seen at
+        # heading -a is then exactly the mirror image of heading +a, so only half the angles are stored
+        vh = view[0].copy(); vh[2] = 0; vh = vh / max(np.linalg.norm(vh), 1e-6)
+        Ls = nrm(-vh * 0.55 + np.array((0, 0, 0.85), f32))
         diff = np.clip((n * Ls).sum(-1), 0, 1)[:, None]
         # ambient occlusion from the distance field
         ao = np.ones(len(p), f32)

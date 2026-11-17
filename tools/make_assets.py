@@ -82,7 +82,8 @@ for name, car in CARS:
     tall = max(0, max(z for _, z in car.S['top']) - 2.2) if hasattr(car, 'S') else 0
     for (e, s_, w, up, dn), na in zip(ELEV, CAR_ANGLES):
         upx = up + int(np.ceil(tall / s_)) + (6 if tall else 0)
-        for i in range(na): add(car, i * 2 * np.pi / na, np.radians(e), s_, w, upx, dn, ss=2, outline=True)
+        # only headings 0..180 degrees are stored; the game mirrors them for the other half
+        for i in range(na // 2 + 1): add(car, i * 2 * np.pi / na, np.radians(e), s_, w, upx, dn, ss=2, outline=True)
     if hasattr(car, 'S'): car_dims.append((int(round((car.S['L'] / 2 - 0.05) * 16)), int(round((car.S['W'] / 2) * 16))))
     print(name, round(time.time() - t0, 1), flush=True)
 group()
@@ -228,7 +229,7 @@ H = ['#ifndef ASSETS_H', '#define ASSETS_H',
      'extern const SprFrame spr_frames[];', 'extern const unsigned short spr_palette[];',
      'extern const unsigned char spr_pixels[];', '#define SPR_NCOL %d' % NCOL, '#define SPR_PAL_BASE 103',
      'extern const unsigned char car_dims[][2];   /* half length, half width per car set (1/16 m) */',
-     '#define CAR_SET_FRAMES %d' % sum(CAR_ANGLES), '#define CAR_NSETS %d' % len(car_dims)]
+     '#define CAR_SET_FRAMES %d' % sum(n // 2 + 1 for n in CAR_ANGLES), '#define CAR_NSETS %d' % len(car_dims)]
 for name, base in sets: H.append('#define %s %d' % (name, base))
 H.append('#define SPR_NFRAMES %d' % len(table))
 H.append('#endif')

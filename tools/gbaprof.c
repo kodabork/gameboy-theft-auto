@@ -31,6 +31,7 @@ static u16 tm_reload[4], tm_ctl[4]; static u64 tm_start[4];
 static u64 frame_start;         /* cycle when current video frame started */
 static int vblank_done;
 static long flips; static u64 flip_cyc[100000];
+static u32 callee_addr; static u32 call_hist[1000000]; static long ncall_hist;
 static u32 keys_now;
 static int dump_list[256], ndump; static const char *outpre = "gp";
 
@@ -651,6 +652,8 @@ int main(int argc, char **argv)
     FILE *f = fopen(argv[1], "rb"); if (!f) { perror(argv[1]); return 1; }
     fseek(f, 0, SEEK_END); romsize = (u32)ftell(f); fseek(f, 0, SEEK_SET);
     rom = malloc(romsize + 4); fread(rom, 1, romsize, f); fclose(f);
+    const char *sramf = getenv("SRAM_FILE");
+    if (sramf) { FILE *sf = fopen(sramf, "rb"); if (sf) { fread(sram, 1, sizeof sram, sf); fclose(sf); } else memset(sram, 0xFF, sizeof sram); }
     double secs = atof(argv[2]);
     for (char *p = argv[3]; *p && nscript < 4096; ) {
         script_n[nscript] = (int)strtol(p, &p, 10); if (*p == ':') p++;
@@ -670,6 +673,7 @@ int main(int argc, char **argv)
     long vframe = 0;
     keys_now = keys_for_frame(0);
     u64 icount = 0;
+    if (getenv("CALLEE")) callee_addr = (u32)strtoul(getenv("CALLEE"), 0, 16) & ~1u;
     const char *profp = getenv("PROF");
     u64 *hrom = profp ? calloc(romsize / 2 + 1, 8) : 0, *hiw = profp ? calloc(0x4000, 8) : 0;
     u64 prof_from = (u64)(getenv("PROF_FROM") ? atof(getenv("PROF_FROM")) * 16777216.0 : 0);
@@ -686,6 +690,7 @@ int main(int argc, char **argv)
         }
         u32 pc = r[15];
         u64 c0 = cycles;
+        if (callee_addr && (pc & ~1u) == callee_addr && ncall_hist < 1000000) call_hist[ncall_hist++] = r[14];
         branched = 0;
         icount++;
         if (thumb) {
@@ -714,6 +719,7 @@ int main(int argc, char **argv)
         for (u32 i = 0; i < 0x4000; i++) if (hiw[i]) fprintf(pf_, "%08x %llu\n", 0x03000000 + i * 2, (unsigned long long)hiw[i]);
         fclose(pf_);
     }
+    if (callee_addr) { FILE *cf = fopen("callers.txt", "w"); for (long i = 0; i < ncall_hist; i++) fprintf(cf, "%08x\n", call_hist[i]); fclose(cf); }
     double t = cycles / 16777216.0;
     printf("emulated %.2f s, %llu instr, %ld flips, avg %.2f fps\n", t, (unsigned long long)icount, flips, flips / t);
     /* fps per second of emulated time */
@@ -723,5 +729,6 @@ int main(int argc, char **argv)
         printf("%s%ld", s ? " " : "per-second: ", n);
     }
     printf("\n");
+    if (sramf) { FILE *sf = fopen(sramf, "wb"); if (sf) { fwrite(sram, 1, sizeof sram, sf); fclose(sf); } }
     return 0;
 }

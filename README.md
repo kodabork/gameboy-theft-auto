@@ -16,7 +16,17 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
-## What's new in v0.16
+## What's new in v0.17
+- **Saving fixed.** Saves were being written, but a checksum mismatch made the game reject them on the
+  next boot, so CONTINUE never appeared. Saves now load correctly. The game also autosaves after
+  every completed job (manual saves still aren't allowed during a job or a police chase)
+- **ROM is 42% smaller** (24.8 MB down to 14.3 MB): cars are left/right symmetric, so only half of
+  the view angles are stored and the rest are drawn mirrored; unused terrain height data removed
+- **Faster:** about 13-16% higher frame rate (often 16-19 fps instead of 13-15), from cheaper ground
+  drawing near the camera, fewer divisions in wall and sprite drawing, and a faster minimap
+- Cars now have real windscreens and rear windows (dark tinted glass) instead of body-coloured ones
+
+## v0.16
 - Smoother car rotation: cars now have 64 view angles up close (was 32), at the two nearest
   camera elevations, so they turn smoothly instead of snapping
 - 7 new car types (26 car sets in all): long-roof station wagon, tuner coupe with a big rear wing,

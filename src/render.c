@@ -76,6 +76,7 @@ static const StyleDef styles[4] = {
     { 48,  0, 48, 10, 48, 64, 0, 0 },     /* office: ribbon glazing with mullions */
     { 64,  6, 58, 12, 42, 56, 0, 0 },     /* modern: wide windows */
 };
+static const u16 bay_rcp[4] = { 21846, 26215, 21846, 16384 };   /* ceil(2^20 / bay) */
 
 #define ZK (FY * 65536)
 static s16 col_gfl[SCR_W];               /* first row of ground below the nearest wall */
@@ -93,8 +94,9 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
     }
     if (z0 > 4095) z0 = 4095;
     if (z1 > 4095) z1 = 4095;
-    int sx0 = (60 << 8) + ((x0 * FX) << 8) / z0;
-    int sx1 = (60 << 8) + ((x1 * FX) << 8) / z1;
+    /* x*FX*256/z == x*recip_z[z]/512 (FY = 2*FX): a multiply instead of two divisions */
+    int sx0 = (60 << 8) + (int)(((s64)x0 * recip_z[z0]) >> 9);
+    int sx1 = (60 << 8) + (int)(((s64)x1 * recip_z[z1]) >> 9);
     if (sx0 > sx1) {
         int t;
         t = sx0; sx0 = sx1; sx1 = t; t = x0; x0 = x1; x1 = t;
@@ -123,6 +125,10 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
     int iz = iz0 + (int)(((s64)izstep * frac) >> 8);
     int uz = uz0 + (int)(((s64)uzstep * frac) >> 8);
     int ua = 0, ub = 0, blk = -1, cstart = 0;
+    /* storeys above the shop level: the same for every column of this wall */
+    int nfl = (H - 16 - 64) / styles[style].storey;
+    if (nfl < 0) nfl = 0;
+    const int hb = 64 + nfl * styles[style].storey;
 
     for (int c = c0; c < c1; c++, iz += izstep, uz += uzstep) {
         int ym = col_ymax[c];
@@ -149,15 +155,19 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
         /* texture u: exact every 4 columns, linear in between */
         int b = c >> 2;
         if (b != blk) {
-            blk = b; cstart = c;
             int izb = iz + izstep * 4; if (izb < 64) izb = 64;
-            ua = uz / (izc >> 4 > 0 ? izc >> 4 : 1); ub = (uz + uzstep * 4) / (izb >> 4 > 0 ? izb >> 4 : 1);
+            /* consecutive blocks share an edge: reuse the previous block's end instead of dividing again */
+            if (b == blk + 1 && c == cstart + 4) ua = ub;
+            else ua = uz / (izc >> 4 > 0 ? izc >> 4 : 1);
+            ub = (uz + uzstep * 4) / (izb >> 4 > 0 ? izb >> 4 : 1);
+            blk = b; cstart = c;
         }
         int u = ua + (((ub - ua) * (c - cstart)) >> 2);
         if (u < 0) u = 0;
         /* facade style: 0 brick tenement, 1 brownstone, 2 office ribbon glass, 3 modern concrete */
         const StyleDef *S = &styles[style];
-        int um = u % S->bay;
+        int bq = (u * bay_rcp[style]) >> 20;            /* u / bay without a division */
+        int um = u - bq * S->bay;
         int edge = (u >= 16 && u <= L - 16);
         int wincol = edge && um >= S->w0 && um < S->w1;
         int mullion = (style == 2) && (um % 16) < 2;
@@ -169,11 +179,8 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
         cr = band(col, cr, re, ROW(H - 16), ct0, ct1);                 /* cornice */
         if (cr <= re) {
             int SH = S->storey;
-            int nfl = (H - 16 - 64) / SH;
-            if (nfl < 0) nfl = 0;
-            int hb = 64 + nfl * SH;
             cr = band(col, cr, re, ROW(hb), cw0, cw1);
-            int bay = u / S->bay + seed;
+            int bay = bq + seed;
             for (int fl = nfl - 1; fl >= 0 && cr <= re; fl--) {
                 int base = 64 + fl * SH;
                 if (wincol) {
@@ -329,6 +336,7 @@ static const u8 tile_base[11] = {
     8 + MAT_TRIM * 8 + 1, 8 + MAT_GRASS * 8
 };
 static u8 lot_base[81][2];
+EWRAM_BSS static u8 tile_pal[128 * 128];            /* tile_base[ground_tile[i]], resolved once at start-up */
 #define GRID_TX (GRID_LIM >> 3)
 
 /* base palette index at grid-texel position (16.16 texels; texel = 0.5 m) */
@@ -336,7 +344,7 @@ static inline __attribute__((always_inline)) int ground_base(int gu, int gv, int
 {
     int tx = gu >> 16, ty = gv >> 16;
     if ((unsigned)tx < GRID_TX && (unsigned)ty < GRID_TX) {
-        int b = tile_base[ground_tile[((ty & 127) << 7) | (tx & 127)]];
+        int b = tile_pal[((ty & 127) << 7) | (tx & 127)];
         if (b >= 0xFE) b = lot_base[(ty >> 7) * 9 + (tx >> 7)][b & 1];
         return b;
     }
@@ -362,6 +370,13 @@ static void draw_ground(void)
         else if (ym >= gf - 1) gs[x] = HORIZON + 1;
         else { gs[x] = (u8)gf; patch[npatch++] = (u8)x; }
     }
+    int gsmax = 0;
+    static u8 gmx[SCR_W / 2], gmn[SCR_W / 2];      /* per column pair: rows where ground starts in both / either */
+    for (int i = 0; i < SCR_W / 2; i++) {
+        int a = gs[2 * i], b = gs[2 * i + 1];
+        gmx[i] = (u8)(a > b ? a : b); gmn[i] = (u8)(a < b ? a : b);
+        if (gmx[i] > gsmax) gsmax = gmx[i];
+    }
     for (int y = HORIZON + 1; y < SCR_H; y++) {
         int z = (camh * row_k[y]) >> 16;
         if (z > 4095) z = 4095;
@@ -370,38 +385,70 @@ static void draw_ground(void)
         const int fe = fogpair[z >> 5][0][y & 1], fo = fogpair[z >> 5][1][y & 1];
         const int lanes = z < 640;
         u16 *row = FB + y * SCR_W;
+        /* is this whole row on the street grid? (it is a straight line in texel space) */
+        const unsigned lim = GRID_TX;
+        const int gue = gu + su * (SCR_W - 1), gve = gv + sv * (SCR_W - 1);
+        const int ingrid = (unsigned)(gu >> 16) < lim && (unsigned)(gv >> 16) < lim && (unsigned)(gue >> 16) < lim && (unsigned)(gve >> 16) < lim;
+        #define PAIR_BASE(b) do { if (ingrid) { int tx_ = gu >> 16, ty_ = gv >> 16; b = tile_pal[((ty_ & 127) << 7) | (tx_ & 127)]; \
+            if (b >= 0xFE) b = lot_base[(ty_ >> 7) * 9 + (tx_ >> 7)][b & 1]; } else b = ground_base(gu, gv, lanes); } while (0)
         if (z < 170 && y + 1 < SCR_H) {        /* closest rows: one sample per 2x2 pixels */
             const int su2 = su * 2, sv2 = sv * 2, y1 = y + 1;
             const int fe1 = fogpair[z >> 5][0][y1 & 1], fo1 = fogpair[z >> 5][1][y1 & 1];
-            u16 *row1 = row + SCR_W;
-            for (int x = 0; x < SCR_W; x += 2, gu += su2, gv += sv2) {
-                int ga = gs[x], gb = gs[x + 1];
-                int a = y >= ga, b = y >= gb, a1 = y1 >= ga, b1 = y1 >= gb;
-                if (!(a | b | a1 | b1)) continue;
-                int base = ground_base(gu, gv, lanes);
-                u32 p0 = (u32)((base + fe) * 0x0101) | ((u32)((base + fo) * 0x0101) << 16);
-                u32 p1 = (u32)((base + fe1) * 0x0101) | ((u32)((base + fo1) * 0x0101) << 16);
-                if (a & b) *(u32 *)&row[x] = p0; else if (a) row[x] = (u16)p0; else if (b) row[x + 1] = (u16)(p0 >> 16);
-                if (a1 & b1) *(u32 *)&row1[x] = p1; else if (a1) row1[x] = (u16)p1; else if (b1) row1[x + 1] = (u16)(p1 >> 16);
+            const u32 pp0 = (u32)(fe * 0x0101) | ((u32)(fo * 0x0101) << 16), pp1 = (u32)(fe1 * 0x0101) | ((u32)(fo1 * 0x0101) << 16);
+            u32 *r0 = (u32 *)row, *r1 = (u32 *)(row + SCR_W);
+            int bq = -1, base = 0;                       /* one sample per 4 columns: a texel here spans more than that */
+            for (int i = 0; i < SCR_W / 2; i++, gu += su2, gv += sv2) {
+                if (y1 < gmn[i]) continue;               /* both rows still wall in this column pair */
+                if ((i >> 1) != bq) { bq = i >> 1; PAIR_BASE(base); }
+                u32 bb = (u32)base * 0x01010101u, p0 = bb + pp0, p1 = bb + pp1;
+                if (y >= gmx[i]) { r0[i] = p0; r1[i] = p1; continue; }
+                int x = i * 2, ga = gs[x], gb = gs[x + 1];
+                u16 *q0 = row + x, *q1 = q0 + SCR_W;
+                if (y >= ga) q0[0] = (u16)p0;
+                if (y >= gb) q0[1] = (u16)(p0 >> 16);
+                if (y1 >= ga) q1[0] = (u16)p1;
+                if (y1 >= gb) q1[1] = (u16)(p1 >> 16);
             }
             y++;
             continue;
         }
-        if (z < 256) {                         /* near rows: one sample per two columns */
+        if (z < 512) {                         /* near and middle rows: one sample per two columns */
             const int su2 = su * 2, sv2 = sv * 2;
-            for (int x = 0; x < SCR_W; x += 2, gu += su2, gv += sv2) {
-                int a = y >= gs[x], b = y >= gs[x + 1];
-                if (!(a | b)) continue;
-                int base = ground_base(gu, gv, lanes);
-                if (a & b) { *(u32 *)&row[x] = (u32)((base + fe) * 0x0101) | ((u32)((base + fo) * 0x0101) << 16); }
-                else if (a) row[x] = (u16)((base + fe) * 0x0101);
-                else row[x + 1] = (u16)((base + fo) * 0x0101);
+            const u32 pp = (u32)(fe * 0x0101) | ((u32)(fo * 0x0101) << 16);
+            u32 *rw = (u32 *)row;
+            for (int i = 0; i < SCR_W / 2; i++, gu += su2, gv += sv2) {
+                if (y < gmn[i]) continue;
+                int base; PAIR_BASE(base);
+                u32 p = (u32)base * 0x01010101u + pp;
+                if (y >= gmx[i]) { rw[i] = p; continue; }
+                if (y >= gs[2 * i]) row[2 * i] = (u16)p; else row[2 * i + 1] = (u16)(p >> 16);
             }
         } else {
-            for (int x = 0; x < SCR_W; x++, gu += su, gv += sv) {
-                if (y < gs[x]) continue;
-                int base = ground_base(gu, gv, lanes);
-                row[x] = (u16)((base + ((x & 1) ? fo : fe)) * 0x0101);
+            if (ingrid) {
+                const u16 pe = (u16)(fe * 0x0101), po = (u16)(fo * 0x0101);
+                #define GRID_BASE(b) do { int tx_ = gu >> 16, ty_ = gv >> 16; b = tile_pal[((ty_ & 127) << 7) | (tx_ & 127)]; \
+                    if (b >= 0xFE) b = lot_base[(ty_ >> 7) * 9 + (tx_ >> 7)][b & 1]; } while (0)
+                if (y >= gsmax) {
+                    for (int x = 0; x < SCR_W; x += 2) {
+                        int b0, b1;
+                        GRID_BASE(b0); gu += su; gv += sv;
+                        GRID_BASE(b1); gu += su; gv += sv;
+                        *(u32 *)&row[x] = (u32)(u16)(b0 * 0x0101 + pe) | ((u32)(u16)(b1 * 0x0101 + po) << 16);
+                    }
+                } else {
+                    for (int x = 0; x < SCR_W; x++, gu += su, gv += sv) {
+                        if (y < gs[x]) continue;
+                        int b; GRID_BASE(b);
+                        row[x] = (u16)(b * 0x0101 + ((x & 1) ? po : pe));
+                    }
+                }
+                #undef GRID_BASE
+            } else {
+                for (int x = 0; x < SCR_W; x++, gu += su, gv += sv) {
+                    if (y < gs[x]) continue;
+                    int base = ground_base(gu, gv, lanes);
+                    row[x] = (u16)((base + ((x & 1) ? fo : fe)) * 0x0101);
+                }
             }
         }
     }
@@ -462,16 +509,20 @@ EWRAM_BSS static SprEnt sprs[MAX_SPRITES];
 
 /* Sprites are stored at full horizontal resolution (240 px). Each logical column
    covers two physical pixels, which are merged into one halfword write. */
-static void blit(const SprFrame *f, int sx8, int sb8, int z, const u8 *occ)
+static void blit(const SprFrame *f, int sx8, int sb8, int z, const u8 *occ, int flip)
 {
     int izs = recip_z[z > 4095 ? 4095 : z];
     int inv = ((z << 16) / f->upx) * 64 / 43;          /* source px per screen px, 16.16 */
     if (inv < 4096) inv = 4096;
     int i4 = inv >> 4;
-    int xl = (sx8 << 1) + ((f->ox << 20) / i4);         /* physical px, 8.8 */
-    int xr = xl + ((f->w << 20) / i4);
-    int yt = sb8 + ((f->oy << 20) / i4);
-    int yb = yt + ((f->h << 20) / i4);
+    int ox = flip ? -(f->ox + f->w) : f->ox;
+    const int ri = (1 << 30) / i4;                     /* one division (i4 >= 256), then (a << 20) / i4 ~= a * ri >> 10 */
+    #define DIV_I4(a) ((int)(((s64)(a) * ri) >> 10))
+    int xl = (sx8 << 1) + DIV_I4(ox);                  /* physical px, 8.8 */
+    int xr = xl + DIV_I4(f->w);
+    int yt = sb8 + DIV_I4(f->oy);
+    int yb = yt + DIV_I4(f->h);
+    #undef DIV_I4
     int p0 = (xl + 127) >> 8, p1 = (xr + 127) >> 8;     /* physical columns [p0,p1) */
     int r0 = (yt + 127) >> 8, r1 = (yb + 127) >> 8;
     int cs = p0 >> 1, ce = (p1 + 1) >> 1;
@@ -489,6 +540,7 @@ static void blit(const SprFrame *f, int sx8, int sb8, int z, const u8 *occ)
         int va = (pa >= p0 && pa < p1 && (unsigned)ua < (unsigned)w);
         int vb = (pb >= p0 && pb < p1 && (unsigned)ub < (unsigned)w);
         if (!va && !vb) continue;
+        if (flip) { ua = w - 1 - ua; ub = w - 1 - ub; }
         int rend = re;
         if (izs < col_wiz[c] && col_wtop[c] < rend) rend = col_wtop[c];
         if (occ && occ[c] < rend) rend = occ[c];
@@ -524,7 +576,7 @@ static void blit(const SprFrame *f, int sx8, int sb8, int z, const u8 *occ)
     }
 }
 
-#define IS_DECAL(f) ((unsigned)((f) - BLOOD_POOL) < 12u)
+#define IS_DECAL(f) ((unsigned)(((f) & 0x7FFF) - BLOOD_POOL) < 12u)
 static void draw_sprites(const Sprite *spr, int n)
 {
     int nv = 0;
@@ -545,12 +597,13 @@ static void draw_sprites(const Sprite *spr, int n)
         int z = sprs[k].z - (IS_DECAL(s->frame) ? M(3) : 0);
         int sx8 = (60 << 8) + ((x * FX) << 8) / z;
         int sb8 = (HORIZON << 8) + (((C->h - s->h) * FY) << 8) / z;
-        blit(&spr_frames[s->frame], sx8, sb8, z, 0);
+        blit(&spr_frames[s->frame & 0x7FFF], sx8, sb8, z, 0, s->frame >> 15);
     }
 }
 
 void render_init(void)
 {
+    for (int i = 0; i < 128 * 128; i++) tile_pal[i] = tile_base[ground_tile[i]];
     for (int x = 0; x < SCR_W; x++) {
         col_ang[x] = (u8)(-(iatan2(2 * x + 1 - SCR_W, 2 * FX) >> 4));
         col_k[x] = ((2 * x + 1 - SCR_W) * 65536) / (2 * FX);

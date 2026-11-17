@@ -333,7 +333,8 @@ def render(model, yaw, elev, s, w_sq, rows_up, rows_down, shadow=True, max_t=30.
     if shadow:
         tg = o[:, 2] / max(-dl[2], 1e-4)
         g = o + dl * tg[:, None]
-        fd = model.footprint(g[:, 0] + 0.25, g[:, 1] - 0.15)
+        so = getattr(model, 'shadow_off', (0.25, -0.15))
+        fd = model.footprint(g[:, 0] + so[0], g[:, 1] + so[1])
         shad = (~hit) & (fd < 0.12)
     if hasattr(model, 'ground_light'):
         tg = o[:, 2] / max(-dl[2], 1e-4)
