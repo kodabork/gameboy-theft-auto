@@ -76,6 +76,10 @@ static void recompute_rom(void)
 }
 
 /* ---------------------------------------------------------------- IO */
+/* FIXDT=n: timer 2 (the game clock) advances n ticks per read and the key script is indexed by
+   displayed frame instead of VBlank, so every build plays exactly the same game: pure cost comparison */
+static int fixdt; static u32 fixdt_acc;
+static u32 keys_for_frame(long vf);
 static u16 timer_val(int n)
 {
     if (!(tm_ctl[n] & 0x80)) return tm_reload[n];
@@ -92,8 +96,9 @@ static u16 io_rd16(u32 a)
     switch (a) {
     case 0x004: { u16 v = *(u16 *)&io[4] & 0xFFF8; if (line >= 160 && line < 227) v |= 1; if ((fc_ % LINE_CYC) >= 960) v |= 2; if (line == (*(u16 *)&io[4] >> 8)) v |= 4; return v; }
     case 0x006: return (u16)line;
-    case 0x100: case 0x104: case 0x108: case 0x10C: return timer_val((a - 0x100) >> 2);
-    case 0x130: return (u16)(~keys_now & 0x3FF);
+    case 0x108: if (fixdt) { fixdt_acc += fixdt; return (u16)fixdt_acc; } return timer_val(2);
+    case 0x100: case 0x104: case 0x10C: return timer_val((a - 0x100) >> 2);
+    case 0x130: return (u16)(~(fixdt ? keys_for_frame(flips) : keys_now) & 0x3FF);
     }
     return *(u16 *)&io[a];
 }
@@ -655,6 +660,7 @@ int main(int argc, char **argv)
     const char *sramf = getenv("SRAM_FILE");
     if (sramf) { FILE *sf = fopen(sramf, "rb"); if (sf) { fread(sram, 1, sizeof sram, sf); fclose(sf); } else memset(sram, 0xFF, sizeof sram); }
     double secs = atof(argv[2]);
+    if (getenv("FIXDT")) fixdt = atoi(getenv("FIXDT"));
     for (char *p = argv[3]; *p && nscript < 4096; ) {
         script_n[nscript] = (int)strtol(p, &p, 10); if (*p == ':') p++;
         script_k[nscript++] = (u32)strtoul(p, &p, 16); if (*p == ',') p++;
@@ -729,6 +735,21 @@ int main(int argc, char **argv)
         printf("%s%ld", s ? " " : "per-second: ", n);
     }
     printf("\n");
+    if (getenv("HIST")) {      /* how many VBlanks each displayed frame took */
+        /* HIST=seconds, or HIST=first_frame-last_frame (displayed-frame numbers) */
+        long h[16] = {0}; double from = atof(getenv("HIST")) * 16777216.0;
+        long f0 = 0, f1 = 100000; const char *dash = strchr(getenv("HIST"), '-');
+        if (dash) { f0 = atol(getenv("HIST")); f1 = atol(dash + 1); from = 0; }
+        u64 c0 = 0, c1 = 0;
+        for (long i = 1; i < flips && i < 100000; i++) {
+            if (flip_cyc[i - 1] < from || i <= f0 || i > f1) continue;
+            if (!c0) c0 = flip_cyc[i - 1]; c1 = flip_cyc[i];
+            long v = (long)((flip_cyc[i] - flip_cyc[i - 1] + FRAME_CYC / 2) / FRAME_CYC); if (v > 15) v = 15; h[v]++;
+        }
+        long nf = 0; for (int i = 1; i < 16; i++) nf += h[i];
+        printf("vblanks per frame:"); for (int i = 1; i < 16; i++) if (h[i]) printf(" %d:%ld", i, h[i]);
+        printf("   -> %.2f fps over %ld frames\n", nf && c1 > c0 ? nf * 16777216.0 / (double)(c1 - c0) : 0.0, nf);
+    }
     if (sramf) { FILE *sf = fopen(sramf, "wb"); if (sf) { fwrite(sram, 1, sizeof sram, sf); fclose(sf); } }
     return 0;
 }

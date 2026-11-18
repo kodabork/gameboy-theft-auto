@@ -33,7 +33,7 @@ typedef struct { s16 x, y; u8 g, bank, scale, pad; } TxtObj;
 #define MAX_TXT 96
 extern TxtObj g_txt[MAX_TXT]; extern int g_ntxt;
 void hud_glyph_tile(int g, u32 *tile); int hud_nglyphs(void); void radar_init(void);
-void radar_build(u32 *tiles4bpp);                /* 64x64, 4bpp, 1D tile order */
+void radar_build(u32 *tiles4bpp, int part);      /* 64x64, 4bpp, 1D tile order; part 0..3 per frame */
 extern GameHud g_hud;
 
 void game_init(void);

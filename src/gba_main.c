@@ -140,8 +140,8 @@ int main(void)
         u16 *back = (REG_DISPCNT & 0x0010) ? PAGE0 : PAGE1;
         render_frame(back, &cam, sprs, nobj);
         hud_draw(back);
-        int radar_new = (frame_n++ & 3) == 0;
-        if (radar_new) radar_build(radar_buf);
+        int part = frame_n++ & 3, radar_new = part == 3;
+        radar_build(radar_buf, part);
 
         flip_req = 1;                             /* the VBlank interrupt flips the page */
         /* HUD */

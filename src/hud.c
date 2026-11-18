@@ -61,7 +61,21 @@ static inline void put_px(int x, int y, int c)
 
 static void rect(int x, int y, int w, int h, int c)
 {
-    for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) put_px(x + i, y + j, c);
+    /* clip, then fill whole 2-pixel words; only the odd edge pixels need read-modify-write */
+    int x1 = x + w, y1 = y + h;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x1 > 240) x1 = 240;
+    if (y1 > 160) y1 = 160;
+    if (x >= x1 || y >= y1) return;
+    const u16 cc = (u16)(c | (c << 8));
+    for (int j = y; j < y1; j++) {
+        int a = x, b = x1;
+        if (a & 1) { put_px(a, j, c); a++; }
+        if (b & 1) { b--; put_px(b, j, c); }
+        u16 *p = FBH + j * SCR_W + (a >> 1), *e = FBH + j * SCR_W + (b >> 1);
+        while (p < e) *p++ = cc;
+    }
 }
 
 static int text_width(const char *s, int scale) { int n = 0; while (*s++) n++; return n * 6 * scale; }
@@ -125,19 +139,24 @@ static char *fmt_int(char *p, int v)
 
 static void blit_img(const Img *im, int x0, int y0)     /* palette-index image, 0 = transparent */
 {
-    u8 *fb8 = (u8 *)FBH;
+    int xs = x0 < 0 ? 0 : x0, xe = x0 + im->w > 240 ? 240 : x0 + im->w;
+    if (xs >= xe) return;
     for (int y = 0; y < im->h; y++) {
         int sy = y0 + y; if (sy < 0 || sy >= 160) continue;
-        const u8 *src = im->px + y * im->w;
+        const u8 *src = im->px + y * im->w - x0;     /* indexed by screen x */
         u16 *row = FBH + sy * 120;
-        for (int x = 0; x < im->w; x++) {
-            int v = src[x]; if (!v) continue;
-            int sx = x0 + x; if (sx < 0 || sx >= 240) continue;
+        int sx = xs;
+        if (sx & 1) { int v = src[sx]; if (v) row[sx >> 1] = (u16)((row[sx >> 1] & 0x00FF) | (v << 8)); sx++; }
+        for (; sx + 1 < xe; sx += 2) {               /* whole 2-pixel words */
+            int a = src[sx], b = src[sx + 1];
+            if (!(a | b)) continue;
             u16 *w = &row[sx >> 1];
-            *w = (sx & 1) ? (u16)((*w & 0x00FF) | (v << 8)) : (u16)((*w & 0xFF00) | v);
+            if (a && b) *w = (u16)(a | (b << 8));
+            else if (a) *w = (u16)((*w & 0xFF00) | a);
+            else *w = (u16)((*w & 0x00FF) | (b << 8));
         }
+        if (sx < xe) { int v = src[sx]; if (v) row[sx >> 1] = (u16)((row[sx >> 1] & 0xFF00) | v); }
     }
-    (void)fb8;
 }
 static void shade_band(int y0, int y1)          /* darken a strip of the frame (checker of black) */
 {
@@ -252,19 +271,26 @@ void radar_init(void) {}
 #else
 #define IWRAM_ARM __attribute__((section(".iwram"), target("arm"), noinline))
 #endif
-IWRAM_ARM void radar_build(u32 *t)
+/* Built a quarter of the disc per frame (part 0..3) from values latched at part 0, so the cost is
+   spread evenly instead of landing on one frame; the finished picture is shown after part 3. */
+IWRAM_ARM void radar_build(u32 *t, int part)
 {
-    for (int i = 0; i < 64 * 8; i++) t[i] = 0;
-    int c = icos(g_hud.pang), s = isin(g_hud.pang);
+    static int c, s, ox, oy, px0, py0;
     const int R = 28, SCALE = M(2.5);              /* 2.5 m per radar pixel */
-    /* minimap texel coordinates in 16.16, stepped incrementally */
-    const int ox = (g_hud.px - TMAP_ORIGIN) << 11, oy = (g_hud.py - TMAP_ORIGIN) << 11;   /* units/32 << 16 */
+    if (part == 0) {
+        for (int i = 0; i < 64 * 8; i++) t[i] = 0;
+        c = icos(g_hud.pang); s = isin(g_hud.pang);
+        px0 = g_hud.px; py0 = g_hud.py;
+        /* minimap texel coordinates in 16.16, stepped incrementally */
+        ox = (px0 - TMAP_ORIGIN) << 11; oy = (py0 - TMAP_ORIGIN) << 11;   /* units/32 << 16 */
+    }
     const int sxx = (SCALE * s) >> 3, sxy = -(SCALE * c) >> 3;     /* per +x radar px (>>14, <<11) */
     const int syx = -(SCALE * c) >> 3, syy = -(SCALE * s) >> 3;    /* per +y radar px */
     /* disc spans per row: outer half-width and inner (non-rim) half-width; 8 pixels packed per word write */
     static const u8 span_o[29] = { 28,27,27,27,27,27,27,27,26,26,26,25,25,24,24,23,22,22,21,20,19,18,17,15,14,12,10,7,0 };
     static const s8 span_i[29] = { 27,26,26,26,26,26,26,26,25,25,25,24,24,23,23,22,21,20,20,19,18,16,15,14,12,10,7,0,-1 };
-    for (int y = -R; y <= R; y++) {
+    static const s8 ystart[5] = { -28, -14, 0, 14, 29 };
+    for (int y = ystart[part]; y < ystart[part + 1]; y++) {
         int ay = y < 0 ? -y : y;
         int xo = span_o[ay], xi = span_i[ay];
         int u = ox + y * syx - xo * sxx, v = oy + y * syy - xo * sxy;
@@ -282,9 +308,10 @@ IWRAM_ARM void radar_build(u32 *t)
             if ((px & 7) == 7 || x == xo) { trow[(px >> 3) * 8] = acc; acc = 0; }
         }
     }
+    if (part != 3) return;
     /* blips (clamped to the rim) */
     for (int i = 0; i < g_hud.nblips; i++) {
-        int dx = g_hud.bx[i] - g_hud.px, dy = g_hud.by[i] - g_hud.py;
+        int dx = g_hud.bx[i] - px0, dy = g_hud.by[i] - py0;
         int f = (dx * c + dy * s) >> 14, rr = (dx * s - dy * c) >> 14;
         int x = rr / SCALE, y = -f / SCALE;
         int d2 = x * x + y * y, lim = R - 3;

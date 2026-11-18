@@ -281,52 +281,33 @@ static void draw_buildings(void)
 }
 
 /* ------------------------------------------------------ streets and sky */
-/* tile id -> material*2 + light   (0 = lot) */
-static const u8 tile_ml[11] = {
-    0xFF, MAT_ASPHALT * 2 + 1, MAT_SIDEWALK * 2 + 1, MAT_YELLOW * 2 + 1, MAT_SILVER * 2 + 1,
-    MAT_ASPHALT * 2 + 0, MAT_SIDEWALK * 2 + 0, MAT_CONCRETE * 2 + 0, 0xFE,
-    MAT_TRIM * 2 + 1, MAT_GRASS * 2 + 0
-};
-
 /* ---------------------------------------------------------------- ground */
 EWRAM_BSS static s32 col_k[SCR_W];                     /* column slope (2x-119)/(2FX), 16.16 */
-static u8 fogpair[128][2][2];                  /* palette fog offsets [z>>5][column parity][row parity] */
-static const u8 tm_mat[10] = { MAT_GRASS, MAT_WATER, MAT_SAND, MAT_GRASS, MAT_BROWN,
-                               MAT_ASPHALT, MAT_YELLOW, MAT_SIDEWALK, MAT_SIDEWALK, MAT_CONCRETE };
+EWRAM_BSS static u8 fogpair[128][2][2];                  /* palette fog offsets [z>>5][column parity][row parity] */
 #define GRID_LIM (8 * 1024 + M(15))
 
-/* surface (material*2+light) at map-space position u,v (16.16 units from the map origin) */
-static inline int ground_ml(u32 u, u32 v, int lanes)
+/* palette base (8 + mat*8, no light) per terrain material code */
+static const u8 tm_b8[10] = { 8 + MAT_GRASS * 8, 8 + MAT_WATER * 8, 8 + MAT_SAND * 8, 8 + MAT_GRASS * 8, 8 + MAT_BROWN * 8,
+                              8 + MAT_ASPHALT * 8, 8 + MAT_YELLOW * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_CONCRETE * 8 };
+
+/* road cell seen close up: lane lines from the interpolated lateral road coordinate, crisp at any
+   angle. u,v: 16.16 units from the map origin; idx, m: the terrain cell. Returns a palette base. */
+static __attribute__((noinline)) int lane_base(u32 u, u32 v, int idx, int m)
 {
-    int x = (int)(u >> 16) + TMAP_ORIGIN, y = (int)(v >> 16) + TMAP_ORIGIN;
-    if ((unsigned)x < GRID_LIM && (unsigned)y < GRID_LIM) {
-        int tx = x >> 3, ty = y >> 3;
-        int bx = tx >> 7, by = ty >> 7;
-        int ml = tile_ml[ground_tile[((ty & 127) << 7) | (tx & 127)]];
-        if (ml >= 0xFE) ml = g_world.lotmat[by * 9 + bx] * 2 + (ml == 0xFF);
-        return ml;
+    int uu = (int)(u >> 16) - 8, vv = (int)(v >> 16) - 8;
+    int fx = uu & 15, fy = vv & 15;
+    const u8 *r = terrain_r + (vv >> 4) * TMAP_W + (uu >> 4);
+    int r0 = r[0], r1 = r[1], r2 = r[TMAP_W], r3 = r[TMAP_W + 1];
+    if (r0 && r1 && r2 && r3) {
+        int la = (r0 & 127) * (16 - fx) + (r1 & 127) * fx;
+        int lb = (r2 & 127) * (16 - fx) + (r3 & 127) * fx;
+        int d = ((la * (16 - fy) + lb * fy) >> 5) - 512;      /* 1/64 m */
+        if (d < 0) d = -d;
+        if (d <= 13 && (terrain_r[idx] >> 7)) return 8 + MAT_YELLOW * 8 + 1;
+        if (d <= 294) return (d > 250 && d <= 282) ? 8 + MAT_SIDEWALK * 8 + 1 : 8 + MAT_ASPHALT * 8 + 1;
+        return 8 + MAT_CONCRETE * 8 + (m >> 7);
     }
-    const unsigned lim = (TMAP_W - 2) << 20;
-    if (u >= lim || v >= lim) return MAT_WATER * 2 + (((u ^ v) >> 21) & 1);
-    int idx = (v >> 20) * TMAP_W + (u >> 20);
-    int m = terrain_m[idx], mt = m & 127;
-    if (lanes && mt >= TM_ROAD && mt != TM_PATH) {
-        /* lane lines from the interpolated lateral road coordinate: crisp at any angle */
-        int uu = (int)(u >> 16) - 8, vv = (int)(v >> 16) - 8;
-        int fx = uu & 15, fy = vv & 15;
-        const u8 *r = terrain_r + (vv >> 4) * TMAP_W + (uu >> 4);
-        int r0 = r[0], r1 = r[1], r2 = r[TMAP_W], r3 = r[TMAP_W + 1];
-        if (r0 && r1 && r2 && r3) {
-            int la = (r0 & 127) * (16 - fx) + (r1 & 127) * fx;
-            int lb = (r2 & 127) * (16 - fx) + (r3 & 127) * fx;
-            int d = ((la * (16 - fy) + lb * fy) >> 5) - 512;      /* 1/64 m */
-            if (d < 0) d = -d;
-            if (d <= 13 && (terrain_r[idx] >> 7)) return MAT_YELLOW * 2 + 1;
-            if (d <= 294) return (d > 250 && d <= 282) ? MAT_SIDEWALK * 2 + 1 : MAT_ASPHALT * 2 + 1;
-            return MAT_CONCRETE * 2 + (m >> 7);
-        }
-    }
-    return tm_mat[mt] * 2 + (m >> 7);
+    return tm_b8[m & 127] + (m >> 7);
 }
 
 /* palette base (8 + mat*8 + light) per street tile code; 0xFF/0xFE = the block's lot surface */
@@ -339,17 +320,68 @@ static u8 lot_base[81][2];
 EWRAM_BSS static u8 tile_pal[128 * 128];            /* tile_base[ground_tile[i]], resolved once at start-up */
 #define GRID_TX (GRID_LIM >> 3)
 
-/* base palette index at grid-texel position (16.16 texels; texel = 0.5 m) */
-static inline __attribute__((always_inline)) int ground_base(int gu, int gv, int lanes)
+/* on-grid ground texel -> palette base (lots resolved per block) */
+static inline __attribute__((always_inline)) int grid_px(int gu, int gv, const u8 *tp, const u8 (*lb)[2])
 {
-    int tx = gu >> 16, ty = gv >> 16;
-    if ((unsigned)tx < GRID_TX && (unsigned)ty < GRID_TX) {
-        int b = tile_pal[((ty & 127) << 7) | (tx & 127)];
-        if (b >= 0xFE) b = lot_base[(ty >> 7) * 9 + (tx >> 7)][b & 1];
-        return b;
+    int b = tp[((gv >> 9) & (127 << 7)) | ((gu >> 16) & 127)];
+    if (b >= 0xFE) b = lb[(gv >> 23) * 9 + (gu >> 23)][b & 1];
+    return b;
+}
+/* any ground texel: street grid, island terrain map or open sea (16.16 texels; texel = 0.5 m) */
+static inline __attribute__((always_inline)) int gen_base(int gu, int gv, int lanes)
+{
+    if ((unsigned)(gu >> 16) < GRID_TX && (unsigned)(gv >> 16) < GRID_TX) return grid_px(gu, gv, tile_pal, lot_base);
+    u32 u = (u32)(gu << 3) - ((u32)TMAP_ORIGIN << 16), v = (u32)(gv << 3) - ((u32)TMAP_ORIGIN << 16);
+    const u32 lim = (TMAP_W - 2) << 20;
+    if (u >= lim || v >= lim) return 8 + MAT_WATER * 8 + (((u ^ v) >> 21) & 1);
+    int idx = (v >> 20) * TMAP_W + (u >> 20);
+    int m = terrain_m[idx], mt = m & 127;
+    if (lanes && mt >= TM_ROAD && mt != TM_PATH) return lane_base(u, v, idx, m);
+    return tm_b8[mt] + (m >> 7);
+}
+#define ground_base gen_base
+/* off-grid ground, columns x..x1-1 of one row */
+static __attribute__((noinline)) void gen_span(u16 *row, int x, int x1, int gu, int gv, int su, int sv, int fe, int fo, int lanes)
+{
+    for (; x < x1; x++, gu += su, gv += sv) {
+        int b = gen_base(gu, gv, lanes);
+        row[x] = (u16)((b + ((x & 1) ? fo : fe)) * 0x0101);
     }
-    int ml = ground_ml((u32)(gu << 3) - ((u32)TMAP_ORIGIN << 16), (u32)(gv << 3) - ((u32)TMAP_ORIGIN << 16), lanes);
-    return 8 + (ml >> 1) * 8 + (ml & 1);
+}
+/* off-grid ground, n column pairs into rows y and y+1 (one sample per column, both rows) */
+static __attribute__((noinline)) void gen_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1, int lanes)
+{
+    u16 *d = (u16 *)dst, *end = d + 2 * n;
+    for (int k = 0; d < end; d++, k ^= 16, gu += su, gv += sv) {
+        int b = gen_base(gu, gv, lanes) * 0x0101;
+        d[SCR_W] = (u16)(b + (pp1 >> k));
+        d[0] = (u16)(b + (pp0 >> k));
+    }
+}
+/* Tight span loops, kept out of draw_ground so every variable stays in a register:
+   n column pairs of on-grid ground, one texture sample per column. */
+static __attribute__((noinline)) void grid_span(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp)
+{
+    const u8 *tp = tile_pal; const u8 (*lb)[2] = lot_base;
+    u32 *end = dst + n;
+    do {
+        int b0 = grid_px(gu, gv, tp, lb); gu += su; gv += sv;
+        int b1 = grid_px(gu, gv, tp, lb); gu += su; gv += sv;
+        *dst++ = ((u32)b0 | ((u32)b1 << 16)) * 0x0101u + pp;
+    } while (dst < end);
+}
+/* the same into two rows at once (near ground: one sample shared by rows y and y+1) */
+static __attribute__((noinline)) void grid_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1)
+{
+    const u8 *tp = tile_pal; const u8 (*lb)[2] = lot_base;
+    u32 *end = dst + n;
+    do {
+        int b0 = grid_px(gu, gv, tp, lb); gu += su; gv += sv;
+        int b1 = grid_px(gu, gv, tp, lb); gu += su; gv += sv;
+        u32 bb = ((u32)b0 | ((u32)b1 << 16)) * 0x0101u;
+        dst[SCR_W / 2] = bb + pp1;
+        *dst++ = bb + pp0;
+    } while (dst < end);
 }
 
 /* flat ground, floor-cast row by row into every pixel that is not covered by a wall */
@@ -396,19 +428,29 @@ static void draw_ground(void)
             const int fe1 = fogpair[z >> 5][0][y1 & 1], fo1 = fogpair[z >> 5][1][y1 & 1];
             const u32 pp0 = (u32)(fe * 0x0101) | ((u32)(fo * 0x0101) << 16), pp1 = (u32)(fe1 * 0x0101) | ((u32)(fo1 * 0x0101) << 16);
             u32 *r0 = (u32 *)row, *r1 = (u32 *)(row + SCR_W);
-            for (int i = 0; i < SCR_W / 2; i++) {
-                if (y1 < gmn[i]) { gu += su * 2; gv += sv * 2; continue; }
+            const int gur = gu, gvr = gv;
+            for (int i = 0; i < SCR_W / 2; ) {
+                if (y >= gmx[i]) {                     /* a run of column pairs that are ground in both rows */
+                    int j = i + 1;
+                    while (j < SCR_W / 2 && y >= gmx[j]) j++;
+                    if (ingrid) grid_span2(r0 + i, j - i, gur + su * 2 * i, gvr + sv * 2 * i, su, sv, pp0, pp1);
+                    else gen_span2(r0 + i, j - i, gur + su * 2 * i, gvr + sv * 2 * i, su, sv, pp0, pp1, lanes);
+                    i = j; continue;
+                }
+                if (y1 < gmn[i]) { i++; continue; }
+                gu = gur + su * 2 * i; gv = gvr + sv * 2 * i;
                 int b0, b1;
                 PAIR_BASE(b0); gu += su; gv += sv;
-                PAIR_BASE(b1); gu += su; gv += sv;
+                PAIR_BASE(b1);
                 u32 bb = (u32)b0 * 0x0101u | ((u32)b1 * 0x0101u << 16), p0 = bb + pp0, p1 = bb + pp1;
-                if (y >= gmx[i]) { r0[i] = p0; r1[i] = p1; continue; }
+                if (y >= gmx[i]) { r0[i] = p0; r1[i] = p1; i++; continue; }
                 int x = i * 2, ga = gs[x], gb = gs[x + 1];
                 u16 *q0 = row + x, *q1 = q0 + SCR_W;
                 if (y >= ga) q0[0] = (u16)p0;
                 if (y >= gb) q0[1] = (u16)(p0 >> 16);
                 if (y1 >= ga) q1[0] = (u16)p1;
                 if (y1 >= gb) q1[1] = (u16)(p1 >> 16);
+                i++;
             }
             y++;
             continue;
@@ -427,28 +469,29 @@ static void draw_ground(void)
         } else {
             if (ingrid) {
                 const u16 pe = (u16)(fe * 0x0101), po = (u16)(fo * 0x0101);
-                #define GRID_BASE(b) do { int tx_ = gu >> 16, ty_ = gv >> 16; b = tile_pal[((ty_ & 127) << 7) | (tx_ & 127)]; \
-                    if (b >= 0xFE) b = lot_base[(ty_ >> 7) * 9 + (tx_ >> 7)][b & 1]; } while (0)
-                if (y >= gsmax) {
-                    for (int x = 0; x < SCR_W; x += 2) {
-                        int b0, b1;
-                        GRID_BASE(b0); gu += su; gv += sv;
-                        GRID_BASE(b1); gu += su; gv += sv;
-                        *(u32 *)&row[x] = (u32)(u16)(b0 * 0x0101 + pe) | ((u32)(u16)(b1 * 0x0101 + po) << 16);
+                const u32 pp = (u32)pe | ((u32)po << 16);
+                u32 *rw = (u32 *)row;
+                for (int i = 0; i < SCR_W / 2; ) {
+                    if (y >= gmx[i]) {
+                        int j = i + 1;
+                        while (j < SCR_W / 2 && y >= gmx[j]) j++;
+                        grid_span(rw + i, j - i, gu + su * 2 * i, gv + sv * 2 * i, su, sv, pp);
+                        i = j; continue;
                     }
-                } else {
-                    for (int x = 0; x < SCR_W; x++, gu += su, gv += sv) {
-                        if (y < gs[x]) continue;
-                        int b; GRID_BASE(b);
+                    if (y >= gmn[i]) {                 /* only one column of the pair shows ground */
+                        int x = y >= gs[2 * i] ? 2 * i : 2 * i + 1;
+                        int b = grid_px(gu + su * x, gv + sv * x, tile_pal, lot_base);
                         row[x] = (u16)(b * 0x0101 + ((x & 1) ? po : pe));
                     }
+                    i++;
                 }
-                #undef GRID_BASE
             } else {
-                for (int x = 0; x < SCR_W; x++, gu += su, gv += sv) {
-                    if (y < gs[x]) continue;
-                    int base = ground_base(gu, gv, lanes);
-                    row[x] = (u16)((base + ((x & 1) ? fo : fe)) * 0x0101);
+                for (int x = 0; x < SCR_W; ) {
+                    if (y < gs[x]) { x++; continue; }
+                    int x1 = x + 1;
+                    while (x1 < SCR_W && y >= gs[x1]) x1++;
+                    gen_span(row, x, x1, gu + su * x, gv + sv * x, su, sv, fe, fo, lanes);
+                    x = x1;
                 }
             }
         }
@@ -602,7 +645,7 @@ static void draw_sprites(const Sprite *spr, int n)
     }
 }
 
-void render_init(void)
+__attribute__((section(".romcode"))) void render_init(void)   /* runs once: lives in ROM, not IWRAM */
 {
     for (int i = 0; i < 128 * 128; i++) tile_pal[i] = tile_base[ground_tile[i]];
     for (int x = 0; x < SCR_W; x++) {

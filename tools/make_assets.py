@@ -2,6 +2,7 @@
 import sys, os, time, numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
 from sprites_sdf import *
+from frame_render import crop, run_all
 
 OUT_C, OUT_BIN = sys.argv[1], sys.argv[2]
 NCOL = 148                       # sprite colours (palette indices 104..254); 0 = transparent
@@ -9,33 +10,12 @@ NCOL = 148                       # sprite colours (palette indices 104..254); 0 
 frames = []                      # (rgb_logical, mask, shadowmask, ox, oy, upx_q8)
 
 def add_image(col, mask, smask, ox, oy, upx):
-    any_ = mask | smask
-    if not any_.any():
-        frames.append((np.zeros((1, 1, 3)), np.zeros((1, 1), bool), np.zeros((1, 1), bool), 0, 0, upx)); return
-    ys, xs = np.nonzero(any_)
-    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
-    frames.append((col[y0:y1, x0:x1], mask[y0:y1, x0:x1], smask[y0:y1, x0:x1], int(x0 + ox), int(y0 + oy), upx))
+    frames.append(crop(col, mask, smask, ox, oy, upx))
 
+jobs = []                        # deferred SDF renders: run in parallel (and cached) before the palette
 def add(model, yaw, elev, s, w_sq, up, down, shadow=True, ss=1, outline=False):
-    rgb, a, sh = render(model, yaw, elev, s / ss, w_sq * ss, up * ss, down * ss, shadow)
-    if ss > 1:                                    # anti-aliasing: average ss x ss samples
-        H0, W0 = a.shape
-        a4 = a.reshape(H0 // ss, ss, W0 // ss, ss).astype(np.float32)
-        cov = a4.mean((1, 3))
-        csum = (rgb.reshape(H0 // ss, ss, W0 // ss, ss, 3) * a4[..., None]).sum((1, 3))
-        rgb = csum / np.maximum(a4.sum((1, 3)), 1)[..., None]
-        sh = sh.reshape(H0 // ss, ss, W0 // ss, ss).mean((1, 3)) >= 0.5
-        a = cov >= 0.5
-        sh &= ~a
-    H, W = a.shape
-    if outline:                                   # dark silhouette edge: pre-rendered sprite look
-        inner = a.copy()
-        inner[1:, :] &= a[:-1, :]; inner[:-1, :] &= a[1:, :]; inner[:, 1:] &= a[:, :-1]; inner[:, :-1] &= a[:, 1:]
-        edge = a & ~inner
-        rgb = rgb.copy(); rgb[edge] = rgb[edge] * 0.35
-    yy, xx = np.mgrid[0:H, 0:W]
-    smask = sh & (((xx + yy) & 1) == 0)          # dithered = see-through shadow
-    add_image(rgb, a, smask, -(w_sq // 2), -up, int(round(s * 16 * 256)))
+    frames.append(len(jobs))
+    jobs.append((model, (yaw, elev, s, w_sq, up, down), dict(shadow=shadow, ss=ss, outline=outline)))
 
 sets = []
 def begin(name): sets.append((name, len(frames)))
@@ -166,7 +146,10 @@ begin('TREE'); add(Tree(), 0.0, np.radians(9), 0.05, 136, 142, 16)
 begin('LAMP')
 for i in range(8): add(Lamp(), i * 2 * np.pi / 8, np.radians(9), 0.05, 96, 145, 8)
 group()
-print('scenery', round(time.time() - t0, 1), flush=True)
+print('rendering', len(jobs), 'frames', flush=True)
+done = run_all(jobs, os.path.join(os.path.dirname(OUT_BIN), 'cache'))
+frames = [done[f] if isinstance(f, int) else f for f in frames]
+print('rendered', round(time.time() - t0, 1), flush=True)
 
 # ----------------------------------------------------------- palette (k-means)
 rng = np.random.default_rng(1)

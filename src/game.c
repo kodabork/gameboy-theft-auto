@@ -90,13 +90,14 @@ static u16 keys_prev;
 static int prev_step;
 static u32 frame_no;
 static u8 near_cars[MAX_CARS]; static int n_near;   /* active cars within ~70 m of the player */
-GameHud g_hud;
+EWRAM_BSS GameHud g_hud;
 
-static int angdiff(int a, int b) { return ((a - b + 2048) & 4095) - 2048; }
-static int iabs(int v) { return v < 0 ? -v : v; }
-static int dist_approx(int dx, int dy) { dx = iabs(dx); dy = iabs(dy); return dx > dy ? dx + dy / 2 : dy + dx / 2; }
-static int plx(void) { return pl.x >> 8; }
-static int ply(void) { return pl.y >> 8; }
+#define AINL static inline __attribute__((always_inline))
+AINL int angdiff(int a, int b) { return ((a - b + 2048) & 4095) - 2048; }
+AINL int iabs(int v) { return v < 0 ? -v : v; }
+AINL int dist_approx(int dx, int dy) { dx = iabs(dx); dy = iabs(dy); return dx > dy ? dx + (dy >> 1) : dy + (dx >> 1); }
+AINL int plx(void) { return pl.x >> 8; }
+AINL int ply(void) { return pl.y >> 8; }
 
 static void msg(const char *a, const char *b, int secs) { g_hud.msg1 = a; g_hud.msg2 = b; g_hud.msg_t = secs * TICKS; }
 static void big(const char *t, int color, int secs) { g_hud.big = t; g_hud.big_color = color; g_hud.big_t = secs * TICKS; }
@@ -606,9 +607,19 @@ static void collide_pair(Car *A, Car *B)
 
 static void car_car_collisions(void)
 {
+    /* cheap bounding-square reject first: most pairs are far apart */
+    EWRAM_BSS static int px[MAX_CARS], py[MAX_CARS], pr[MAX_CARS];
+    for (int a = 0; a < n_near; a++) {
+        const Car *c = &cars[near_cars[a]];
+        int hl, hw; dims_of(c->model, &hl, &hw);
+        px[a] = c->x >> 8; py[a] = c->y >> 8; pr[a] = hl + M(0.25);
+    }
     for (int a = 0; a < n_near; a++)
-        for (int b = a + 1; b < n_near; b++)
+        for (int b = a + 1; b < n_near; b++) {
+            int reach = pr[a] + pr[b], dx = px[b] - px[a], dy = py[b] - py[a];
+            if (dx > reach || dx < -reach || dy > reach || dy < -reach) continue;
             collide_pair(&cars[near_cars[a]], &cars[near_cars[b]]);
+        }
 }
 
 /* is point (x,y) inside car c grown by 'pad'? returns push-out direction + car speed */
@@ -1569,7 +1580,7 @@ typedef struct { s16 x, y; u16 frame; s16 head; s16 h; } Prop;     /* head < 0: 
 #define MAX_PROPS 900
 EWRAM_BSS static Prop props[MAX_PROPS];
 static int nprops;
-static u16 prop_start[64], prop_count[64];
+EWRAM_BSS static u16 prop_start[64], prop_count[64];
 #define MAX_ROOF 80
 EWRAM_BSS static Prop roofs[MAX_ROOF];
 static int nroofs;
@@ -1844,20 +1855,32 @@ void game_update(u16 keys, int dt)
     }
     /* move in sub-steps short enough that a fast car can't jump through another one between checks */
     {
-        int vfast = 0;
+        /* each car gets its own number of sub-steps (parked and slow cars need one); the fastest
+           car sets how many collision passes run, and slower cars move on a spread of those passes */
+        EWRAM_BSS static u8 nst[MAX_CARS];
+        EWRAM_BSS static s16 acc_[MAX_CARS];
+        for (int i = 0; i < ncars; i++) { nst[i] = 1; acc_[i] = 0; }
+        int n = 1;
         for (int k = 0; k < n_near; k++) {
-            Car *c = &cars[near_cars[k]];
+            int i = near_cars[k];
+            Car *c = &cars[i];
             int vx, vy; car_vel(c, &vx, &vy);
             int v = dist_approx(vx >> 8, vy >> 8);                 /* units per second */
-            if (v > vfast) vfast = v;
+            int step_len = v * mdt[i] >> 14;                       /* TICKS = 16384: units moved this frame */
+            int ni = ((step_len * 7282) >> 16) + 1;                /* / M(0.6) */
+            if (ni > 8) ni = 8;
+            nst[i] = (u8)ni;
+            if (ni > n) n = ni;
         }
-        int step_len = vfast * dt / TICKS;                         /* units the fastest car moves this frame */
-        int n = step_len / M(0.6) + 1;
-        if (n > 8) n = 8;
         for (int st = 0; st < n; st++) {
             for (int i = 0; i < ncars; i++) {
                 if (!mdt[i] || !cars[i].active) continue;
-                int part = mdt[i] / n + (st == n - 1 ? mdt[i] % n : 0);
+                int ni = nst[i];
+                acc_[i] += ni;
+                if (acc_[i] < n) continue;
+                acc_[i] -= n;
+                int part = ni == 1 ? mdt[i] : mdt[i] / ni;
+                if (st == n - 1) part = mdt[i] - part * (ni - 1);
                 if (part > 0) move_car(&cars[i], part);
             }
             car_car_collisions();
@@ -2004,6 +2027,7 @@ static int view_lim = 0x7fffffff;
 static int view_dist(int x, int y, int *rel_view)
 {
     int dx = x - cm->x, dy = y - cm->y;
+    if (iabs(dx) > view_lim || iabs(dy) > view_lim) return -1;     /* cheap reject first */
     int z = (dx * cm->c + dy * cm->s) >> 14;
     if (z < M(1)) return -1;
     int d = dist_approx(dx, dy);
@@ -2011,7 +2035,7 @@ static int view_dist(int x, int y, int *rel_view)
     /* also reject things well outside the left/right edges of the view */
     int xs = (dx * cm->s - dy * cm->c) >> 14;
     if (iabs(xs) * FX > z * 95 + M(3) * FX) return -1;
-    *rel_view = iatan2(dy, dx);
+    if (rel_view) *rel_view = iatan2(dy, dx);                    /* only when the caller needs the angle */
     return d;
 }
 
@@ -2170,12 +2194,12 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
     for (int i = 0; i < MAX_FLASH; i++)
         if (flashes[i].t > 0) push_h(flashes[i].x, flashes[i].y, FX_FLASH, flashes[i].h);
     /* mission markers and checkpoints */
-    if (mk_col >= 0 && pl.dead_t <= 0 && !cut_on && view_dist(mk_x, mk_y, &view) >= 0) push(mk_x, mk_y, FX_MARKER + mk_col);
+    if (mk_col >= 0 && pl.dead_t <= 0 && !cut_on && view_dist(mk_x, mk_y, 0) >= 0) push(mk_x, mk_y, FX_MARKER + mk_col);
     for (int i = 0; i < ncars; i++) {                           /* smoke and fire on damaged cars */
         Car *c = &cars[i];
         if (!c->active || (c->dmg < CAR_SMOKE && !(IS_WRECK(c) && c->burn > 0))) continue;
         int cx = c->x >> 8, cy = c->y >> 8;
-        int dd = view_dist(cx, cy, &view);
+        int dd = view_dist(cx, cy, 0);
         if (dd < 0 || dd > M(60)) continue;
         int a = c->head >> 8, hl, hw; dims_of(c->model, &hl, &hw);
         int fx = cx + ((icos(a) * (hl * 2 / 3)) >> 14), fy = cy + ((isin(a) * (hl * 2 / 3)) >> 14);   /* engine bay */
@@ -2192,12 +2216,12 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
     }
     for (int i = 0; i < MAX_BOOMS; i++) {
         if (booms[i].t <= 0 || booms[i].t >= BOOM_LEN) continue;
-        if (view_dist(booms[i].x, booms[i].y, &view) < 0) continue;
+        if (view_dist(booms[i].x, booms[i].y, 0) < 0) continue;
         push_h(booms[i].x, booms[i].y, FX_EXPL + booms[i].t * 6 / BOOM_LEN, M(0.5) + booms[i].t * M(2) / BOOM_LEN);
     }
     for (int i = 0; i < MAX_PICKUPS; i++) {
         if (!pickups[i].avail) continue;
-        int dd = view_dist(pickups[i].x, pickups[i].y, &view);
+        int dd = view_dist(pickups[i].x, pickups[i].y, 0);
         if (dd < 0 || dd > M(50)) continue;
         int bob = (isin((int)(frame_no * 40 + i * 300)) * 3) >> 14;
         push_h(pickups[i].x, pickups[i].y, FX_PICKUP + pickups[i].type, M(0.5) + bob);
@@ -2211,7 +2235,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
             int bi = j * 8 + i;
             for (int k = 0; k < prop_count[bi]; k++) {
                 const Prop *p = &props[prop_start[bi] + k];
-                int dd = view_dist(p->x, p->y, &view);
+                int dd = view_dist(p->x, p->y, p->head >= 0 ? &view : 0);
                 if (dd < 0) continue;
                 int f = p->frame;
                 if (p->head >= 0) {
@@ -2225,13 +2249,13 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         for (int i = 0; i < nroofs; i++) {
             int dx = roofs[i].x - cm->x, dy = roofs[i].y - cm->y;
             if (iabs(dx) > M(170) || iabs(dy) > M(170)) continue;
-            if (view_dist(roofs[i].x, roofs[i].y, &view) < 0) continue;
+            if (view_dist(roofs[i].x, roofs[i].y, 0) < 0) continue;
             push_h(roofs[i].x, roofs[i].y, roofs[i].frame, roofs[i].h);
         }
     }
     view_lim = M(100);
     for (int i = 0; i < g_ntrees; i++) {
-        int dd = view_dist(g_trees[i].x, g_trees[i].y, &view);
+        int dd = view_dist(g_trees[i].x, g_trees[i].y, 0);
         if (dd < 0 || dd > M(120)) continue;
         push(g_trees[i].x, g_trees[i].y, TREE);
     }
@@ -2258,7 +2282,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         for (int i = 0; i < NRING_TREES; i++) {
             int x = ring_trees[i][0], y = ring_trees[i][1];
             if (iabs(x - cm->x) > M(120) || iabs(y - cm->y) > M(120)) continue;
-            if (view_dist(x, y, &view) < 0) continue;
+            if (view_dist(x, y, 0) < 0) continue;
             push(x, y, TREE);
         }
     }

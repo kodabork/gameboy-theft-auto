@@ -103,7 +103,7 @@ static void music_tick(void)
     else if (d == 3) { REG16(0x04000078) = 0x5100; REG16(0x0400007C) = 0x8000 | 0x0010; }  /* hat */
 }
 
-void sound_init(void)
+__attribute__((section(".romcode"))) void sound_init(void)   /* runs once: ROM, not IWRAM */
 {
     psg_init();
     build_engine_wave();
