@@ -120,27 +120,31 @@ for c in ((1.0, 0.82, 0.10), (0.20, 0.95, 0.35)):
     col = np.zeros((H_, W_, 3), np.float32); col[:] = c
     col[xr < 0.3] = np.minimum(np.array(c) * 1.2 + 0.2, 1)
     add_image(col, mm, np.zeros_like(mm), -W_ // 2, -H_, int(0.035 * 16 * 256))
-begin('FX_PICKUP')     # 0 pistol, 1 SMG, 2 health, 3 shotgun, 4 rifle
-for kind in range(5):
+begin('FX_PICKUP')     # 0 pistol, 1 SMG, 2 health, 3 shotgun, 4 rifle, 5 rocket launcher
+for kind in range(6):
     col = np.zeros((14, 18, 3), np.float32); mm = np.zeros((14, 18), bool)
     if kind == 2:
         mm[3:11, 7:11] = True; mm[5:9, 4:14] = True; col[:] = (0.95, 0.15, 0.15)
         ring = np.zeros_like(mm); ring[2:12, 3:15] = True; ring &= ~mm
         col[ring] = (0.95, 0.95, 0.95); mm |= ring
     else:
-        if kind == 3:      # shotgun: long twin barrel, pump, stock
+        if kind == 5:      # rocket launcher: fat tube, flared muzzle, grip and sight
+            mm[3:8, 0:18] = True; mm[2:9, 0:2] = True; mm[8:11, 7:9] = True; mm[8:10, 11:13] = True; mm[1:3, 9:12] = True
+        elif kind == 3:    # shotgun: long twin barrel, pump, stock
             mm[4:6, 0:18] = True; mm[6:8, 7:12] = True; mm[5:10, 0:4] = True; mm[6:9, 13:15] = True
         elif kind == 4:    # rifle: barrel, curved magazine, grip, stock
             mm[3:6, 0:18] = True; mm[6:9, 9:11] = True; mm[9:11, 10:12] = True; mm[6:10, 5:7] = True; mm[4:9, 0:3] = True
         else:
             mm[3:7, 2:16 if kind else 13] = True; mm[6:12, 4:7] = True
             if kind: mm[6:11, 10:12] = True; mm[4:6, 16:18] = True
-        col[:] = (0.20, 0.21, 0.23); col[3:4] = (0.55, 0.56, 0.60)
+        col[:] = (0.20, 0.21, 0.23) if kind != 5 else (0.24, 0.30, 0.16); col[3:4] = (0.55, 0.56, 0.60)
         glow = np.zeros_like(mm); glow[1:13, 0:18] = True; glow &= ~mm
         gj, gi = np.nonzero(glow); keep = (gi + gj) % 2 == 0
         g2 = np.zeros_like(mm); g2[gj[keep], gi[keep]] = True
         col[g2] = (0.35, 1.0, 0.45); mm |= g2
     add_image(col, mm, np.zeros_like(mm), -9, -18, int(0.03 * 16 * 256))
+begin('FX_ROCKET')     # rocket in flight: hot exhaust core in a flame halo
+col, mm = blob(9, 7, (1.0, 0.55, 0.10), (1.0, 0.95, 0.70)); add_image(col, mm, np.zeros_like(mm), -4, -3, int(0.03 * 16 * 256))
 group()
 begin('TREE'); add(Tree(), 0.0, np.radians(9), 0.05, 136, 142, 16)
 begin('LAMP')

@@ -28,6 +28,8 @@ typedef struct {
     const char *dlg_who, *dlg_l1, *dlg_l2;       /* story dialogue page */
     int cutscene;                                /* letterbox the dialogue */
     const char *radio_name; int radio_t;         /* station name, shown briefly after a change */
+#define MAX_PK_BLIPS 16
+    s16 pk_x[MAX_PK_BLIPS], pk_y[MAX_PK_BLIPS]; u8 pk_t[MAX_PK_BLIPS]; int npk;   /* pickups on the radar (type: 2 = health) */
 } GameHud;
 void hud_draw(u16 *fb);
 typedef struct { s16 x, y; u8 g, bank, scale, pad; } TxtObj;

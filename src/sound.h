@@ -12,8 +12,8 @@ typedef struct {
     volatile int shot, shot_vol;           /* shot: 1 pistol 2 SMG 3 shotgun 4 rifle; vol 0..64 (0 = full) */
 } SoundState;
 extern SoundState g_snd;
-enum { SFX_TUNE = 1, SFX_PICKUP = 2, SFX_GLASS = 4, SFX_START = 8, SFX_WANTED = 16, SFX_PASS = 32,
-       SFX_FAIL = 64, SFX_YELP = 128, SFX_CASH = 256, SFX_RICOCHET = 512, NSFX = 10 };
+enum { SFX_TUNE = 1, SFX_PICKUP = 2, SFX_GLASS = 4, SFX_START = 8, SFX_PASS = 16,
+       SFX_FAIL = 32, SFX_YELP = 64, SFX_CASH = 128, SFX_RICOCHET = 256, SFX_MEOW = 512, NSFX = 10 };
 void sound_init(void);
 void sound_vblank(void);    /* called from the VBlank interrupt */
 #endif

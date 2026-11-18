@@ -134,3 +134,64 @@ class WaterTower(Base):
         col[stave] *= 0.7
         return col
     def footprint(self, gx, gy): return np.sqrt(gx ** 2 + gy ** 2) - 1.7
+
+class Cat(Base):
+    """A street cat. mode 'walk' (phase 0..2pi) or 'sit'. coat: 'tabby' (orange, striped),
+    'black', 'grey' (grey with a white chest and paws)."""
+    step, iters = 0.7, 140
+    COATS = {'tabby': ((0.80, 0.45, 0.16), (0.50, 0.24, 0.07), (0.92, 0.80, 0.62)),
+             'black': ((0.07, 0.07, 0.08), (0.04, 0.04, 0.05), (0.10, 0.10, 0.11)),
+             'grey':  ((0.50, 0.51, 0.54), (0.36, 0.37, 0.40), (0.90, 0.90, 0.88))}
+    def __init__(self, coat, mode='walk', phase=0.0):
+        self.coat, self.mode, self.phase = coat, mode, float(phase)
+        fur, dark, light = self.COATS[coat]
+        eye = (0.70, 0.85, 0.20) if coat != 'black' else (0.95, 0.80, 0.15)
+        #         body  head  legs   tail  ears  eyes  nose
+        self.cols = [fur, fur, fur, dark if coat == 'tabby' else fur, fur, eye, (0.85, 0.50, 0.50)]
+        self.kinds = [5, 5, 5, 5, 5, 4, 5]
+    def parts(self, p):
+        x, y, z = p[..., 0], p[..., 1], p[..., 2]
+        ph = self.phase
+        legs = np.full(p.shape[:-1], 9, f32)
+        if self.mode == 'sit':
+            body = smin(sd_capsule(p, (-0.10, 0, 0.11), (0.06, 0, 0.22), 0.085), sd_sphere(p, (-0.09, 0, 0.09), 0.10), 0.05)
+            hc = np.array((0.11, 0, 0.36), f32)
+            for s in (-1, 1):
+                legs = np.minimum(legs, sd_capsule(p, (0.07, s * 0.035, 0.20), (0.09, s * 0.035, 0.02), 0.022))
+                legs = np.minimum(legs, sd_sphere(p, (-0.07, s * 0.07, 0.07), 0.055))      # folded haunches
+            tail = np.minimum(sd_capsule(p, (-0.17, 0, 0.03), (-0.05, 0.13, 0.025), 0.02),
+                              sd_capsule(p, (-0.05, 0.13, 0.025), (0.08, 0.10, 0.02), 0.018))
+        else:
+            bob = 0.008 * np.cos(2 * ph)
+            body = smin(sd_capsule(p, (-0.16, 0, 0.20 + bob), (0.12, 0, 0.21 + bob), 0.075),
+                        sd_sphere(p, (0.10, 0, 0.20 + bob), 0.08), 0.04)
+            hc = np.array((0.23, 0, 0.27 + bob), f32)
+            for i, (lx, s) in enumerate(((0.11, 1), (0.11, -1), (-0.13, 1), (-0.13, -1))):
+                sw = 0.07 * np.sin(ph + (0 if i in (0, 3) else np.pi))                    # diagonal pairs
+                lift = 0.03 * max(0.0, np.cos(ph + (0 if i in (0, 3) else np.pi)))
+                legs = np.minimum(legs, sd_capsule(p, (lx, s * 0.04, 0.18 + bob), (lx + sw, s * 0.04, 0.025 + lift), 0.022))
+            sway = 0.05 * np.sin(ph * 0.5)
+            t0, t1, t2 = (-0.20, 0, 0.22), (-0.30, sway, 0.30), (-0.32, sway * 1.8, 0.43)
+            tail = np.minimum(sd_capsule(p, t0, t1, 0.02), sd_capsule(p, t1, t2, 0.017))
+        head = smin(sd_sphere(p, hc, 0.07), sd_sphere(p, hc + (0.05, 0, -0.018), 0.034), 0.02)
+        ears = np.minimum(sd_capsule(p, hc + (0.0, 0.032, 0.045), hc + (-0.004, 0.042, 0.075), 0.02),
+                          sd_capsule(p, hc + (0.0, -0.032, 0.045), hc + (-0.004, -0.042, 0.075), 0.02))
+        eyes = np.minimum(sd_sphere(p, hc + (0.055, 0.026, 0.012), 0.012), sd_sphere(p, hc + (0.055, -0.026, 0.012), 0.012))
+        nose = sd_sphere(p, hc + (0.083, 0, -0.012), 0.009)
+        return [body, head, legs, tail, ears, eyes, nose]
+    def shade(self, p, n, view):
+        ps = np.stack(self.parts(p))
+        idx = ps.argmin(0)
+        alb = np.array(self.cols, f32)[idx].copy()
+        fur, dark, light = self.COATS[self.coat]
+        x, y, z = p[..., 0], p[..., 1], p[..., 2]
+        furry = idx <= 4
+        if self.coat == 'tabby':                                    # stripes across the back and tail
+            st = (np.sin(x * 70 + np.abs(y) * 20) > 0.35) & furry & (z > 0.12)
+            alb[st] = dark
+        if self.coat in ('grey', 'tabby'):                          # pale chest, muzzle and paws
+            pale = furry & (((idx == 0) & (z < 0.17) & (x > 0.02)) | ((idx == 2) & (z < 0.05)) | ((idx == 1) & (x > p[..., 0].min() * 0 + 0.0) & (z < 0.27) & (x > 0.24)))
+            alb[pale] = light
+        kind = np.array(self.kinds, np.int32)[idx]
+        return lighting(alb, kind, n, view, z * 3 + 0.4)
+    def footprint(self, gx, gy): return np.sqrt((gx / 1.8) ** 2 + gy ** 2) - 0.09

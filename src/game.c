@@ -13,7 +13,7 @@
 #define MAX_PEDS 56
 #define MAX_DROPS 32
 #define MAX_FLASH 8
-#define MAX_PICKUPS 24
+#define MAX_PICKUPS 52
 
 /* fixed car slots */
 #define SLOT_TRAFFIC0 1
@@ -75,8 +75,8 @@ static struct {
     int in_car;
     int x, y, head, phase, moving, running;
     int hp, money;
-    u8 weapon, owned;           /* owned bitmask: 1 pistol, 2 smg, 4 shotgun, 8 rifle */
-    s16 ammo[5];
+    u8 weapon, owned;           /* owned bitmask: 1 pistol, 2 smg, 4 shotgun, 8 rifle, 16 rocket launcher */
+    s16 ammo[6];
     int fire_cd, aim_t, hurt_cd, arrest_t;
     int dead_t; u8 dead_kind;
 } pl;
@@ -499,7 +499,8 @@ static void car_damage(Car *c, int d, int by_player)
     c->dmg += d; if (c->dmg > 1000) c->dmg = 1000;
     if (before < CAR_FIRE && c->dmg >= CAR_FIRE) {             /* catches fire */
         c->burn = c->dmg >= 1000 ? TICKS / 2 : 5 * TICKS;
-        if (is_player_car(c)) msg("YOUR CAR IS ON FIRE!", "GET OUT! (R)", 3);
+        /* your own car always gives you time to bail out: a crash alone never kills you */
+        if (is_player_car(c)) { if (c->burn < 4 * TICKS) c->burn = 4 * TICKS; msg("YOUR CAR IS ON FIRE!", "GET OUT! (R)", 3); }
         else if (c->ai == AI_TRAFFIC) { c->ai = AI_NONE; c->speed = 0; eject_driver(c); }
         else if (c->ai == AI_POLICE || c->ai == AI_RIVAL) { c->ai = AI_NONE; }
         if (by_player && c->police) crime(2);
@@ -537,12 +538,11 @@ static void car_explode(Car *c)
     c->model = CAR_WRECK; c->ai = AI_NONE; c->police = 0; c->speed = 0; c->burn = 20 * TICKS;
     c->vx = c->vx / 3; c->vy = c->vy / 3; c->kx = c->ky = 0;
     explode_at(c->x >> 8, c->y >> 8, c);
-    if (was_player) {                         /* thrown clear: hurt, but a crash never kills you */
+    if (was_player) {                         /* still inside when it blows: that's fatal */
         int a = c->head >> 8;
         pl.in_car = -1;
-        pl.x = c->x + Q8((isin(a) * M(3)) >> 14); pl.y = c->y - Q8((icos(a) * M(3)) >> 14); pl.head = c->head;
-        pl.hp -= 40; if (pl.hp < 10) pl.hp = 10;
-        g_hud.hurt_t = TICKS / 3;
+        pl.x = c->x + Q8((isin(a) * M(2)) >> 14); pl.y = c->y - Q8((icos(a) * M(2)) >> 14); pl.head = c->head;
+        player_hurt(1000);
     }
 }
 
@@ -714,7 +714,7 @@ static void crime(int level)
     int nw = level;
     if (wanted >= level) nw = wanted + (cop_nearby(M(45)) ? 1 : 0);
     if (nw > 5) nw = 5;
-    if (nw > wanted) { wanted = nw; wanted_cool = 0; g_snd.sfx |= SFX_WANTED; }
+    if (nw > wanted) { wanted = nw; wanted_cool = 0; }
 }
 
 /* ------------------------------------------------------------ pedestrians */
@@ -962,12 +962,67 @@ static void walk(u16 keys, int dt)
 
 
 /* weapons: 0 fists, 1 pistol, 2 SMG, 3 shotgun, 4 rifle */
-#define NWEAP 5
-static const char *const weapon_names[NWEAP] = { "FISTS", "PISTOL", "SMG", "SHOTGUN", "RIFLE" };
-static const s16 w_rate[NWEAP]  = { 0, TICKS * 3 / 10, TICKS / 11, TICKS * 9 / 10, TICKS * 2 / 5 };
-static const s16 w_range[NWEAP] = { 0, M(32), M(26), M(15), M(55) };
-static const u8 w_dmg[NWEAP]    = { 0, 50, 22, 70, 100 };
-static const u8 w_auto[NWEAP]   = { 0, 0, 1, 0, 0 };
+#define NWEAP 6
+#define W_ROCKET 5
+static const char *const weapon_names[NWEAP] = { "FISTS", "PISTOL", "SMG", "SHOTGUN", "RIFLE", "ROCKETS" };
+static const s16 w_rate[NWEAP]  = { 0, TICKS * 3 / 10, TICKS / 11, TICKS * 9 / 10, TICKS * 2 / 5, TICKS * 6 / 5 };
+static const s16 w_range[NWEAP] = { 0, M(32), M(26), M(15), M(55), M(80) };
+static const u8 w_dmg[NWEAP]    = { 0, 50, 22, 70, 100, 0 };
+static const u8 w_auto[NWEAP]   = { 0, 0, 1, 0, 0, 0 };
+
+/* rockets: real projectiles. A direct hit sets the car ablaze at once; the blast does the rest */
+#define MAX_ROCKETS 3
+typedef struct { int x, y, vx, vy; s16 life, h; u8 active; } Rocket;      /* x,y q8 units; v q8 units/s */
+static Rocket rockets[MAX_ROCKETS];
+static int point_vs_car(const Car *c, int x, int y, int pad, int *ox, int *oy);
+static void rocket_fire(int head)
+{
+    for (int i = 0; i < MAX_ROCKETS; i++) {
+        Rocket *r = &rockets[i];
+        if (r->active) continue;
+        int c = icos(head), sn = isin(head);
+        r->x = pl.x + Q8((c * M(1.2)) >> 14); r->y = pl.y + Q8((sn * M(1.2)) >> 14);
+        r->vx = (c * M(42)) >> 6; r->vy = (sn * M(42)) >> 6;              /* 42 m/s, q8 (no int overflow) */
+        r->life = (s16)(TICKS * 2 >> 6); r->h = M(1.3); r->active = 1;
+        return;
+    }
+}
+static void car_damage(Car *c, int d, int by_player);
+static void explode_at(int x, int y, Car *src);
+static void crime(int level);
+static int cop_nearby(int range);
+static void update_rockets(int dt)
+{
+    for (int i = 0; i < MAX_ROCKETS; i++) {
+        Rocket *r = &rockets[i];
+        if (!r->active) continue;
+        r->life -= dt >> 6;
+        /* move in steps of about 0.6 m so it can't skip through a car */
+        int dist = dist_approx(r->vx >> 8, r->vy >> 8) * dt / TICKS;          /* units this frame */
+        int n = dist / M(0.6) + 1, hit = r->life <= 0;
+        Car *hc = 0;
+        for (int k = 0; k < n && !hit; k++) {
+            r->x += (r->vx >> 6) * dt / (TICKS >> 6) / n; r->y += (r->vy >> 6) * dt / (TICKS >> 6) / n;
+            int x = r->x >> 8, y = r->y >> 8;
+            if (world_point_blocked(x, y, M(0.2))) { hit = 1; break; }
+            for (int j = 0; j < ncars; j++) {
+                Car *c = &cars[j];
+                if (!c->active || j == pl.in_car) continue;
+                int ox, oy;
+                if (point_vs_car(c, x, y, M(0.2), &ox, &oy)) { hit = 1; hc = c; break; }
+            }
+            for (int j = 0; j < MAX_PEDS && !hit; j++) {
+                const Ped *p = &peds[j];
+                if (p->active && !p->down && dist_approx((p->x >> 8) - x, (p->y >> 8) - y) < M(0.7)) hit = 1;
+            }
+        }
+        if (!hit) continue;
+        r->active = 0;
+        if (hc && !IS_WRECK(hc)) car_damage(hc, 1000, 1);          /* direct hit: burning, about to go up */
+        explode_at(r->x >> 8, r->y >> 8, hc);
+        if (cop_nearby(M(45))) crime(2);
+    }
+}
 
 static void hit_ped(Ped *p, int dmg, int aimang)
 {
@@ -1001,6 +1056,24 @@ static void player_fire(u16 keys, u16 pressed, int dt)
     pl.fire_cd = w_rate[w];
     pl.ammo[w]--;
     pl.aim_t = TICKS / 2;
+    if (w == W_ROCKET) {                                        /* aim at the nearest car ahead, else straight on */
+        int ph = pl.head >> 8, aim = ph, bd = M(80);
+        for (int i = 0; i < ncars; i++) {
+            const Car *c = &cars[i];
+            if (!c->active || IS_WRECK(c)) continue;
+            int dx = (c->x >> 8) - plx(), dy = (c->y >> 8) - ply(), d = dist_approx(dx, dy);
+            if (d >= bd || d < M(3)) continue;
+            int a = iatan2(dy, dx);
+            if (iabs(angdiff(a, ph)) > 400) continue;
+            bd = d; aim = a;
+        }
+        pl.head = Q8(aim);
+        rocket_fire(aim);
+        muzzle(plx(), ply(), aim, M(1.35));
+        g_snd.shot = 3; g_snd.shot_vol = 52;
+        panic(plx(), ply(), M(50));
+        return;
+    }
     int range = w_range[w];
     int ph = pl.head >> 8;
     /* candidates in front, best first (auto-aim) */
@@ -1036,7 +1109,7 @@ static void player_fire(u16 keys, u16 pressed, int dt)
         }
     }
     else {                                              /* nobody in the sights: shoot the nearest car ahead */
-        static const s16 car_dmg[NWEAP] = { 0, 70, 30, 160, 130 };
+        static const s16 car_dmg[NWEAP] = { 0, 70, 30, 160, 130, 0 };
         int bc = -1, bd = 0x7fffffff;
         for (int i = 0; i < ncars; i++) {
             Car *c = &cars[i];
@@ -1090,7 +1163,7 @@ static void toggle_car(void)
 {
     if (pl.in_car >= 0) {
         Car *c = &cars[pl.in_car];
-        if (c->speed > Q8(M(3)) || c->speed < -Q8(M(3))) return;
+        if ((c->speed > Q8(M(3)) || c->speed < -Q8(M(3))) && c->dmg < CAR_FIRE) return;   /* bail out of a burning car at any speed */
         int a = c->head >> 8;
         for (int side = 1; side >= -1; side -= 2) {
             int ex = (c->x >> 8) + side * ((-isin(a) * M(2.0)) >> 14);
@@ -1123,6 +1196,99 @@ static void toggle_car(void)
     }
 }
 
+
+/* ------------------------------------------------------------ cats */
+/* A few street cats near the player. They live on the sidewalk loop around a block (like the
+   pedestrians, so they never walk into walls): wander, sit, bolt from runners and cars, and
+   meow when you walk up to them. Nothing ever hurts them. */
+#define MAX_CATS 5
+#define CAT_A M(14.3)                    /* sidewalk loop: square from (A, A) to (B, B) in the block */
+#define CAT_B M(61.7)
+#define CAT_SIDE (CAT_B - CAT_A)
+enum { CAT_WALK, CAT_SIT, CAT_RUN };
+typedef struct { int s; int x, y, head, phase; s16 timer, meow_cd; u8 active, bx, by, state, coat; s8 dir; } StreetCat;
+EWRAM_BSS static StreetCat street_cats[MAX_CATS];
+
+static void cat_place(StreetCat *c)
+{
+    int s = c->s >> 8, side = s / CAT_SIDE, t = s - side * CAT_SIDE;
+    int ox = c->bx * 1024, oy = c->by * 1024, x, y, h;
+    switch (side & 3) {
+    case 0: x = CAT_A + t; y = CAT_A; h = 0; break;
+    case 1: x = CAT_B; y = CAT_A + t; h = 1024; break;
+    case 2: x = CAT_B - t; y = CAT_B; h = 2048; break;
+    default: x = CAT_A; y = CAT_B - t; h = 3072; break;
+    }
+    c->x = ox + x; c->y = oy + y;
+    if (c->state != CAT_SIT) c->head = c->dir > 0 ? h : (h + 2048) & 4095;
+}
+
+static void cat_spawn(StreetCat *c)
+{
+    int pbx = plx() >> 10, pby = ply() >> 10;
+    for (int tries = 0; tries < 8; tries++) {
+        c->bx = (u8)clampi(pbx + (int)(rnd() % 3) - 1, 0, 7); c->by = (u8)clampi(pby + (int)(rnd() % 3) - 1, 0, 7);
+        c->s = (int)(rnd() % (4 * CAT_SIDE)) << 8;
+        c->dir = (rnd() & 1) ? 1 : -1; c->state = CAT_SIT; c->timer = (s16)(rnd() % 6 + 2) * 64;
+        c->head = (int)(rnd() & 4095);
+        cat_place(c);
+        if (dist_approx(c->x - plx(), c->y - ply()) > M(22)) break;
+    }
+    c->coat = (u8)(rnd() % 3); c->phase = 0; c->meow_cd = 0; c->active = 1;
+}
+
+static void update_cats(int dt)
+{
+    const int in_town = plx() > 0 && ply() > 0 && plx() < 8 * 1024 && ply() < 8 * 1024;
+    for (int i = 0; i < MAX_CATS; i++) {
+        StreetCat *c = &street_cats[i];
+        if (!c->active || dist_approx(c->x - plx(), c->y - ply()) > M(90)) {
+            if (in_town) cat_spawn(c); else c->active = 0;
+            continue;
+        }
+        int ticks = dt >> 8;                                    /* timers count 1/64 s */
+        if (c->meow_cd > 0) c->meow_cd -= ticks;
+        /* threats: a car moving nearby, or the player running at it */
+        int pd = dist_approx(c->x - plx(), c->y - ply());
+        int threat = 0, tx = 0, ty = 0;
+        if (pl.in_car < 0 && pd < M(4) && pl.running) { threat = 1; tx = plx(); ty = ply(); }
+        for (int k = 0; k < n_near && !threat; k++) {
+            const Car *v = &cars[near_cars[k]];
+            int vx, vy; car_vel(v, &vx, &vy);
+            if (dist_approx(vx >> 8, vy >> 8) < M(2)) continue;
+            if (dist_approx((v->x >> 8) - c->x, (v->y >> 8) - c->y) < M(8)) { threat = 1; tx = v->x >> 8; ty = v->y >> 8; }
+        }
+        if (threat && c->state != CAT_RUN) {
+            /* bolt along the sidewalk, whichever way leads away */
+            int s0 = c->s, best = 1, bd = -1;
+            for (int d = -1; d <= 1; d += 2) {
+                c->s = s0 + d * Q8(M(2)); c->dir = (s8)d; cat_place(c);
+                int dd = dist_approx(c->x - tx, c->y - ty);
+                if (dd > bd) { bd = dd; best = d; }
+            }
+            c->s = s0; c->dir = (s8)best; c->state = CAT_RUN; c->timer = 100 + (int)(rnd() % 60);
+        } else if (!threat && pl.in_car < 0 && pd < M(2.5) && !pl.running && c->state != CAT_RUN) {
+            if (c->meow_cd <= 0) { g_snd.sfx |= SFX_MEOW; c->meow_cd = 64 * 6; }   /* friendly mew, then sits and looks at you */
+            c->state = CAT_SIT; c->timer = 64 * 3;
+            c->head = iatan2(ply() - c->y, plx() - c->x);
+        }
+        c->timer -= ticks;
+        if (c->timer <= 0) {
+            if (c->state == CAT_SIT) { c->state = CAT_WALK; c->dir = (rnd() & 1) ? 1 : -1; c->timer = (s16)(64 * (3 + rnd() % 6)); }
+            else { c->state = CAT_SIT; c->timer = (s16)(64 * (2 + rnd() % 7)); }
+        }
+        if (c->state != CAT_SIT) {
+            int speed = c->state == CAT_RUN ? Q8(M(4.5)) : Q8(M(0.6));      /* q8 units per second */
+            int step = (speed >> 6) * dt / (TICKS >> 6);
+            c->s += c->dir * step;
+            const int loop = Q8(4 * CAT_SIDE);
+            if (c->s < 0) c->s += loop; else if (c->s >= loop) c->s -= loop;
+            c->phase += step;
+            cat_place(c);
+        }
+    }
+}
+
 /* ------------------------------------------------------------ pickups */
 static void setup_pickups(void)
 {
@@ -1130,10 +1296,15 @@ static void setup_pickups(void)
     static const s16 pos[MAX_PICKUPS][3] = {
         {3,3,0}, {5,4,2}, {2,5,1}, {4,6,0}, {6,3,1}, {1,2,2}, {6,6,2}, {2,2,0}, {5,1,1}, {3,6,2},
         {0,0,3}, {7,7,3}, {4,1,3}, {1,6,4}, {6,0,4}, {7,4,0}, {0,4,1}, {3,7,1}, {7,1,2}, {4,4,4},
-        {0,7,0}, {5,6,3}, {2,0,2}, {6,5,0} };
+        {0,7,0}, {5,6,3}, {2,0,2}, {6,5,0},
+        /* v0.20: a second set, mostly guns; these sit on the far side of their block */
+        {1,5,5}, {6,2,5}, {3,0,5}, {5,7,5},      /* rocket launchers; the first is a block from the Kings' corner */
+        {6,4,0}, {3,1,1}, {0,1,3}, {4,5,4}, {5,7,0}, {2,1,1}, {3,2,3}, {1,3,4}, {0,6,1}, {1,0,4}, {4,2,0}, {6,7,3}, {5,5,1}, {7,6,4}, {1,4,3}, {1,5,0}, {4,0,1}, {3,4,4}, {4,3,2}, {7,3,2}, {2,7,0}, {3,5,3}, {2,4,1}, {4,7,2} };
     for (int i = 0; i < MAX_PICKUPS; i++) {
-        pickups[i].x = pos[i][0] * 1024 + M(13.5);
-        pickups[i].y = pos[i][1] * 1024 + M(30 + (i * 7) % 25);
+        int x = pos[i][0] * 1024 + M(13.5), y = pos[i][1] * 1024 + M(30 + (i * 7) % 25);
+        if (i >= 24) { x = pos[i][0] * 1024 + M(28 + (i * 11) % 24); y = pos[i][1] * 1024 + M(13.5); }   /* the cross street's sidewalk */
+        for (int k = 0; k < 8 && world_point_blocked(x, y, M(0.6)); k++) { x += M(2); y += M(2); }   /* never inside a wall */
+        pickups[i].x = x; pickups[i].y = y;
         pickups[i].type = (u8)pos[i][2]; pickups[i].avail = 1; pickups[i].timer = 0;
     }
 }
@@ -1150,6 +1321,7 @@ static void update_pickups(int dt)
         else if (k->type == 1) { pl.owned |= 2; pl.ammo[2] += 120; pl.weapon = 2; msg("SMG", "", 2); }
         else if (k->type == 3) { pl.owned |= 4; pl.ammo[3] += 16; pl.weapon = 3; msg("SHOTGUN", "", 2); }
         else if (k->type == 4) { pl.owned |= 8; pl.ammo[4] += 30; pl.weapon = 4; msg("RIFLE", "", 2); }
+        else if (k->type == 5) { pl.owned |= 16; pl.ammo[5] += 5; pl.weapon = 5; msg("ROCKET LAUNCHER", "5 ROCKETS", 2); }
         else { pl.hp = 100; msg("HEALTH", "", 2); }
         g_snd.sfx |= SFX_PICKUP;
     }
@@ -1229,7 +1401,8 @@ static const char *const mission_title[] = { "HOT WHEELS", "CANDY RUN", "THE BOO
 static const u16 giver_model[] = { PED_RED, PED_GREEN, PED_SUIT, PED_SUIT, PED_NAVY, PED_SUIT, PED_GREEN, PED_RED, PED_WHITE };
 
 static int gstate = 0;                        /* GS_* */
-typedef struct { u32 magic; u16 ver, mission; s32 money; s16 hp; u8 owned, weapon; s16 ammo[5]; u16 pad; s32 x, y; u32 sum; } SaveData;
+/* car: 0 = saved on foot, else car set + 1 in the low byte and heading (256 per turn) in the high byte */
+typedef struct { u32 magic; u16 ver, mission; s32 money; s16 hp; u8 owned, weapon; s16 ammo[5]; u16 car; s32 x, y; u32 sum; } SaveData;
 static int save_read(SaveData *d);
 static void save_write(void);
 static int menu_sel, menu_note, title_t, has_save;
@@ -1539,7 +1712,7 @@ static void respawn_player(void)
     pl.x = Q8(bx * 1024 + M(13.5)); pl.y = Q8(by * 1024 + M(36)); pl.head = Q8(0);
     cam_ang = pl.head;
     pl.hp = 100;
-    if (arrested) { pl.owned = 0; pl.weapon = 0; pl.ammo[1] = pl.ammo[2] = pl.ammo[3] = pl.ammo[4] = 0; pl.money -= pl.money / 10; }
+    if (arrested) { pl.owned = 0; pl.weapon = 0; pl.ammo[1] = pl.ammo[2] = pl.ammo[3] = pl.ammo[4] = pl.ammo[5] = 0; pl.money -= pl.money / 10; }
     else { pl.money -= 100; if (pl.money < 0) pl.money = 0; }
     wanted = 0; wanted_cool = 0;
     for (int i = 0; i < NPOLICE; i++) cars[SLOT_POLICE0 + i].active = 0;
@@ -1718,8 +1891,15 @@ static void save_write(void)
     { u8 *z = (u8 *)&d; for (unsigned i = 0; i < sizeof d; i++) z[i] = 0; }   /* no stray padding bytes in the checksum */
     d.magic = SAVE_MAGIC; d.ver = 1; d.mission = (u16)mission; d.money = pl.money; d.hp = (s16)pl.hp;
     d.owned = pl.owned; d.weapon = pl.weapon;
-    for (int i = 0; i < 5; i++) d.ammo[i] = pl.ammo[i];
+    for (int i = 1; i < 5; i++) d.ammo[i] = pl.ammo[i];
+    d.ammo[0] = pl.ammo[5];                       /* slot 0 (fists) was unused: it holds the rockets */
     d.x = plx(); d.y = ply();
+    if (pl.in_car >= 0 && !IS_WRECK(&cars[pl.in_car])) {
+        const Car *c = &cars[pl.in_car];
+        enum { RCP = ((1 << 22) + CAR_SET_FRAMES - 1) / CAR_SET_FRAMES };
+        int set = (int)(((unsigned)(c->model - CAR_COUPE_BLUE) * RCP) >> 22);
+        if (set >= 0 && set < CAR_NSETS) d.car = (u16)((set + 1) | (((c->head >> 8) >> 4) << 8));
+    }
     d.sum = save_sum(&d);
     const u8 *b = (const u8 *)&d;
     for (unsigned i = 0; i < sizeof d; i++) SRAM_B(i) = b[i];
@@ -1730,7 +1910,8 @@ static void new_game_state(void)
 {
     if (pl.in_car >= 0) cars[pl.in_car].ai = AI_NONE;
     pl.in_car = 0; pl.hp = 100; pl.money = 0; pl.owned = 0; pl.weapon = 0; pl.dead_t = 0;
-    for (int i = 0; i < 5; i++) pl.ammo[i] = 0;
+    for (int i = 0; i < 6; i++) pl.ammo[i] = 0;
+    for (int i = 0; i < MAX_ROCKETS; i++) rockets[i].active = 0;
     Car *p = &cars[0];
     p->model = CAR_HATCH_LIME; p->ai = AI_NONE; p->speed = 0; p->vx = p->vy = 0; p->active = 1; p->kx = p->ky = p->spin = 0; p->dmg = 0; p->burn = 0;
     p->x = Q8(ROAD_C(3) + M(18)); p->y = Q8(ROAD_C(4) - LANE_OFS); p->head = 0;
@@ -1740,6 +1921,7 @@ static void new_game_state(void)
     for (int i = PED_CREW0; i < MAX_PEDS; i++) peds[i].active = 0;
     cars[SLOT_MISSION].active = 0; cars[SLOT_RIVAL0].active = cars[SLOT_RIVAL0 + 1].active = 0;
     setup_missions(); setup_pickups();
+    for (int i = 0; i < MAX_CATS; i++) street_cats[i].active = 0;
     g_hud.msg_t = 0; g_hud.big_t = 0; g_hud.countdown = 0; cut_on = 0;
 }
 static void load_game(const SaveData *d)
@@ -1747,10 +1929,17 @@ static void load_game(const SaveData *d)
     new_game_state();
     mission = d->mission; pl.money = d->money; pl.hp = d->hp > 0 ? d->hp : 100;
     pl.owned = d->owned; pl.weapon = d->weapon;
-    for (int i = 0; i < 5; i++) pl.ammo[i] = d->ammo[i];
-    /* back on foot where the game was saved, the starter car parked beside you */
-    pl.in_car = -1; pl.x = Q8(d->x); pl.y = Q8(d->y);
-    cars[0].x = Q8(d->x + M(3)); cars[0].y = Q8(d->y);
+    for (int i = 1; i < 5; i++) pl.ammo[i] = d->ammo[i];
+    pl.ammo[0] = 0; pl.ammo[5] = d->ammo[0];
+    /* back where the game was saved: in the car you saved in, or on foot with no free car */
+    pl.x = Q8(d->x); pl.y = Q8(d->y);
+    int set = (d->car & 255) - 1;
+    if (set >= 0 && set < CAR_NSETS) {
+        Car *c = &cars[0];
+        c->model = (u16)(CAR_COUPE_BLUE + set * CAR_SET_FRAMES); c->police = 0;
+        c->x = pl.x; c->y = pl.y; c->head = Q8((d->car >> 8) << 4); cam_ang = c->head;
+        pl.in_car = 0; pl.head = c->head;
+    } else { pl.in_car = -1; cars[0].active = 0; }
 }
 
 static void meta_update(u16 keys, u16 pressed, int dt)
@@ -1783,7 +1972,7 @@ static void meta_update(u16 keys, u16 pressed, int dt)
         static const char *items[4] = { "RESUME", "SAVE GAME", "", "QUIT TO TITLE" };
         for (int i = 0; i < 4; i++) g_hud.menu_item[i] = items[i];
         static char rbuf[24];
-        { const char *a = "RADIO: ", *b = radio_label(); int n = 0; while (*a) rbuf[n++] = *a++; while (*b && n < 23) rbuf[n++] = *b++; rbuf[n] = 0; }
+        { const char *a = "RADIO: ", *b = g_snd.radio_on ? station_name[g_snd.station] : "OFF"; int n = 0; while (*a) rbuf[n++] = *a++; while (*b && n < 23) rbuf[n++] = *b++; rbuf[n] = 0; }
         g_hud.menu_item[2] = rbuf;
         g_hud.menu_n = 4; g_hud.menu_title = "PAUSED";
         g_hud.menu_note = menu_note == 1 ? "GAME SAVED" : menu_note == 2 ? "CAN'T SAVE DURING A JOB OR CHASE" : 0;
@@ -1916,6 +2105,8 @@ void game_update(u16 keys, int dt)
         pl.x = cars[pl.in_car].x; pl.y = cars[pl.in_car].y;       /* crashes never hurt the driver */
     }
     update_pickups(dt);
+    update_rockets(dt);
+    update_cats(dt);
     {   /* Marta's garage fixes your ride: stop in front of it */
         static int in_garage;
         int near = pl.in_car >= 0 && dist_approx(garage_x - plx(), garage_y - ply()) < M(7) && !(mission == 0 && mstate == 1);
@@ -2040,6 +2231,15 @@ void game_update(u16 keys, int dt)
         if (c->active && c->police && wanted) { g_hud.bx[nb] = c->x >> 8; g_hud.by[nb] = c->y >> 8; g_hud.bc[nb++] = 4; }
     }
     g_hud.nblips = nb;
+    /* pickups within radar range (about 70 m): drawn as icons, guns and health */
+    int np = 0;
+    for (int i = 0; i < MAX_PICKUPS && np < MAX_PK_BLIPS; i++) {
+        if (!pickups[i].avail) continue;
+        int dx = pickups[i].x - g_hud.px, dy = pickups[i].y - g_hud.py;
+        if (iabs(dx) > M(72) || iabs(dy) > M(72)) continue;
+        g_hud.pk_x[np] = (s16)pickups[i].x; g_hud.pk_y[np] = (s16)pickups[i].y; g_hud.pk_t[np++] = pickups[i].type;
+    }
+    g_hud.npk = np;
 }
 
 /* ---------------------------------------------------------------- scene */
@@ -2213,6 +2413,24 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
             push(x, y, ped_frame(base, dir, moving, p->run, p->aim, p->phase));
         }
     }
+    view_lim = M(40);
+    for (int i = 0; i < MAX_CATS; i++) {                        /* cats: 8 directions x (sit, walk 0..3) */
+        const StreetCat *c = &street_cats[i];
+        if (!c->active) continue;
+        if (view_dist(c->x, c->y, &view) < 0) continue;
+        int dir = ((((c->head - view) & 4095) + 256) >> 9) & 7;
+        static const u16 coat_base[3] = { CAT_TABBY, CAT_BLACK, CAT_GREY };
+        int f = c->state == CAT_SIT ? 0 : 1 + ((c->phase / Q8(M(0.09))) & 3);
+        push(c->x, c->y, coat_base[c->coat] + dir * 5 + f);
+    }
+    view_lim = M(50);
+    for (int i = 0; i < MAX_ROCKETS; i++) {
+        const Rocket *r = &rockets[i];
+        if (!r->active) continue;
+        int x = r->x >> 8, y = r->y >> 8;
+        push_h(x, y, FX_ROCKET, r->h);
+        push_h(x - (r->vx >> 13), y - (r->vy >> 13), FX_SMOKE, r->h - M(0.3));   /* smoke trail, ~1.3 m behind */
+    }
     for (int i = 0; i < MAX_DROPS; i++)
         if (drops[i].life > 0) push_h(drops[i].x >> 8, drops[i].y >> 8, BLOOD_DROP, drops[i].h >> 8);
     for (int i = 0; i < MAX_FLASH; i++)
@@ -2322,7 +2540,20 @@ void game_debug(void)
     int act = 0; for (int i = 0; i < MAX_PEDS; i++) act += peds[i].active;
     printf("peds active %d  wanted %d  hp %d  police %d\n", act, wanted, pl.hp, active_police());
     printf("pl %d,%d g=%d in_car %d hp %d dead %d\n", plx(), ply(), ground_h(plx(), ply()), pl.in_car, pl.hp, pl.dead_t);
+    for (int i = 0; i < MAX_CATS; i++) if (street_cats[i].active) printf("cat%d %5d,%5d state %d coat %d d=%d\n", i, street_cats[i].x, street_cats[i].y, street_cats[i].state, street_cats[i].coat, dist_approx(street_cats[i].x - plx(), street_cats[i].y - ply()) / 16);
+    for (int i = 0; i < MAX_ROCKETS; i++) if (rockets[i].active) printf("rocket%d %d,%d\n", i, rockets[i].x >> 8, rockets[i].y >> 8);
+    printf("weapon %d ammo %d owned %d\n", pl.weapon, pl.ammo[pl.weapon], pl.owned);
     if (pl.in_car >= 0) { Car *c = &cars[pl.in_car]; printf("player car %d,%d g=%d camgh=%d head=%d\n", c->x >> 8, c->y >> 8, ground_h(c->x >> 8, c->y >> 8), cam_gh, c->head >> 8); }
+}
+void game_debug_near_cat(void)              /* test: stand 4 m from the nearest cat, facing it */
+{
+    int bi = -1, bd = 0x7fffffff;
+    for (int i = 0; i < MAX_CATS; i++) { int d = dist_approx(street_cats[i].x - plx(), street_cats[i].y - ply()); if (street_cats[i].active && d < bd) { bd = d; bi = i; } }
+    if (bi < 0 || pl.in_car >= 0) return;
+    StreetCat *c = &street_cats[bi];
+    int a = (c->head + 1024) & 4095;                       /* beside it, on the sidewalk line */
+    pl.x = Q8(c->x - ((icos(c->head) * M(3)) >> 14) + ((icos(a) * M(1.6)) >> 14)); pl.y = Q8(c->y - ((isin(c->head) * M(3)) >> 14) + ((isin(a) * M(1.6)) >> 14));
+    pl.head = Q8(c->head); cam_ang = pl.head;
 }
 void game_debug_knock(int ahead_m, int age)
 {
@@ -2335,6 +2566,7 @@ void game_debug_knock(int ahead_m, int age)
     Ped *q = &peds[1]; q->x = p->x + Q8(M(3)); q->y = p->y - Q8(M(3.5)); q->down = 0;
 }
 void game_debug_play(void) { new_game_state(); gstate = GS_PLAY; }
+void game_debug_burn_self(void) { if (pl.in_car >= 0) car_damage(&cars[pl.in_car], 1000, 0); }   /* test: set your own car on fire */
 void game_debug_burn(int d)              /* damage the car nearest the player (not the player's) */
 {
     int bi = -1, bd = 0x7fffffff;
@@ -2373,6 +2605,6 @@ void game_debug_street(int n)          /* n = road*4 + dir: start of a long stre
 void game_debug_set(int w, int give_guns)
 {
     wanted = w;
-    if (give_guns) { pl.owned = 15; pl.ammo[1] = 50; pl.ammo[2] = 200; pl.ammo[3] = 20; pl.ammo[4] = 40; pl.weapon = 2; }
+    if (give_guns) { pl.owned = 31; pl.ammo[1] = 50; pl.ammo[2] = 200; pl.ammo[3] = 20; pl.ammo[4] = 40; pl.ammo[5] = 10; pl.weapon = 2; }
 }
 #endif

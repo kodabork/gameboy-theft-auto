@@ -228,7 +228,8 @@ static const SfxNote sfx_glass[] = { {0, W_NOISE_HI, 0, 0, 92, 10, 0}, {2, W_SIN
                                      {7, W_SINE, 3700, 3650, 34, 8, 12}, {10, W_SINE, 6100, 6000, 30, 8, 12}, {0} };
 static const SfxNote sfx_start[] = { {0, W_NOISE_LO, 0, 0, 70, 9, 0}, {5, W_NOISE_LO, 0, 0, 66, 9, 0}, {10, W_NOISE_LO, 0, 0, 62, 9, 0},
                                      {15, W_NOISE_LO, 0, 0, 60, 9, 0}, {20, W_SQUARE, 45, 95, 44, 12, 12}, {0} };
-static const SfxNote sfx_wanted[] = { {0, W_SQUARE, 880, 880, 40, 11, 0}, {8, W_SQUARE, 660, 660, 40, 11, 0}, {0} };
+/* cat: a short rising-then-falling mew */
+static const SfxNote sfx_meow[] = { {0, W_SQUARE, 620, 1150, 26, 11, 9}, {6, W_SQUARE, 1150, 560, 30, 11, 10}, {6, W_SINE, 1700, 900, 18, 11, 10}, {0} };
 static const SfxNote sfx_pass[] = { {0, W_TRI, 523, 523, 70, 12, 0}, {6, W_TRI, 659, 659, 70, 12, 0}, {12, W_TRI, 784, 784, 70, 12, 0},
                                     {18, W_TRI, 1047, 1047, 80, 13, 0}, {18, W_SQUARE, 523, 523, 22, 13, 0}, {0} };
 static const SfxNote sfx_fail[] = { {0, W_SQUARE, 392, 392, 40, 12, 0}, {9, W_SQUARE, 370, 370, 40, 12, 0}, {18, W_SQUARE, 349, 349, 40, 12, 0},
@@ -236,8 +237,8 @@ static const SfxNote sfx_fail[] = { {0, W_SQUARE, 392, 392, 40, 12, 0}, {9, W_SQ
 static const SfxNote sfx_yelp[] = { {0, W_SQUARE, 950, 380, 34, 11, 10}, {0, W_SINE, 1250, 520, 30, 11, 10}, {0} };
 static const SfxNote sfx_cash[] = { {0, W_SQUARE, 1568, 1568, 30, 9, 0}, {3, W_SQUARE, 2093, 2093, 30, 9, 0}, {6, W_SINE, 2637, 2637, 60, 11, 0}, {0} };
 static const SfxNote sfx_ricochet[] = { {0, W_SINE, 3400, 900, 44, 11, 11}, {0, W_NOISE_HI, 0, 0, 30, 8, 0}, {0} };
-static const SfxNote *const sfx_list[NSFX] = { sfx_tune, sfx_pickup, sfx_glass, sfx_start, sfx_wanted, sfx_pass,
-                                               sfx_fail, sfx_yelp, sfx_cash, sfx_ricochet };
+static const SfxNote *const sfx_list[NSFX] = { sfx_tune, sfx_pickup, sfx_glass, sfx_start, sfx_pass,
+                                               sfx_fail, sfx_yelp, sfx_cash, sfx_ricochet, sfx_meow };
 typedef struct { u32 ph, f, f1; int env, lp; u8 wave, decay, glide; } SfxVoice;
 #define NSV 4
 static SfxVoice sv[NSV]; static int sv_next;

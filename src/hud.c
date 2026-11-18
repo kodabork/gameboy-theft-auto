@@ -3,6 +3,7 @@
 #include "engine.h"
 #include "game.h"
 #include "logo.h"
+#include "portraits.h"
 #include "ground.h"
 
 #define COL_RED 252
@@ -176,9 +177,41 @@ static void draw_menu(int y)
     }
 }
 
+int g_face = -1, g_face_x, g_face_y;            /* portrait to show as a hardware sprite (GBA) */
+static int face_of(const char *who)
+{
+    if (!who) return -1;
+    for (int k = 0; k < NFACES; k++) {
+        const char *a = who, *b = face_names[k];
+        while (*a && *a == *b) { a++; b++; }
+        if (!*a && !*b) return k;
+    }
+    return -1;
+}
+/* join the page's two lines and word-wrap them to 'width' characters (up to 3 lines) */
+static int wrap_lines(const char *l1, const char *l2, int width, char out[3][40])
+{
+    char buf[96]; int n = 0;
+    for (const char *p = l1; p && *p && n < 94; p++) buf[n++] = *p;
+    if (l2 && *l2 && n < 94) { buf[n++] = ' '; for (const char *p = l2; *p && n < 95; p++) buf[n++] = *p; }
+    buf[n] = 0;
+    int nl = 0, i = 0;
+    while (buf[i] && nl < 3) {
+        while (buf[i] == ' ') i++;
+        int end = i, last = -1;
+        while (buf[end] && end - i < width) { if (buf[end] == ' ') last = end; end++; }
+        if (buf[end] && buf[end] != ' ' && last > i) end = last;     /* break at the last space */
+        int k = 0; for (int j = i; j < end && k < 39; j++) out[nl][k++] = buf[j];
+        while (k > 0 && out[nl][k - 1] == ' ') k--;
+        out[nl][k] = 0; nl++; i = end;
+    }
+    return nl;
+}
+
 void hud_draw(u16 *fb)
 {
     FBH = fb;
+    g_face = -1;
 #ifndef HOST
     g_ntxt = 0;
 #endif
@@ -194,13 +227,26 @@ void hud_draw(u16 *fb)
         blit_img(&img_press, (240 - img_press.w) / 2, 142);
         return;
     }
-    if (g_hud.dlg_l1) {                          /* story dialogue */
-        if (g_hud.cutscene) { rect(0, 0, 240, 12, COL_BLACK); rect(0, 113, 240, 47, COL_BLACK); }
-        else shade_band(112, 156);
-        if (g_hud.dlg_who && g_hud.dlg_who[0]) text(8, 116, g_hud.dlg_who, COL_YELLOW, 1);
-        text(8, 128, g_hud.dlg_l1, COL_WHITE, 1);
-        if (g_hud.dlg_l2) text(8, 138, g_hud.dlg_l2, COL_WHITE, 1);
-        text(214, 148, "A >", COL_YELLOW, 1);
+    if (g_hud.dlg_l1) {                          /* story dialogue: RPG-style box with the speaker's portrait */
+        int face = face_of(g_hud.dlg_who);
+        if (g_hud.cutscene) { rect(0, 0, 240, 12, COL_BLACK); rect(0, 107, 240, 53, COL_BLACK); }
+        else shade_band(107, 160);
+        int tx = 8, width = 37;
+        if (face >= 0) {
+            rect(3, 109, 50, 1, COL_WHITE); rect(3, 158, 50, 1, COL_WHITE);          /* frame */
+            rect(3, 109, 1, 50, COL_WHITE); rect(52, 109, 1, 50, COL_WHITE);
+#ifdef HOST
+            blit_img(&img_faces[face], 4, 110);
+#else
+            g_face = face; g_face_x = 4; g_face_y = 110;                          /* drawn as a hardware sprite */
+#endif
+            tx = 58; width = 28;
+        }
+        if (g_hud.dlg_who && g_hud.dlg_who[0]) text(tx, 112, g_hud.dlg_who, COL_YELLOW, 1);
+        static char lines[3][40];
+        int n = wrap_lines(g_hud.dlg_l1, g_hud.dlg_l2, width, lines);
+        for (int i = 0; i < n; i++) text(tx, 123 + i * 10, lines[i], COL_WHITE, 1);
+        text(228, 150, ">", COL_YELLOW, 1);
         return;
     }
     if (g_hud.menu_n) {                          /* pause menu */
@@ -310,6 +356,27 @@ IWRAM_ARM void radar_build(u32 *t, int part)
         }
     }
     if (part != 3) return;
+    /* pickups: a pistol (cyan, white outline) for guns, a first-aid box (red cross on white) for
+       health; only inside the disc, never clamped to the rim */
+    {
+        /* 7x5 icons: '#' body, 'o' outline/background */
+        static const char gun[5][8] = { "ooooooo", "o#####o", "o######", "ooo#o##", "  ooo##" };
+        static const char aid[5][8] = { " ooooo ", " oo#oo ", " o###o ", " oo#oo ", " ooooo " };
+        for (int i = 0; i < g_hud.npk; i++) {
+            int dx = g_hud.pk_x[i] - px0, dy = g_hud.pk_y[i] - py0;
+            int f = (dx * c + dy * s) >> 14, rr = (dx * s - dy * c) >> 14;
+            int x = rr / SCALE, y = -f / SCALE;
+            if (x * x + y * y > (R - 5) * (R - 5)) continue;
+            int health = g_hud.pk_t[i] == 2;
+            const char (*ic)[8] = health ? aid : gun;
+            for (int j = 0; j < 5; j++) for (int k = 0; k < 7; k++) {
+                char ch = ic[j][k];
+                if (ch == ' ') continue;
+                int col = ch == '#' ? (health ? 14 : g_hud.pk_t[i] == 5 ? 8 : 13) : (health ? 4 : 15);   /* rockets: orange */
+                rpx(t, 32 + x - 3 + k, 32 + y - 2 + j, col);
+            }
+        }
+    }
     /* blips (clamped to the rim) */
     for (int i = 0; i < g_hud.nblips; i++) {
         int dx = g_hud.bx[i] - px0, dy = g_hud.by[i] - py0;

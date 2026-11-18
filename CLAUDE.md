@@ -7,7 +7,7 @@ Original open-city game for the Game Boy Advance in the style of GTA: a pseudo-3
 - **Keep the repo private.** It uses GTA and Game Boy trademarks.
 - **Cars are original look-alike archetypes** (Driv3r GBA style). Never replicate real licensed car designs.
 - **Keep the title logo original.** It must not imitate the official GTA logo.
-- **Crashes must never kill the player.**
+- **A crash alone must never kill the player.** Since v0.21 (the owner's request) staying inside a car until it explodes is fatal, so a burning player car always gets at least 4 s and can be bailed out of at any speed.
 - Commit messages end with a `Co-Authored-By` trailer for the model in use.
 - Bump the version and add a "What's new" section to `README.md` with each release.
 
@@ -51,14 +51,14 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 ## Testing
 - **PC build:** run from `src/`:
   ```
-  gcc -DHOST -O2 -w -o ../build/host host_main.c game.c world.c render.c collide.c tables.c assets.c hud.c terrain.c sound.c logo.c
+  gcc -DHOST -O2 -w -o ../build/host host_main.c game.c world.c render.c collide.c tables.c assets.c hud.c terrain.c sound.c logo.c portraits.c
   ../build/host "frames:hexkeys,..." "dumpframes"
   ```
   Dumped frames go to `build/fNNNN.ppm`.
   - Keys: A=1, B=2, SELECT=4, START=8, RIGHT=0x10, LEFT=0x20, UP=0x40, DOWN=0x80, R=0x100, L=0x200.
-  - Debug codes: 0xFD0 start play, 0xFE0+k teleport to job k's marker, 0xFFE give guns, 0xFC0+n damage the nearest car, 0xB00+n street, 0xC00+n coast.
+  - Debug codes: 0xF00 set your own car on fire, 0xFD0 start play, 0xFE0+k teleport to job k's marker, 0xFFE give guns, 0xFC0+n damage the nearest car, 0xB00+n street, 0xC00+n coast.
 - **Crash test:** build the PC build with `-fsanitize=address,undefined` and fuzz with random key scripts.
-- **Mission test:** `tools/mission_test.c` plays every job's win condition in order. Build it from `src/` with `gcc -DHOST -O1 -w -I. -o mt ../tools/mission_test.c world.c render.c collide.c tables.c assets.c hud.c terrain.c sound.c logo.c`. `tools/crash_test.c` is the high-speed car collision test.
+- **Mission test:** `tools/mission_test.c` plays every job's win condition in order. Build it from `src/` with `gcc -DHOST -O1 -w -I. -o mt ../tools/mission_test.c world.c render.c collide.c tables.c assets.c hud.c terrain.c sound.c logo.c portraits.c`. `tools/crash_test.c` is the high-speed car collision test.
 - **ROM profiler and emulator:** `tools/gbaprof.c`. Build it with `gcc -O2 -o tools/gbaprof tools/gbaprof.c`.
   - Usage: `gbaprof rom seconds "frames:keys,..." [dump_flips] [prefix]`. It prints fps.
   - `PROF=file PROF_FROM=sec` writes per-PC cycles; aggregate them with `tools/profsym.py` and `tools/byline.py`.
@@ -75,9 +75,9 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - Preview a model quickly with `tools/frame_render.render_frame` before running the full sprite render.
 
 ## Story and missions
-See `STORY.md`. There are nine jobs; the races were removed in v0.19. Cutscenes run in-engine: the giver actor stands in ped slot `PED_ACTOR`, the camera logic is in `game_build_scene`, and the letterbox is in `hud.c`.
+See `STORY.md`. There are nine jobs; the races were removed in v0.19. Cutscenes run in-engine: the giver actor stands in ped slot `PED_ACTOR`, the camera logic is in `game_build_scene`. The RPG-style dialogue box is in `hud.c`: the speaker's 48x48 portrait (`tools/make_portraits.py` -> `src/portraits.c`) is a 64x64 OBJ at tiles 960.., palette bank 15, OAM 127, uploaded when the speaker changes; text is word-wrapped to 28 characters.
 
 ## Ideas not done yet
 - More performance work: walls (`band`/`vspan`) and sprite blits are now the largest costs.
 - A finer ground texture (0.5 m texels look stair-stepped close up).
-- Female ped models for Marta and Jinx. They currently reuse outfit colours.
+- Female ped models for Marta and Jinx. They currently reuse outfit colours (their portraits are female).

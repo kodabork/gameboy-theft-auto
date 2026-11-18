@@ -2,6 +2,8 @@
 #include "engine.h"
 #include "game.h"
 #include "sound.h"
+#include "portraits.h"
+extern int g_face, g_face_x, g_face_y;
 extern void irq_handler(void);
 
 #define REG16(a) (*(volatile u16 *)(a))
@@ -105,6 +107,7 @@ int main(void)
     for (int i = 0; i < 256; i++) PAL_BG[i] = pal[i];
     for (int i = 0; i < 128; i++) set_sprite(i, 0, 0, -1);
     make_tiles();
+    for (int i = 448 * 8; i < 512 * 8; i++) OBJ_TILES[i] = 0;   /* portrait sprite: blank margins */
     game_init();
     radar_init();
     sound_init();
@@ -118,7 +121,8 @@ int main(void)
     u16 prev = 0;
     EWRAM_BSS static u32 radar_buf[64 * 8];
     u32 frame_n = 0;
-    static const u16 radar_pal[16] = { 0, 0x1484, 0x318C, 0x5145, 0x7FFF, 0x7FFF, 0x13FF, 0x13E4, 0x033F, 0x7D08, 0x2529, 0x1A46, 0x3ED8 };
+    /* 13 gun pickup (cyan), 14 health cross (red), 15 gun outline (white) */
+    static const u16 radar_pal[16] = { 0, 0x1484, 0x318C, 0x5145, 0x7FFF, 0x7FFF, 0x13FF, 0x13E4, 0x033F, 0x7D08, 0x2529, 0x1A46, 0x3ED8, 0x7FE4, 0x0C7F, 0x7FFF };
     for (int i = 0; i < 16; i++) PAL_OBJ[16 + i] = radar_pal[i];
     REG_DISPCNT = 0x0004 | 0x0400 | 0x1000 | 0x0040;   /* mode 4, BG2, OBJ, 1D */
     for (;;) {
@@ -153,6 +157,19 @@ int main(void)
         set_sprite(7, 116, 120, g_hud.near_car && !hide ? 10 : -1);
         if (radar_new) for (int i = 0; i < 64 * 8; i++) OBJ_TILES[16 * 8 + i] = radar_buf[i];    /* radar tiles 528.. */
         text_objs();
+        {   /* cutscene portrait: a 64x64 4bpp sprite at tiles 960.., palette bank 15; tiles uploaded on change */
+            static int face_loaded = -1;
+            volatile u16 *o = OAM + 127 * 4;
+            if (g_face >= 0) {
+                if (g_face != face_loaded) {
+                    for (int t = 0; t < 36; t++)
+                        for (int y = 0; y < 8; y++) OBJ_TILES[(448 + (t / 6) * 8 + t % 6) * 8 + y] = face_tiles[g_face][t * 8 + y];
+                    for (int i = 0; i < 16; i++) PAL_OBJ[15 * 16 + i] = face_pal[g_face][i];
+                    face_loaded = g_face;
+                }
+                o[0] = (u16)(g_face_y & 255); o[1] = (u16)((g_face_x & 511) | 0xC000); o[2] = (u16)(960 | (15 << 12));
+            } else o[0] = 0x0200;
+        }
         { volatile u16 *o = OAM + 20 * 4; o[0] = hide ? 0x0200 : (u16)(94 & 255); o[1] = (u16)(2 | 0xC000); o[2] = (u16)((512 + 16) | (1 << 12)); }
         for (int i = 0; i < 8; i++)            /* nitro bar, bottom left */
             set_sprite(8 + i, 88 + i * 8, 150, g_hud.in_car && !hide ? (g_hud.nitro > i * 125 + 62 ? 12 : 13) : -1);

@@ -8,15 +8,33 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 |---|---|---|
 | A | Gas | Fire (auto-aims at the nearest person in front) |
 | B | Brake / reverse; B + steer at speed = handbrake drift | Run (hold with Up) |
-| L | Nitro | Switch weapon |
+| L | Nitro | Switch weapon (fists, pistol, SMG, shotgun, rifle, rockets) |
 | Left / Right | Steer | Turn |
 | Up / Down | Change radio station | Walk forward / back |
-| R | Get out (when slow) | Get in the nearest car (any car) |
+| R | Get out (when slow, or any speed if the car is burning) | Get in the nearest car (any car) |
 | SELECT | Horn | |
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
-## What's new in v0.20
+## What's new in v0.21
+- **Rocket launcher.** Rockets fly where you aim (they lock onto the nearest car ahead), and a direct
+  hit sets a car ablaze; the blast catches nearby cars and people. Four launchers around town, one a
+  block from the Eastside Kings' corner (job 4). 5 rockets per pickup; rocket ammo is saved
+- **More weapon pickups:** 52 now instead of 24, mostly guns. The minimap shows the ones within
+  range: a cyan pistol badge for guns, an orange one for rocket launchers, a red-cross first-aid
+  box for health
+- **RPG-style cutscenes:** the person talking appears as a framed face portrait next to their lines
+  (Eddie, Marta, Jinx, Moran, Shaw and Rudy each have their own original portrait)
+- **Cats!** Orange tabbies, black cats and grey cats roam the sidewalks. They wander, sit, bolt when
+  you run at them or a car comes close, and meow when you walk up to them. Nothing hurts them
+- **Loading a save** puts you back in the car you saved in, or on foot with no car (it used to give
+  you the starter car every time)
+- **Cars that explode with you inside now kill you.** When your car catches fire you always get at
+  least 4 seconds, and you can bail out (R) at any speed. A crash on its own still never kills you
+- No more sound when your wanted level goes up
+- Pause menu shows "RADIO: OFF" instead of "RADIO: RADIO OFF"
+
+## v0.20
 - **More realistic cars.** Every car model was reworked:
   - Rounded roofs, hoods and trunks (they curve down to the sides instead of being flat slabs)
   - Side mirrors sit on the doors instead of floating next to them

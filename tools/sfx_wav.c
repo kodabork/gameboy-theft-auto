@@ -23,7 +23,7 @@ static void wav(const char *path, const signed char *pcm, int n)
 
 int main(int argc, char **argv)
 {
-    static const char *names[NSFX] = { "tune", "pickup", "glass", "start", "wanted", "pass", "fail", "yelp", "cash", "ricochet" };
+    static const char *names[NSFX] = { "tune", "pickup", "glass", "start", "pass", "fail", "yelp", "cash", "ricochet", "meow" };
     const char *pre = argc > 1 ? argv[1] : "sfx_";
     static signed char pcm[SAMPLES * 200];
     for (int k = 0; k < NSFX; k++) {
