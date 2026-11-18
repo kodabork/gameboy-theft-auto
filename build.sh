@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds steelharbor.gba with clang + lld (no devkitPro needed).
 #   LOGO_ROM=/path/to/a_gba_rom_you_own.gba ./build.sh        (logo needed for real hardware)
-#   REGEN_ASSETS=1 ./build.sh                                  (re-render sprites, ~1 min)
+#   REGEN_ASSETS=1 ./build.sh                                  (re-render all sprites, ~40 min)
 set -e
 cd "$(dirname "$0")"
 mkdir -p build
@@ -9,6 +9,8 @@ python3 tools/gen_tables.py src/tables.c
 [ -f build/terrain.bin ] || python3 tools/gen_terrain.py build/terrain.bin src/terrain.c src/terrain.h
 if [ -n "$REGEN_ASSETS" ] || [ ! -f build/assets.bin ]; then
     python3 tools/make_assets.py src/assets.c build/assets.bin
+    python3 tools/append_props.py src/assets.c src/assets.h build/assets.bin
+    python3 tools/append_fx.py src/assets.c src/assets.h build/assets.bin
 fi
 CF="-g --target=arm-none-eabi -mcpu=arm7tdmi -mfloat-abi=soft -O2 -ffreestanding -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -Wall -Wno-unused-function"
 python3 tools/make_logo.py src/assets.c src/logo.c build/logo_preview.png > /dev/null

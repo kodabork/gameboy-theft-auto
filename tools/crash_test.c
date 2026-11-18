@@ -4,7 +4,7 @@ const unsigned char spr_pixels[1 << 25];
 unsigned char terrain_h[656 * 656], terrain_m[656 * 656], terrain_r[656 * 656], radar_map[328 * 328];
 int main(int argc, char **argv)
 {
-    FILE *tf = fopen("/home/claude/steelharbor/build/terrain.bin", "rb"); fread(terrain_h, 1, sizeof terrain_h, tf); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
+    FILE *tf = fopen("../build/terrain.bin", "rb"); fread(terrain_h, 1, sizeof terrain_h, tf); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
     game_init();
     int hits = 0, misses = 0;
     int through = 0;

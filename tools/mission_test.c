@@ -7,7 +7,7 @@ static void skip_dialog(void) { for (int k = 0; k < 12 && gstate == GS_DIALOG; k
 static void kill_all(int k0, int k1) { for (int k = k0; k < k1; k++) { Ped *p = &peds[PED_MISSION0 + k]; if (p->active) { p->down = 1; p->timer = 30 * 256; } } }
 int main(void)
 {
-    FILE *tf = fopen("/home/claude/steelharbor/build/terrain.bin", "rb"); fread(terrain_h, 1, sizeof terrain_h, tf); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
+    FILE *tf = fopen("../build/terrain.bin", "rb"); fread(terrain_h, 1, sizeof terrain_h, tf); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
     game_init(); new_game_state(); gstate = GS_PLAY;
     int fails = 0;
     for (int m = 0; m < NMISSIONS; m++) {
