@@ -20,6 +20,7 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 - **New cutscene portraits:** the faces in the dialogue box are now bigger (64x64) anime-style pixel
   art with cel shading, big expressive eyes and proper hair, using up to 160 colours each instead
   of 15
+- Faces are soft and rounded: full cheeks and a rounded chin
 
 ## v0.21
 - **Rocket launcher.** Rockets fly where you aim (they lock onto the nearest car ahead), and a direct

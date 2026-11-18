@@ -61,12 +61,14 @@ def face_base(a, chin=47.0, jaw=21.0, wide=0.0):
     """neck, face and ears; light from the upper left"""
     a.poly([(27, 41), (37, 41), (38, 56), (26, 56)], 'skin', smooth=False)                          # neck
     a.poly([(26, 44), (38, 44), (38, 50), (32, 52), (26, 49)], 'skin_sh', smooth=False)             # shadow under the chin
-    a.poly([(19 - wide, 18), (45 + wide, 18), (45.5 + wide, 28), (44 + wide * 0.5, 36), (32 + jaw * 0.25, chin - 2.5),
-            (32, chin), (32 - jaw * 0.25, chin - 2.5), (20 - wide * 0.5, 36), (18.5 - wide, 28)], 'skin')
+    # rounded face: full cheeks, a soft jaw and a broad, rounded chin
+    chin -= 1.8
+    a.poly([(19 - wide, 18), (45 + wide, 18), (46 + wide, 27), (45.5 + wide, 34), (43.5 + wide * 0.5, 39.5), (39.5, chin - 1.3),
+            (32, chin), (24.5, chin - 1.3), (20.5 - wide * 0.5, 39.5), (18.5 - wide, 34), (18 - wide, 27)], 'skin')
     a.ellipse(18.6 - wide, 31, 1.8, 3.2, 'skin'); a.ellipse(45.4 + wide, 31, 1.8, 3.2, 'skin_sh')   # ears
     # cel shadow down the far (right) side of the face and under the jaw
-    a.poly([(44.5 + wide, 22), (45.5 + wide, 28), (44 + wide * 0.5, 36), (32 + jaw * 0.25, chin - 2.5), (35, chin - 3.0),
-            (41.5, 36), (42.5, 28)], 'skin_sh')
+    a.poly([(44.8 + wide, 22), (46 + wide, 27), (45.5 + wide, 34), (43.5 + wide * 0.5, 39.5), (39.5, chin - 1.3), (36.5, chin - 0.9),
+            (40, chin - 3.5), (42.6, 36), (43.2, 28)], 'skin_sh')
 
 def eye(a, cx, cy, side, iris='iris', style='normal', lid=0.0):
     """big anime eye. side -1 = left eye (on our left), +1 = right. style: normal, sharp, soft, tired"""
@@ -176,7 +178,7 @@ def eddie():
     strands(a, [[(24, 8), (22, 12), (21, 15)], [(33, 6), (32, 10), (30, 14)], [(40, 8), (42, 12), (43, 15)]])
     a.line([(21, 9.5), (27, 7), (34, 7.2)], 'hair_hi', 1.4)                                         # shine band
     brow(a, 25.5, 26.5, -1, 0.8, 1.1); brow(a, 38.5, 26.5, 1, 0.8, 1.1)
-    eye(a, 25.5, 31, -1, style='sharp'); eye(a, 38.5, 31, 1, style='sharp')
+    eye(a, 25.5, 31, -1, style='normal'); eye(a, 38.5, 31, 1, style='normal')
     nose(a); mouth(a, 'flat')
     return a, dict(skin=(0.96, 0.80, 0.68), hair=(0.12, 0.12, 0.16), iris=(0.45, 0.28, 0.14), cloth=(0.17, 0.18, 0.22),
                    shirt=(0.72, 0.18, 0.16), bg=((0.24, 0.30, 0.42), (0.10, 0.12, 0.20)))
