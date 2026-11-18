@@ -75,7 +75,7 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - Preview a model quickly with `tools/frame_render.render_frame` before running the full sprite render.
 
 ## Story and missions
-See `STORY.md`. There are nine jobs; the races were removed in v0.19. Cutscenes run in-engine: the giver actor stands in ped slot `PED_ACTOR`, the camera logic is in `game_build_scene`. The RPG-style dialogue box is in `hud.c`: the speaker's 48x48 portrait (`tools/make_portraits.py` -> `src/portraits.c`) is a 64x64 OBJ at tiles 960.., palette bank 15, OAM 127, uploaded when the speaker changes; text is word-wrapped to 28 characters.
+See `STORY.md`. There are nine jobs; the races were removed in v0.19. Cutscenes run in-engine: the giver actor stands in ped slot `PED_ACTOR`, the camera logic is in `game_build_scene`. The RPG-style dialogue box is in `hud.c`: the speaker's portrait is 64x64 anime-style pixel art (`tools/make_portraits.py` -> `src/portraits.c`; shapes drawn 4x and reduced by majority vote, cel shading, coloured outlines). On the GBA it is an 8bpp 64x64 OBJ at tiles 896.., colours in OBJ palette entries 96..255, OAM 127, uploaded when the speaker changes; text is word-wrapped to 27 characters.
 
 ## Ideas not done yet
 - More performance work: walls (`band`/`vspan`) and sprite blits are now the largest costs.

@@ -616,7 +616,7 @@ static void dump_page(long fl)
     int page = (*(u16 *)&io[0] & 0x10) ? 0xA000 : 0;
     static u16 scr[160][240];
     for (int i = 0; i < 240 * 160; i++) scr[i / 240][i % 240] = *(u16 *)&pal[vram[page + i] * 2];
-    /* OBJ layer (4bpp, 1D mapping; affine only as plain 2x scale) */
+    /* OBJ layer (4bpp or 8bpp, 1D mapping; affine only as plain 2x scale) */
     static const int sw[3][4] = { {8,16,32,64}, {16,32,32,64}, {8,8,16,32} }, sh_[3][4] = { {8,16,32,64}, {8,8,16,32}, {16,32,32,64} };
     for (int o = 127; o >= 0; o--) {
         u16 a0 = *(u16 *)&oam[o * 8], a1 = *(u16 *)&oam[o * 8 + 2], a2 = *(u16 *)&oam[o * 8 + 4];
@@ -629,6 +629,12 @@ static void dump_page(long fl)
         for (int y = 0; y < h * sc; y++) for (int x = 0; x < w * sc; x++) {
             int sx = x0 + x, sy = y0 + y; if (sx < 0 || sx >= 240 || sy < 0 || sy >= 160) continue;
             int tx = x / sc, ty = y / sc;
+            if (a0 & 0x2000) {                    /* 8bpp: tiles are 64 bytes, one palette of 256 */
+                int t = tile + ((ty / 8) * (w / 8) + tx / 8) * 2;
+                u8 ci = vram[0x10000 + ((t * 32) & 0x7FFF) + (ty & 7) * 8 + (tx & 7)];
+                if (ci) scr[sy][sx] = *(u16 *)&pal[0x200 + ci * 2];
+                continue;
+            }
             int t = tile + (ty / 8) * (w / 8) + tx / 8;
             u8 b = vram[0x10000 + ((t * 32) & 0x7FFF) + (ty & 7) * 4 + (tx & 7) / 2];
             int ci = (tx & 1) ? b >> 4 : b & 15;

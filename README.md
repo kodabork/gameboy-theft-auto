@@ -16,7 +16,12 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
-## What's new in v0.21
+## What's new in v0.22
+- **New cutscene portraits:** the faces in the dialogue box are now bigger (64x64) anime-style pixel
+  art with cel shading, big expressive eyes and proper hair, using up to 160 colours each instead
+  of 15
+
+## v0.21
 - **Rocket launcher.** Rockets fly where you aim (they lock onto the nearest car ahead), and a direct
   hit sets a car ablaze; the blast catches nearby cars and people. Four launchers around town, one a
   block from the Eastside Kings' corner (job 4). 5 rockets per pickup; rocket ammo is saved
@@ -24,7 +29,6 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
   range: a cyan pistol badge for guns, an orange one for rocket launchers, a red-cross first-aid
   box for health
 - **RPG-style cutscenes:** the person talking appears as a framed face portrait next to their lines
-  (Eddie, Marta, Jinx, Moran, Shaw and Rudy each have their own original portrait)
 - **Cats!** Orange tabbies, black cats and grey cats roam the sidewalks. They wander, sit, bolt when
   you run at them or a car comes close, and meow when you walk up to them. Nothing hurts them
 - **Loading a save** puts you back in the car you saved in, or on foot with no car (it used to give

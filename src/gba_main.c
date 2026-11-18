@@ -107,7 +107,6 @@ int main(void)
     for (int i = 0; i < 256; i++) PAL_BG[i] = pal[i];
     for (int i = 0; i < 128; i++) set_sprite(i, 0, 0, -1);
     make_tiles();
-    for (int i = 448 * 8; i < 512 * 8; i++) OBJ_TILES[i] = 0;   /* portrait sprite: blank margins */
     game_init();
     radar_init();
     sound_init();
@@ -157,17 +156,16 @@ int main(void)
         set_sprite(7, 116, 120, g_hud.near_car && !hide ? 10 : -1);
         if (radar_new) for (int i = 0; i < 64 * 8; i++) OBJ_TILES[16 * 8 + i] = radar_buf[i];    /* radar tiles 528.. */
         text_objs();
-        {   /* cutscene portrait: a 64x64 4bpp sprite at tiles 960.., palette bank 15; tiles uploaded on change */
+        {   /* cutscene portrait: a 64x64 8bpp sprite at tiles 896.., colours in OBJ palette 96..255 */
             static int face_loaded = -1;
             volatile u16 *o = OAM + 127 * 4;
             if (g_face >= 0) {
                 if (g_face != face_loaded) {
-                    for (int t = 0; t < 36; t++)
-                        for (int y = 0; y < 8; y++) OBJ_TILES[(448 + (t / 6) * 8 + t % 6) * 8 + y] = face_tiles[g_face][t * 8 + y];
-                    for (int i = 0; i < 16; i++) PAL_OBJ[15 * 16 + i] = face_pal[g_face][i];
+                    for (int i = 0; i < 64 * 16; i++) OBJ_TILES[384 * 8 + i] = face_tiles[g_face][i];
+                    for (int i = 0; i < 160; i++) PAL_OBJ[96 + i] = face_pal[g_face][i];
                     face_loaded = g_face;
                 }
-                o[0] = (u16)(g_face_y & 255); o[1] = (u16)((g_face_x & 511) | 0xC000); o[2] = (u16)(960 | (15 << 12));
+                o[0] = (u16)((g_face_y & 255) | 0x2000); o[1] = (u16)((g_face_x & 511) | 0xC000); o[2] = (u16)896;
             } else o[0] = 0x0200;
         }
         { volatile u16 *o = OAM + 20 * 4; o[0] = hide ? 0x0200 : (u16)(94 & 255); o[1] = (u16)(2 | 0xC000); o[2] = (u16)((512 + 16) | (1 << 12)); }

@@ -233,14 +233,15 @@ void hud_draw(u16 *fb)
         else shade_band(107, 160);
         int tx = 8, width = 37;
         if (face >= 0) {
-            rect(3, 109, 50, 1, COL_WHITE); rect(3, 158, 50, 1, COL_WHITE);          /* frame */
-            rect(3, 109, 1, 50, COL_WHITE); rect(52, 109, 1, 50, COL_WHITE);
+            /* 64x64 portrait in a white frame, standing a little above the box like an RPG */
+            rect(3, 92, 66, 1, COL_WHITE); rect(3, 157, 66, 1, COL_WHITE);
+            rect(3, 92, 1, 66, COL_WHITE); rect(68, 92, 1, 66, COL_WHITE);
 #ifdef HOST
-            blit_img(&img_faces[face], 4, 110);
+            blit_img(&img_faces[face], 4, 93);
 #else
-            g_face = face; g_face_x = 4; g_face_y = 110;                          /* drawn as a hardware sprite */
+            g_face = face; g_face_x = 4; g_face_y = 93;                           /* drawn as a hardware sprite */
 #endif
-            tx = 58; width = 28;
+            tx = 74; width = 27;
         }
         if (g_hud.dlg_who && g_hud.dlg_who[0]) text(tx, 112, g_hud.dlg_who, COL_YELLOW, 1);
         static char lines[3][40];
