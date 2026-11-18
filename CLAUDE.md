@@ -19,7 +19,7 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 ```
 
 - **Boot logo:** `LOGO_ROM` supplies the Nintendo boot logo bytes. The owner used their own Grand Theft Auto Advance ROM. Emulators boot without it; real hardware needs it. Ask the owner for the file if real-hardware testing matters.
-- **Fresh clone:** `build/` is empty, so the first build generates `build/terrain.bin` (quick) and renders every sprite into `build/assets.bin`. The sprite render takes about 35-40 minutes; run it in the background:
+- **Fresh clone:** `build/` is empty, so the first build generates `build/terrain.bin` (quick) and renders every sprite into `build/assets.bin`. The sprite render runs on every CPU core (about 7 minutes on 4 cores) and caches each frame in `build/cache/`, so re-running after a model change only re-renders what changed. Run it in the background:
   ```
   nohup sh -c 'python3 tools/make_assets.py src/assets.c build/assets.bin && \
     python3 tools/append_props.py src/assets.c src/assets.h build/assets.bin && \
@@ -44,7 +44,7 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 | `src/host_main.c` | PC build for testing (see Testing). |
 
 ## Memory budget
-- **IWRAM is tight:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400, which leaves roughly 2.5 KB of stack.
+- **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
 - Put big arrays in EWRAM with `EWRAM_BSS`.
 - Thumb code has no fast divide. Avoid `/` in hot paths (reciprocal multiplies are used throughout) and avoid 64-bit division entirely.
 
@@ -63,12 +63,21 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
   - Usage: `gbaprof rom seconds "frames:keys,..." [dump_flips] [prefix]`. It prints fps.
   - `PROF=file PROF_FROM=sec` writes per-PC cycles; aggregate them with `tools/profsym.py` and `tools/byline.py`.
   - `SRAM_FILE=path` keeps save memory between runs (used for the save, reboot, CONTINUE test).
-  - The baseline is about 14-15 fps on the standard drive script.
+  - `FIXDT=819` fixes the game clock and indexes keys by displayed frame, so different builds play the identical game; `HIST=a-b` prints VBlanks per frame and fps over displayed frames a..b.
+  - **Benchmark:** `tools/bench.sh [rom]` (needs `build/bench.txt`, the standard drive script in displayed frames). v0.19: 14.4 fps, v0.20: 18.2 fps.
+
+## Sound
+- `src/sound.c`: DirectSound mixer (engine, horn, skid, guns, siren, effect synth) and PSG radio. Five stations (`stations[]`): 64-step patterns for lead, chord stabs, bass and drums.
+- Effects: `g_snd.sfx |= SFX_*` from game code. Each effect is a short note list (`SfxNote`) played on 4 synth voices. `tools/sfx_wav.c` renders every effect to WAV with the real mixer.
+
+## Car models
+- `tools/cars3.py` builds each car from side profiles (height fields). Profile distances are scaled by `1/sqrt(1+slope^2)` (`kfac`) so steep faces (tailgates, upright rear glass) render cleanly. The box truck's cargo box is a separate rounded box (`box_x`, `box_z`); the pickup cab's back wall is a plane.
+- Preview a model quickly with `tools/frame_render.render_frame` before running the full sprite render.
 
 ## Story and missions
 See `STORY.md`. There are nine jobs; the races were removed in v0.19. Cutscenes run in-engine: the giver actor stands in ped slot `PED_ACTOR`, the camera logic is in `game_build_scene`, and the letterbox is in `hud.c`.
 
 ## Ideas not done yet
-- More performance work. Cutscenes drop to about 11 fps.
+- More performance work: walls (`band`/`vspan`) and sprite blits are now the largest costs.
 - A finer ground texture (0.5 m texels look stair-stepped close up).
 - Female ped models for Marta and Jinx. They currently reuse outfit colours.

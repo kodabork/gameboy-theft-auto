@@ -10,13 +10,39 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | B | Brake / reverse; B + steer at speed = handbrake drift | Run (hold with Up) |
 | L | Nitro | Switch weapon |
 | Left / Right | Steer | Turn |
-| Up / Down | – | Walk forward / back |
+| Up / Down | Change radio station | Walk forward / back |
 | R | Get out (when slow) | Get in the nearest car (any car) |
 | SELECT | Horn | |
-| START | Pause menu (resume, save, radio, quit) | |
+| START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
-## What's new in v0.19
+## What's new in v0.20
+- **More realistic cars.** Every car model was reworked:
+  - Rounded roofs, hoods and trunks (they curve down to the sides instead of being flat slabs)
+  - Side mirrors sit on the doors instead of floating next to them
+  - Every car has a rear windshield now, including the sports coupes and muscle cars whose sloped
+    rear glass used to be painted over, and the cargo van (windows in its rear doors)
+  - Windows show a faint sky reflection instead of looking like black holes
+  - A solid dark shadow right under each car, so cars sit on the road instead of floating
+  - Fixed rendering glitches on the back of every boxy vehicle (vans, SUVs, wagons, minivans,
+    hatchbacks): their rear windows and tail panels used to show swirly noise
+  - Pickup: a clean open bed with a proper cab back wall and rear window (the old one had a raised
+    slab in the bed and streaky noise behind the cab). Box truck: a real cargo box behind the cab
+- **Faster.** About 27% higher frame rate on the same drive (14.4 -> 18.2 fps; most frames now run
+  at 20 fps), cutscenes 10 -> 15 fps, title screen 10.5 -> 13 fps, and no more slowdown to 9-11
+  fps on the coast road
+- **Five radio stations.** Press Up / Down in a car to change station (or pick one in the pause
+  menu); the station name shows when you change it or get in a car:
+  HARBOR FM (synth-pop), KICK 104.5 (club house), IRON 97 (rock), LOW END 88 (hip-hop),
+  SMOOTH 101 (late-night jazz)
+- **New sound effects:** radio tuning static, engine cranking when you get in a car, breaking glass
+  on hard crashes, a pickup chime, a cash register at Marta's garage, a two-tone alert when your
+  wanted level goes up, a jingle for a finished job and a sad one for WASTED / BUSTED / failed jobs,
+  a yelp when someone goes down, and bullets pinging off cars and walls
+- Fixed a sound bug: after the first gunshot, two sound voices kept running forever (a faint hiss
+  that also cost CPU time)
+
+## v0.19
 - **New story and missions.** The races are gone; all nine jobs are now crime jobs, tied together by
   one story (see the table below)
 - **Cutscenes.** Every job starts with an in-engine cutscene at its marker: letterbox bars, the

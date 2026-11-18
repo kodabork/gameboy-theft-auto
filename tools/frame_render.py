@@ -26,9 +26,10 @@ def job_key(model, args):
 
 def render_frame(model, yaw, elev, s, w_sq, up, down, shadow=True, ss=1, outline=False):
     """Returns (rgb, mask, shadowmask, ox, oy, upx) cropped to the visible pixels."""
-    rgb, a, sh = render(model, yaw, elev, s / ss, w_sq * ss, up * ss, down * ss, shadow)
-    if ss > 1:                                    # anti-aliasing: average ss x ss samples
-        H0, W0 = a.shape
+    rgb, a, sh, core = render(model, yaw, elev, s / ss, w_sq * ss, up * ss, down * ss, shadow, core=True)
+    if ss > 1:
+        H0, W0 = a.shape                          # anti-aliasing: average ss x ss samples
+        core = core.reshape(H0 // ss, ss, W0 // ss, ss).mean((1, 3)) >= 0.5
         a4 = a.reshape(H0 // ss, ss, W0 // ss, ss).astype(np.float32)
         cov = a4.mean((1, 3))
         csum = (rgb.reshape(H0 // ss, ss, W0 // ss, ss, 3) * a4[..., None]).sum((1, 3))
@@ -44,6 +45,7 @@ def render_frame(model, yaw, elev, s, w_sq, up, down, shadow=True, ss=1, outline
         rgb = rgb.copy(); rgb[edge] = rgb[edge] * 0.35
     yy, xx = np.mgrid[0:H, 0:W]
     smask = sh & (((xx + yy) & 1) == 0)          # dithered = see-through shadow
+    smask |= core & ~a                           # solid where the body blocks all light
     return crop(rgb, a, smask, -(w_sq // 2), -up, int(round(s * 16 * 256)))
 
 def crop(col, mask, smask, ox, oy, upx):

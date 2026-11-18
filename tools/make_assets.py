@@ -59,7 +59,7 @@ CAR_ANGLES = (64, 64, 32, 32)
 car_dims = []
 for name, car in CARS:
     begin(name)
-    tall = max(0, max(z for _, z in car.S['top']) - 2.2) if hasattr(car, 'S') else 0
+    tall = max(0, max([z for _, z in car.S['top']] + [car.S.get('box_z', (0, 0))[1]]) - 2.2) if hasattr(car, 'S') else 0
     for (e, s_, w, up, dn), na in zip(ELEV, CAR_ANGLES):
         upx = up + int(np.ceil(tall / s_)) + (6 if tall else 0)
         # only headings 0..180 degrees are stored; the game mirrors them for the other half

@@ -210,6 +210,7 @@ void hud_draw(u16 *fb)
         if (g_hud.menu_note) text_center(116, g_hud.menu_note, COL_WHITE, 1);
         return;
     }
+    if (g_hud.radio_t > 0 && g_hud.radio_name) text_center(4, g_hud.radio_name, COL_YELLOW, 1);   /* radio station */
     /* money, top right */
     buf[0] = '$'; fmt_int(buf + 1, g_hud.money);
     text(236 - text_width(buf, 1), 4, buf, COL_WHITE, 1);

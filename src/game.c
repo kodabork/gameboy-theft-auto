@@ -303,6 +303,20 @@ static void spawn_police(void)
     }
 }
 
+/* ------------------------------------------------------------ radio */
+static const char *const station_name[NSTATIONS] = { "HARBOR FM", "KICK 104.5", "IRON 97", "LOW END 88", "SMOOTH 101" };
+static const char *radio_label(void) { return g_snd.radio_on ? station_name[g_snd.station] : "RADIO OFF"; }
+static void radio_show(void) { g_hud.radio_name = radio_label(); g_hud.radio_t = TICKS * 5 / 2; }
+/* step through the stations and "off" (UP/DOWN in a car, or A on the pause menu) */
+static void radio_step(int d)
+{
+    int cur = g_snd.radio_on ? g_snd.station : NSTATIONS;
+    cur = (cur + d + NSTATIONS + 1) % (NSTATIONS + 1);
+    if (cur == NSTATIONS) g_snd.radio_on = 0; else { g_snd.radio_on = 1; g_snd.station = cur; }
+    g_snd.sfx |= SFX_TUNE;
+    radio_show();
+}
+
 /* ------------------------------------------------------------ player car */
 static void drive(Car *c, u16 keys, int dt)
 {
@@ -700,7 +714,7 @@ static void crime(int level)
     int nw = level;
     if (wanted >= level) nw = wanted + (cop_nearby(M(45)) ? 1 : 0);
     if (nw > 5) nw = 5;
-    if (nw > wanted) { wanted = nw; wanted_cool = 0; }
+    if (nw > wanted) { wanted = nw; wanted_cool = 0; g_snd.sfx |= SFX_WANTED; }
 }
 
 /* ------------------------------------------------------------ pedestrians */
@@ -740,6 +754,7 @@ static void place_ped_near(Ped *p, int min_d)
 static void kill_ped(Ped *p, int vx, int vy, int by_player, int fling_m)
 {
     spray_blood(p->x >> 8, p->y >> 8, vx, vy);
+    g_snd.sfx |= SFX_YELP;
     if (fling_m > 0) {
         int sp = dist_approx(vx, vy); if (sp < 1) sp = 1;
         int scale = Q8(M(fling_m)) * 256 / sp;
@@ -908,7 +923,7 @@ static void player_hurt(int dmg)
     g_hud.hurt_t = TICKS / 6;
     if (pl.hp <= 0) {
         pl.hp = 0; pl.dead_t = 3 * TICKS; pl.dead_kind = 0;
-        big("WASTED", 0, 3);
+        big("WASTED", 0, 3); g_snd.sfx |= SFX_FAIL;
         if (pl.in_car < 0) {
             Ped fake; fake.x = pl.x; fake.y = pl.y;
             spray_blood(plx(), ply(), 0, 0); (void)fake;
@@ -1038,8 +1053,8 @@ static void player_fire(u16 keys, u16 pressed, int dt)
             pl.head = Q8(aimang);
             car_damage(c, car_dmg[w], 1);
             if (c->police) crime(2); else if (c->ai == AI_TRAFFIC && cop_nearby(M(40))) crime(1);
-            g_snd.hit = 1;
-        }
+            g_snd.hit = 1; g_snd.sfx |= SFX_RICOCHET;              /* bullet on sheet metal */
+        } else if ((rnd() & 3) == 0) g_snd.sfx |= SFX_RICOCHET;   /* a miss whines off a wall */
     }
     muzzle(plx(), ply(), aimang, M(1.35));
     g_snd.shot = w; g_snd.shot_vol = 64;
@@ -1102,7 +1117,8 @@ static void toggle_car(void)
             if (c->police) crime(2);
             if (c->ai == AI_TRAFFIC || c->ai == AI_RIVAL) eject_driver(c);
             pl.in_car = best; c->ai = AI_NONE; c->speed = 0; c->vx = c->kx; c->vy = c->ky; c->kx = c->ky = 0; c->crew = 0;
-            g_snd.door = 1;
+            g_snd.door = 1; g_snd.sfx |= SFX_START;
+            radio_show();
         }
     }
 }
@@ -1135,7 +1151,7 @@ static void update_pickups(int dt)
         else if (k->type == 3) { pl.owned |= 4; pl.ammo[3] += 16; pl.weapon = 3; msg("SHOTGUN", "", 2); }
         else if (k->type == 4) { pl.owned |= 8; pl.ammo[4] += 30; pl.weapon = 4; msg("RIFLE", "", 2); }
         else { pl.hp = 100; msg("HEALTH", "", 2); }
-        g_snd.door = 1;
+        g_snd.sfx |= SFX_PICKUP;
     }
 }
 
@@ -1287,6 +1303,7 @@ static void setup_missions(void)
 static void reward(int money, const char *text)
 {
     pl.money += money;
+    g_snd.sfx |= SFX_PASS;
     big(text, 1, 4);
     time_left = -1;
     int done = mission;
@@ -1302,6 +1319,7 @@ static void reward(int money, const char *text)
 static void mission_fail(const char *why)
 {
     big(why, 0, 3);
+    g_snd.sfx |= SFX_FAIL;
     mstate = 0; time_left = -1; phase = 0;
     for (int i = 0; i < 3; i++) { int s = gang_slot[i]; if (cars[s].active && pl.in_car != s) cars[s].active = 0; }
     for (int i = PED_MISSION0; i < PED_ACTOR; i++) peds[i].active = 0;
@@ -1762,9 +1780,11 @@ static void meta_update(u16 keys, u16 pressed, int dt)
         return;
     }
     if (gstate == GS_PAUSE) {
-        static const char *items[4] = { "RESUME", "SAVE GAME", "RADIO: ON", "QUIT TO TITLE" };
+        static const char *items[4] = { "RESUME", "SAVE GAME", "", "QUIT TO TITLE" };
         for (int i = 0; i < 4; i++) g_hud.menu_item[i] = items[i];
-        if (!g_snd.radio_on) g_hud.menu_item[2] = "RADIO: OFF";
+        static char rbuf[24];
+        { const char *a = "RADIO: ", *b = radio_label(); int n = 0; while (*a) rbuf[n++] = *a++; while (*b && n < 23) rbuf[n++] = *b++; rbuf[n] = 0; }
+        g_hud.menu_item[2] = rbuf;
         g_hud.menu_n = 4; g_hud.menu_title = "PAUSED";
         g_hud.menu_note = menu_note == 1 ? "GAME SAVED" : menu_note == 2 ? "CAN'T SAVE DURING A JOB OR CHASE" : 0;
         if (up && menu_sel > 0) { menu_sel--; g_snd.step = 1; }
@@ -1777,7 +1797,7 @@ static void meta_update(u16 keys, u16 pressed, int dt)
             switch (menu_sel) {
             case 0: gstate = GS_PLAY; break;
             case 1: if (mstate == 1 || wanted > 0 || pl.dead_t > 0) menu_note = 2; else { save_write(); has_save = 1; menu_note = 1; } break;
-            case 2: g_snd.radio_on ^= 1; break;
+            case 2: radio_step(1); g_hud.radio_t = 0; break;
             case 3: gstate = GS_TITLE; menu_sel = has_save ? 1 : 0; g_snd.radio_on = 0; break;
             }
         }
@@ -1807,6 +1827,7 @@ void game_update(u16 keys, int dt)
     u16 pressed = keys & ~keys_prev;
     keys_prev = keys;
     if (g_hud.msg_t > 0) g_hud.msg_t -= dt;
+    if (g_hud.radio_t > 0) g_hud.radio_t -= dt;
     if (g_hud.big_t > 0) g_hud.big_t -= dt;
     if (g_hud.hurt_t > 0) g_hud.hurt_t -= dt;
     if (pl.dead_t > 0) {
@@ -1903,7 +1924,7 @@ void game_update(u16 keys, int dt)
             in_garage = 1;
             if (c->dmg > 0 && !IS_WRECK(c)) {
                 int cost = c->dmg >= CAR_FIRE ? 300 : 100;
-                if (pl.money >= cost) { pl.money -= cost; c->dmg = 0; c->burn = 0; msg("MARTA FIXED YOUR CAR", cost == 300 ? "-$300" : "-$100", 2); g_snd.door = 1; }
+                if (pl.money >= cost) { pl.money -= cost; c->dmg = 0; c->burn = 0; msg("MARTA FIXED YOUR CAR", cost == 300 ? "-$300" : "-$100", 2); g_snd.sfx |= SFX_CASH; }
                 else msg("REPAIRS COST $100", "COME BACK WITH CASH", 2);
             }
         }
@@ -1918,7 +1939,7 @@ void game_update(u16 keys, int dt)
             wanted_cool += dt;
             if (wanted_cool > 12 * TICKS) { wanted--; wanted_cool = 0; }
         }
-        if (pl.arrest_t > TICKS * 6 / 5 && pl.dead_t <= 0) { pl.dead_t = 3 * TICKS; pl.dead_kind = 1; big("BUSTED", 0, 3); }
+        if (pl.arrest_t > TICKS * 6 / 5 && pl.dead_t <= 0) { pl.dead_t = 3 * TICKS; pl.dead_kind = 1; big("BUSTED", 0, 3); g_snd.sfx |= SFX_FAIL; }
     } else {
         for (int i = 0; i < NPOLICE; i++) {
             Car *c = &cars[SLOT_POLICE0 + i];
@@ -1966,6 +1987,8 @@ void game_update(u16 keys, int dt)
         g_snd.engine_rpm = rpm;
         g_snd.engine_vol = (keys & (KEY_A | KEY_B)) ? 56 : 36;
         g_snd.horn = (keys & KEY_SELECT) ? 1 : 0;
+        if (pressed & KEY_UP) radio_step(1);
+        if (pressed & KEY_DOWN) radio_step(-1);
         g_snd.nitro = boosting;
         g_hud.nitro = nitro;
         int skid = 0;
@@ -1975,6 +1998,7 @@ void game_update(u16 keys, int dt)
         int dv = iabs(pspeed_before - c->speed) / 4096;
         if (impact > dv) dv = impact;
         if (dv > 5 && !(keys & KEY_B)) g_snd.crash = dv > 20 ? 64 : dv * 3;
+        if (dv > 16) g_snd.sfx |= SFX_GLASS;                    /* hard hit: breaking glass */
     } else {
         g_hud.speed_mph = 0; g_hud.in_car = 0; g_snd.horn = 0; g_snd.skid = 0; g_snd.nitro = 0;
         int best = 0x7fffffff, bi = -1;
