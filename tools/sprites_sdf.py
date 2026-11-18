@@ -288,7 +288,7 @@ BAYER4 = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
 # ------------------------------------------------------------- renderer
 SHADOW = np.array((0.11, 0.11, 0.12), f32)
 
-def render(model, yaw, elev, s, w_sq, rows_up, rows_down, shadow=True, max_t=30.0):
+def render(model, yaw, elev, s, w_sq, rows_up, rows_down, shadow=True, max_t=30.0, core=False):
     """Orthographic render. yaw = model heading relative to view direction (0 = facing away).
     Returns (rgb[h, w_sq], alpha mask, shadow mask) with anchor (ground centre) at column w_sq/2, row rows_up."""
     H = rows_up + rows_down
@@ -336,6 +336,7 @@ def render(model, yaw, elev, s, w_sq, rows_up, rows_down, shadow=True, max_t=30.
         so = getattr(model, 'shadow_off', (0.25, -0.15))
         fd = model.footprint(g[:, 0] + so[0], g[:, 1] + so[1])
         shad = (~hit) & (fd < 0.12)
+        cshad = (~hit) & (fd < getattr(model, 'core_shadow', -9.0))   # solid contact shadow right under the body
     if hasattr(model, 'ground_light'):
         tg = o[:, 2] / max(-dl[2], 1e-4)
         g = o + dl * tg[:, None]
@@ -346,4 +347,7 @@ def render(model, yaw, elev, s, w_sq, rows_up, rows_down, shadow=True, max_t=30.
         rgb[glow] = gcol[glow]
         hit = hit | glow
         shad &= ~glow
+    if core:
+        if not shadow: cshad = np.zeros(len(o), bool)
+        return rgb.reshape(H, w_sq, 3), hit.reshape(H, w_sq), shad.reshape(H, w_sq), (cshad & ~hit).reshape(H, w_sq)
     return rgb.reshape(H, w_sq, 3), hit.reshape(H, w_sq), shad.reshape(H, w_sq)

@@ -1,4 +1,4 @@
-# GTA (Gameboy Theft Auto): story and missions (v0.19)
+# GTA (Gameboy Theft Auto): story and missions (v0.21)
 
 ## Premise
 Eddie Vance arrives in Steel Harbor to work for his cousin Rudy and finds him gone. The loan shark Victor Moran pins Rudy's $10,000 "debt" on Eddie, and Eddie works it off: stealing cars for Marta, running product for Jinx, and doing Moran's dirty work, some of it ordered by Detective Shaw, Moran's man on the force. Jinx steals Moran's ledger, which proves Moran invents debts to own people. Eddie takes apart Shaw's cash run, Rudy comes out of hiding, and it ends at the old pier.
@@ -27,7 +27,7 @@ Eddie Vance arrives in Steel Harbor to work for his cousin Rudy and finds him go
 | 9 | Last Call | Rudy | Kill Moran (3 guards, 2 stars) at the old pier, then the ending cutscene | $10,000 |
 
 ## Cutscenes
-- In-engine, with letterbox bars and subtitles.
+- In-engine, with letterbox bars and an RPG-style dialogue box: the speaker's face portrait, their name and the line (narration has no portrait).
 - The mission giver appears in the street facing Eddie: an establishing two-shot first, then over-the-shoulder cuts to whoever is speaking.
 - Afterwards the giver walks away.
 - The intro (Marta) and the ending (Rudy) use the same system.
@@ -36,7 +36,7 @@ Eddie Vance arrives in Steel Harbor to work for his cousin Rudy and finds him go
 ## Systems
 - **Title screen:** a "GTA" wordmark with NEW GAME / CONTINUE.
 - **Pause menu (START):** resume, save, radio, quit to title.
-- **Saving:** battery SRAM, plus an autosave after every job. You can't save during a job or while wanted.
-- **Crashes never kill the player.** A car that blows up with you inside throws you clear, with at least 10 health left.
+- **Saving:** battery SRAM, plus an autosave after every job. You can't save during a job or while wanted. Loading puts you back in the car you saved in, or on foot with no car.
+- **A crash alone never kills the player**, but a car that blows up with you inside does (WASTED). A burning car gives you at least 4 s and you can bail out at any speed.
 - **Car damage, from 0 to 1000:** smokes from 650, burns from 880 and then explodes. Gunfire, rams and blasts all count.
 - **Repairs:** Marta's garage charges $100, or $300 if the car is burning.

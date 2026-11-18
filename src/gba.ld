@@ -8,6 +8,7 @@ MEMORY {
 SECTIONS {
     .text : {
         KEEP(*(.crt0))
+        *(.romcode)
         *(EXCLUDE_FILE(*render.o *divmod.o *collide.o *sound.o) .text .text.*)
         *(EXCLUDE_FILE(*render.o *collide.o) .rodata .rodata.*)
         . = ALIGN(4);

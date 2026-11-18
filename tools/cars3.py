@@ -53,9 +53,9 @@ SPECS = {
                 gh=0.90, nose=8.0, tail=12.0, lamp='rect', grille='tall', tail_l='vertical', sport=False),
     # square-body pickup: regular cab + long bed
     'pickup': dict(L=5.50, W=2.00, wb=3.30, xf=1.65, wr=0.38, tw=0.24, zr=0.36, sharp=0.02,
-                   top=[(2.75, 1.00), (2.73, 1.22), (2.60, 1.26), (1.35, 1.32), (1.25, 1.34), (0.75, 1.92), (0.05, 1.93), (-0.05, 1.90), (-0.12, 1.34), (-2.70, 1.34), (-2.75, 1.26)],
-                   belt=[(1.25, 1.34), (-0.05, 1.36)], bot=[(2.75, 0.56), (2.40, 0.42), (-2.40, 0.42), (-2.75, 0.56)],
-                   gh=0.90, nose=12.0, tail=14.0, lamp='rect', grille='truck', tail_l='vertical', sport=False, bed=True),
+                   top=[(2.75, 1.00), (2.73, 1.22), (2.60, 1.26), (1.35, 1.32), (1.25, 1.34), (0.75, 1.92), (0.05, 1.93), (-0.30, 1.91), (-0.40, 1.34), (-2.73, 1.34), (-2.75, 1.31)],
+                   belt=[(1.25, 1.34), (-0.40, 1.36)], bot=[(2.75, 0.56), (2.40, 0.42), (-2.40, 0.42), (-2.75, 0.56)],
+                   gh=0.90, nose=12.0, tail=24.0, lamp='rect', grille='truck', tail_l='vertical', sport=False, bed=True, crown=0.015, tail_xn=0.985),
     # box van
     'van': dict(L=5.20, W=2.00, wb=3.25, xf=1.05, wr=0.35, tw=0.22, zr=0.24, sharp=0.02,
                 top=[(2.60, 0.80), (2.58, 1.02), (2.40, 1.12), (1.90, 1.24), (1.30, 1.84), (1.05, 2.06), (-2.55, 2.08), (-2.60, 2.00)],
@@ -83,8 +83,8 @@ SPECS = {
                     gh=0.88, nose=5.0, tail=12.0, lamp='swept', grille='slim', tail_l='vertical', sport=False, rails=True),
     # small box truck: cab + tall cargo box
     'boxtruck': dict(L=6.40, W=2.10, wb=3.70, xf=1.95, wr=0.40, tw=0.26, zr=0.40, sharp=0.02,
-                     top=[(3.20, 1.05), (3.18, 1.30), (3.00, 1.36), (2.55, 1.42), (2.15, 2.18), (1.75, 2.20), (1.65, 2.95), (-3.18, 2.97), (-3.20, 2.90)],
-                     belt=[(2.55, 1.42), (1.66, 1.46)], bot=[(3.20, 0.60), (2.80, 0.46), (-2.90, 0.50), (-3.20, 0.60)],
+                     top=[(3.20, 1.05), (3.18, 1.30), (3.00, 1.36), (2.55, 1.42), (2.15, 2.18), (1.80, 2.20), (1.72, 1.46), (-3.18, 1.46), (-3.20, 1.40)],
+                     belt=[(2.55, 1.42), (1.72, 1.46)], box_x=(-3.20, 1.70), box_z=(0.72, 2.97), bot=[(3.20, 0.60), (2.80, 0.46), (-2.90, 0.50), (-3.20, 0.60)],
                      gh=0.92, nose=10.0, tail=20.0, lamp='rect', grille='truck', tail_l='vertical', sport=False, box=True),
     # 70s two-door land yacht: enormous hood, vinyl roof
     'yacht': dict(L=5.70, W=2.00, wb=3.10, xf=1.75, wr=0.34, tw=0.23, zr=0.18, sharp=0.025,
@@ -97,6 +97,7 @@ class Car3:
     step = 0.7
     iters = 190
     shadow_off = (0.15, 0.0)          # left/right symmetric, so mirrored frames stay correct
+    core_shadow = -0.22               # solid shadow under the body, inset from the footprint edge
 
     def __init__(self, kind, paint, trim=None, stripe=None, taxi=False, police=False, sport_wheels=None, ambulance=False):
         S = dict(SPECS[kind])
@@ -122,6 +123,20 @@ class Car3:
         self.wx = (S['xf'], S['xf'] - S['wb'])
         self.wr, self.tw = S['wr'], S['tw']
         self.hw = S['W'] / 2
+        # Lipschitz factors: the profiles are height fields, and where one drops steeply (an upright
+        # tailgate, rear window or nose) "z - T(x)" overstates the true distance by sqrt(1 + T'^2).
+        # Scaling by the slope keeps the ray marcher from skipping through those faces.
+        def k(t): return (1.0 / np.sqrt(1.0 + np.gradient(t, self.gx) ** 2)).astype(f32)
+        self.kT, self.kTb, self.kB = k(self.gT), k(self.gTb), k(self.gB)
+        self.kW = k(self.plan(self.gx).astype(f32))
+
+    def kfac(self, x):
+        return (np.interp(x, self.gx, self.kT), np.interp(x, self.gx, self.kTb),
+                np.interp(x, self.gx, self.kB), np.interp(x, self.gx, self.kW))
+
+    def mirror_pos(self):
+        mx = self.cowl - 0.12
+        return mx, float(np.interp(mx, self.gx, self.gTb)) + 0.06, self.hw + 0.015
 
     def prof(self, x):
         return (np.interp(x, self.gx, self.gT), np.interp(x, self.gx, self.gTb), np.interp(x, self.gx, self.gB))
@@ -129,41 +144,56 @@ class Car3:
     def plan(self, x):
         S = self.S
         L2 = S['L'] / 2
-        xn = np.clip(np.abs(x) / L2, 0, 1)
         p = np.where(x > 0, S['nose'], S['tail'])
+        # a square tail keeps some width at the very end, so the tailgate plane (not the tapering
+        # flank) defines the surface there and its shading is clean
+        xn = np.clip(np.abs(x) / L2, 0, np.where(x > 0, 1.0, S.get('tail_xn', 1.0)))
         return self.hw * (1 - xn ** p) ** (1 / p)
 
     def parts(self, p):
         S = self.S
         x, y, z = p[..., 0], p[..., 1], p[..., 2]
         ay = np.abs(y)
-        T, Tb, B = self.prof(x)
+        T0, Tb0, B = self.prof(x)
         Wp = self.plan(x)
         # wheel-arch flares: a touch wider around each axle
         for wx in self.wx:
             Wp = Wp + 0.018 * np.exp(-((x - wx) / 0.45) ** 2)
+        # crowned panels: hood, deck and roof curve down toward the sides instead of being flat slabs
+        Tb = Tb0 - S.get('crown', 0.035) * np.clip(ay / np.maximum(Wp, 0.05), 0, 1) ** 2
+        T = T0 - S.get('roof_crown', 0.06) * np.clip(ay / np.maximum(Wp * S['gh'], 0.05), 0, 1) ** 2
         # body cross-section: tuck at the rocker, widest at the shoulder, rolled top edge
         zn = np.clip((z - B) / np.maximum(Tb - B, 0.05), 0, 1)
         # crisp shoulder line at 70 % height: flat flank below, rolled-in upper body above
         tumble = 1 - 0.04 * (1 - np.clip(zn / 0.30, 0, 1)) ** 2 - np.where(zn > 0.78, 0.010 + 0.05 * np.clip((zn - 0.78) / 0.22, 0, 1), 0)
         Wz = Wp * tumble
-        r = 0.018
-        q = np.stack([ay - Wz + r, np.maximum(z - Tb, B - z) + r], -1)
+        r = S.get('corner', 0.032)
+        kT, kTb, kB, kW = self.kfac(x)
+        q = np.stack([(ay - Wz) * kW + r, np.maximum((z - Tb) * kTb, (B - z) * kB) + r], -1)
         body = (length(np.maximum(q, 0)) + np.minimum(q.max(-1), 0) - r) * 0.85
         body = np.maximum(body, np.abs(x) - S['L'] / 2)
         # greenhouse: narrower, leaning in toward the roof
-        gh_on = T > Tb + 0.02
+        gh_on = T0 > Tb0 + 0.02
         gt = np.clip((z - Tb) / np.maximum(T - Tb, 0.05), 0, 1)
         Wg = Wp * (S['gh'] - 0.09 * gt)
-        rg = 0.025
-        qg = np.stack([ay - Wg + rg, np.maximum(z - T, Tb - 0.06 - z) + rg], -1)
+        rg = S.get('gh_round', 0.05)
+        qg = np.stack([(ay - Wg) * kW + rg, np.maximum((z - T) * kT, (Tb - 0.06 - z) * kTb) + rg], -1)
         green = (length(np.maximum(qg, 0)) + np.minimum(qg.max(-1), 0) - rg) * 0.8
         green = np.where(gh_on, green, 9.0)
         if S.get('bed'):
             # open pickup bed behind the cab: hollow out the top
-            inner = np.maximum(np.maximum(np.abs(x + 1.92) - 0.86, ay - (self.hw - 0.09)), (Tb - 0.50) - z)
+            # flat floor at a fixed height, walls that follow the body's plan shape (no thin spots at the corners)
+            inner = np.maximum(np.maximum(np.abs(x + 1.455) - 1.205, ay - (Wp - 0.09)), (S['top'][-2][1] - 0.50) - z)
             body = np.maximum(body, -inner)
+            # the cab's back wall is a true plane: a near-vertical drop in the roof profile is not a
+            # usable distance field and used to render as streaky noise
+            green = np.maximum(green, -(x + 0.10))
         shell = np.minimum(body, green)
+        if S.get('box_x'):                                 # cargo box: its own rounded box behind the cab
+            bx0, bx1 = S['box_x']; bz0, bz1 = S['box_z']; rb = 0.05
+            qb = np.stack([np.abs(x - (bx0 + bx1) / 2) - ((bx1 - bx0) / 2 - rb), ay - (self.hw - 0.01 - rb),
+                           np.abs(z - (bz0 + bz1) / 2) - ((bz1 - bz0) / 2 - rb)], -1)
+            shell = np.minimum(shell, length(np.maximum(qb, 0)) + np.minimum(qb.max(-1), 0) - rb)
         if S.get('wing'):                                  # rear wing on two uprights
             dz = np.interp(-1.85, self.gx, self.gTb)
             qw = np.stack([np.abs(x + 1.90) - 0.13, ay - (self.hw - 0.10), np.abs(z - (dz + 0.22)) - 0.018], -1)
@@ -191,10 +221,13 @@ class Car3:
             t = length(np.maximum(qt, 0)) + np.minimum(qt.max(-1), 0) - 0.04
             tires = np.minimum(tires, t)
         # side mirrors
-        mx = self.cowl - 0.18
-        mz = np.interp(mx, self.gx, self.gTb) + 0.07
-        qm = np.stack([np.abs(x - mx) - 0.045, np.abs(ay - (self.hw + 0.03)) - 0.075, np.abs(z - mz) - 0.045], -1)
+        # side mirrors: housing on a short arm from the door's front window corner (not floating)
+        mx, mz, may = self.mirror_pos()
+        qm = np.stack([np.abs(x - mx) - 0.04, np.abs(ay - may) - 0.065, np.abs(z - mz) - 0.04], -1)
         mirror = length(np.maximum(qm, 0)) + np.minimum(qm.max(-1), 0) - 0.015
+        a0 = self.hw * S['gh'] - 0.06
+        qa = np.stack([np.abs(x - mx - 0.02) - 0.05, np.abs(ay - (a0 + may) / 2) - (may - a0) / 2, np.abs(z - (mz - 0.035)) - 0.02], -1)
+        mirror = np.minimum(mirror, length(np.maximum(qa, 0)) + np.minimum(qa.max(-1), 0) - 0.005)
         shell = np.minimum(shell, mirror)
         return shell, tires, body, green, T, Tb, B, Wp
 
@@ -239,7 +272,7 @@ class Car3:
             c_pillar = side & (x < 0.50)                     # cargo van: blind sides behind the cab
             b_pillar = side & (np.abs(x - 0.78) < 0.05)
         if S.get('bed'):
-            c_pillar = side & (x < -0.88)
+            c_pillar = side & (x < 0.02)
         if S.get('box'):
             c_pillar = side & (x < 1.80); b_pillar = side & (np.abs(x - 2.0) < 0.001)
         edge_top = (T - z) < frame
@@ -251,10 +284,13 @@ class Car3:
         slope = np.interp(x, self.gx, np.gradient(self.gT, self.gx))
         roof = float(self.gT.max())
         gwid = self.plan(x) * S['gh'] * (1 - 0.09 * np.clip((z - Tb) / np.maximum(T - Tb, 0.05), 0, 1) / S['gh'])
-        screen = (car & (green <= body + 0.003) & (np.abs(slope) > 0.35) & (nz > 0.15)
+        # rear glass on fastbacks lies much flatter than a windscreen, so the rear threshold is lower
+        slope_thr = np.where(x < 0, 0.16, 0.35)
+        screen = (car & (green <= body + 0.003) & (np.abs(slope) > slope_thr) & (nz > 0.15)
                   & (z > Tb + 0.045) & (z < roof - 0.045) & (ay < gwid - 0.075))
         # upright rear glass (hatchbacks, wagons, SUVs, vans, the pickup's cab): the cabin's back face
         belt_r = float(np.interp(0.0, self.gx, self.gTb))            # same window line as the side glass
+        if S.get('van'): belt_r = S['belt'][1][1] + 0.05               # cargo van: windows in the rear doors
         backface = ((car & (green <= body + 0.003) & (nx < -0.45) & (z > Tb + 0.06) & (z < roof - 0.05)
                      & (ay < gwid - 0.085) & (x < 0))
                     | (car & (nz < 0.6) & (nx < 0.2) & (x < -L2 + 0.35) & (z > belt_r + 0.07) & (z < roof - 0.05)
@@ -262,7 +298,7 @@ class Car3:
         if S.get('box'): backface &= False
         screen = screen | backface
         glass = glass | screen
-        fr = car & (((green <= body + 0.003) & (np.abs(slope) > 0.35) & (nz > 0.15) & (z > Tb + 0.02)) | ((nz < 0.6) & (nx < 0.2) & (x < -L2 + 0.35) & (z > belt_r + 0.03) & (z < roof - 0.01) & (not S.get('box')))) & ~screen & ~glass
+        fr = car & (((green <= body + 0.003) & (np.abs(slope) > slope_thr) & (nz > 0.15) & (z > Tb + 0.02)) | ((nz < 0.6) & (nx < 0.2) & (x < -L2 + 0.35) & (z > belt_r + 0.03) & (z < roof - 0.01) & (not S.get('box')))) & ~screen & ~glass
         alb[fr] = (0.03, 0.03, 0.035); mat[fr] = 5
         if S.get('box'):                                   # the cargo box is all painted panel
             boxp = g & (x < 1.80); glass &= ~boxp; c_pillar = c_pillar | boxp
@@ -364,7 +400,7 @@ class Car3:
         elif self.kind in ('gt', 'muscle', 'super'):
             seams = [self.cowl - 0.05, self.cowl - 1.15]
         elif self.kind == 'pickup':
-            seams = [self.cowl - 0.05, bx, -0.98]
+            seams = [self.cowl - 0.05, bx, -0.17]
         elif self.kind == 'van':
             seams = [self.cowl - 0.05, 0.78, -0.40]
         for sx in seams:
@@ -400,8 +436,8 @@ class Car3:
             chk = car & (np.abs(ny) > 0.45) & (np.abs(z - (Tb - 0.22)) < 0.03) & (((x * 10).astype(np.int32) & 1) == 0)
             alb[chk] = (0.08, 0.08, 0.08)
         # mirrors: body colour shell, black glass face
-        mz = np.interp(self.cowl - 0.18, self.gx, self.gTb) + 0.07
-        mir = car & (ay > self.hw - 0.01) & (np.abs(x - (self.cowl - 0.18)) < 0.08) & (np.abs(z - mz) < 0.07)
+        mx_, mz, may = self.mirror_pos()
+        mir = car & (ay > may - 0.07) & (np.abs(x - mx_) < 0.07) & (np.abs(z - mz) < 0.06)
         alb[mir & (nx < -0.3)] = (0.06, 0.06, 0.07); mat[mir & (nx < -0.3)] = 1
         # ---- wheels
         mat[wheel] = 2; alb[wheel] = (0.045, 0.045, 0.05)
@@ -453,7 +489,10 @@ class Car3:
         sp = np.clip((n * h).sum(-1), 0, 1)[:, None]
         m = mat[:, None]
         paint = base * 0.92 + envc * (0.13 + 0.80 * F) * ao + (1.0 * sp ** 150 + 0.18 * sp ** 14) * ao
-        glass = alb + (envc * (0.04 + 0.45 * F) + 0.9 * sp ** 200) * np.clip(n[:, 2:3] * 1.4, 0.15, 1)
+        # tinted glass: dark interior, a soft sky reflection that is stronger on the raked screens
+        # (they face the sky) and toward their top edge, so windows read as glass, not holes
+        sky_t = np.clip(r[:, 2:3] * 2.0, 0, 1)
+        glass = alb + (envc * (0.10 + 0.55 * F) * (0.55 + 0.45 * sky_t) + 0.9 * sp ** 200) * np.clip(n[:, 2:3] * 1.4, 0.22, 1)
         rubber = base * 0.9 + 0.05 * sp ** 6
         alloy = base * 0.5 + envc * 0.45 * ao + 0.7 * sp ** 40
         chrome = alb * 0.15 + envc * 0.75 * ao + 0.9 * sp ** 60

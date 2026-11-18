@@ -2,6 +2,7 @@
 import sys, os, time, numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
 from sprites_sdf import *
+from frame_render import crop, run_all
 
 OUT_C, OUT_BIN = sys.argv[1], sys.argv[2]
 NCOL = 148                       # sprite colours (palette indices 104..254); 0 = transparent
@@ -9,33 +10,12 @@ NCOL = 148                       # sprite colours (palette indices 104..254); 0 
 frames = []                      # (rgb_logical, mask, shadowmask, ox, oy, upx_q8)
 
 def add_image(col, mask, smask, ox, oy, upx):
-    any_ = mask | smask
-    if not any_.any():
-        frames.append((np.zeros((1, 1, 3)), np.zeros((1, 1), bool), np.zeros((1, 1), bool), 0, 0, upx)); return
-    ys, xs = np.nonzero(any_)
-    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
-    frames.append((col[y0:y1, x0:x1], mask[y0:y1, x0:x1], smask[y0:y1, x0:x1], int(x0 + ox), int(y0 + oy), upx))
+    frames.append(crop(col, mask, smask, ox, oy, upx))
 
+jobs = []                        # deferred SDF renders: run in parallel (and cached) before the palette
 def add(model, yaw, elev, s, w_sq, up, down, shadow=True, ss=1, outline=False):
-    rgb, a, sh = render(model, yaw, elev, s / ss, w_sq * ss, up * ss, down * ss, shadow)
-    if ss > 1:                                    # anti-aliasing: average ss x ss samples
-        H0, W0 = a.shape
-        a4 = a.reshape(H0 // ss, ss, W0 // ss, ss).astype(np.float32)
-        cov = a4.mean((1, 3))
-        csum = (rgb.reshape(H0 // ss, ss, W0 // ss, ss, 3) * a4[..., None]).sum((1, 3))
-        rgb = csum / np.maximum(a4.sum((1, 3)), 1)[..., None]
-        sh = sh.reshape(H0 // ss, ss, W0 // ss, ss).mean((1, 3)) >= 0.5
-        a = cov >= 0.5
-        sh &= ~a
-    H, W = a.shape
-    if outline:                                   # dark silhouette edge: pre-rendered sprite look
-        inner = a.copy()
-        inner[1:, :] &= a[:-1, :]; inner[:-1, :] &= a[1:, :]; inner[:, 1:] &= a[:, :-1]; inner[:, :-1] &= a[:, 1:]
-        edge = a & ~inner
-        rgb = rgb.copy(); rgb[edge] = rgb[edge] * 0.35
-    yy, xx = np.mgrid[0:H, 0:W]
-    smask = sh & (((xx + yy) & 1) == 0)          # dithered = see-through shadow
-    add_image(rgb, a, smask, -(w_sq // 2), -up, int(round(s * 16 * 256)))
+    frames.append(len(jobs))
+    jobs.append((model, (yaw, elev, s, w_sq, up, down), dict(shadow=shadow, ss=ss, outline=outline)))
 
 sets = []
 def begin(name): sets.append((name, len(frames)))
@@ -79,7 +59,7 @@ CAR_ANGLES = (64, 64, 32, 32)
 car_dims = []
 for name, car in CARS:
     begin(name)
-    tall = max(0, max(z for _, z in car.S['top']) - 2.2) if hasattr(car, 'S') else 0
+    tall = max(0, max([z for _, z in car.S['top']] + [car.S.get('box_z', (0, 0))[1]]) - 2.2) if hasattr(car, 'S') else 0
     for (e, s_, w, up, dn), na in zip(ELEV, CAR_ANGLES):
         upx = up + int(np.ceil(tall / s_)) + (6 if tall else 0)
         # only headings 0..180 degrees are stored; the game mirrors them for the other half
@@ -140,33 +120,40 @@ for c in ((1.0, 0.82, 0.10), (0.20, 0.95, 0.35)):
     col = np.zeros((H_, W_, 3), np.float32); col[:] = c
     col[xr < 0.3] = np.minimum(np.array(c) * 1.2 + 0.2, 1)
     add_image(col, mm, np.zeros_like(mm), -W_ // 2, -H_, int(0.035 * 16 * 256))
-begin('FX_PICKUP')     # 0 pistol, 1 SMG, 2 health, 3 shotgun, 4 rifle
-for kind in range(5):
+begin('FX_PICKUP')     # 0 pistol, 1 SMG, 2 health, 3 shotgun, 4 rifle, 5 rocket launcher
+for kind in range(6):
     col = np.zeros((14, 18, 3), np.float32); mm = np.zeros((14, 18), bool)
     if kind == 2:
         mm[3:11, 7:11] = True; mm[5:9, 4:14] = True; col[:] = (0.95, 0.15, 0.15)
         ring = np.zeros_like(mm); ring[2:12, 3:15] = True; ring &= ~mm
         col[ring] = (0.95, 0.95, 0.95); mm |= ring
     else:
-        if kind == 3:      # shotgun: long twin barrel, pump, stock
+        if kind == 5:      # rocket launcher: fat tube, flared muzzle, grip and sight
+            mm[3:8, 0:18] = True; mm[2:9, 0:2] = True; mm[8:11, 7:9] = True; mm[8:10, 11:13] = True; mm[1:3, 9:12] = True
+        elif kind == 3:    # shotgun: long twin barrel, pump, stock
             mm[4:6, 0:18] = True; mm[6:8, 7:12] = True; mm[5:10, 0:4] = True; mm[6:9, 13:15] = True
         elif kind == 4:    # rifle: barrel, curved magazine, grip, stock
             mm[3:6, 0:18] = True; mm[6:9, 9:11] = True; mm[9:11, 10:12] = True; mm[6:10, 5:7] = True; mm[4:9, 0:3] = True
         else:
             mm[3:7, 2:16 if kind else 13] = True; mm[6:12, 4:7] = True
             if kind: mm[6:11, 10:12] = True; mm[4:6, 16:18] = True
-        col[:] = (0.20, 0.21, 0.23); col[3:4] = (0.55, 0.56, 0.60)
+        col[:] = (0.20, 0.21, 0.23) if kind != 5 else (0.24, 0.30, 0.16); col[3:4] = (0.55, 0.56, 0.60)
         glow = np.zeros_like(mm); glow[1:13, 0:18] = True; glow &= ~mm
         gj, gi = np.nonzero(glow); keep = (gi + gj) % 2 == 0
         g2 = np.zeros_like(mm); g2[gj[keep], gi[keep]] = True
         col[g2] = (0.35, 1.0, 0.45); mm |= g2
     add_image(col, mm, np.zeros_like(mm), -9, -18, int(0.03 * 16 * 256))
+begin('FX_ROCKET')     # rocket in flight: hot exhaust core in a flame halo
+col, mm = blob(9, 7, (1.0, 0.55, 0.10), (1.0, 0.95, 0.70)); add_image(col, mm, np.zeros_like(mm), -4, -3, int(0.03 * 16 * 256))
 group()
 begin('TREE'); add(Tree(), 0.0, np.radians(9), 0.05, 136, 142, 16)
 begin('LAMP')
 for i in range(8): add(Lamp(), i * 2 * np.pi / 8, np.radians(9), 0.05, 96, 145, 8)
 group()
-print('scenery', round(time.time() - t0, 1), flush=True)
+print('rendering', len(jobs), 'frames', flush=True)
+done = run_all(jobs, os.path.join(os.path.dirname(OUT_BIN), 'cache'))
+frames = [done[f] if isinstance(f, int) else f for f in frames]
+print('rendered', round(time.time() - t0, 1), flush=True)
 
 # ----------------------------------------------------------- palette (k-means)
 rng = np.random.default_rng(1)

@@ -8,15 +8,64 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 |---|---|---|
 | A | Gas | Fire (auto-aims at the nearest person in front) |
 | B | Brake / reverse; B + steer at speed = handbrake drift | Run (hold with Up) |
-| L | Nitro | Switch weapon |
+| L | Nitro | Switch weapon (fists, pistol, SMG, shotgun, rifle, rockets) |
 | Left / Right | Steer | Turn |
-| Up / Down | – | Walk forward / back |
-| R | Get out (when slow) | Get in the nearest car (any car) |
+| Up / Down | Change radio station | Walk forward / back |
+| R | Get out (when slow, or any speed if the car is burning) | Get in the nearest car (any car) |
 | SELECT | Horn | |
-| START | Pause menu (resume, save, radio, quit) | |
+| START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
-## What's new in v0.19
+## What's new in v0.22
+- **New cutscene portraits:** the faces in the dialogue box are now bigger (64x64) anime-style pixel
+  art with cel shading, big expressive eyes and proper hair, using up to 160 colours each instead
+  of 15
+- Faces are soft and rounded: full cheeks and a rounded chin
+
+## v0.21
+- **Rocket launcher.** Rockets fly where you aim (they lock onto the nearest car ahead), and a direct
+  hit sets a car ablaze; the blast catches nearby cars and people. Four launchers around town, one a
+  block from the Eastside Kings' corner (job 4). 5 rockets per pickup; rocket ammo is saved
+- **More weapon pickups:** 52 now instead of 24, mostly guns. The minimap shows the ones within
+  range: a cyan pistol badge for guns, an orange one for rocket launchers, a red-cross first-aid
+  box for health
+- **RPG-style cutscenes:** the person talking appears as a framed face portrait next to their lines
+- **Cats!** Orange tabbies, black cats and grey cats roam the sidewalks. They wander, sit, bolt when
+  you run at them or a car comes close, and meow when you walk up to them. Nothing hurts them
+- **Loading a save** puts you back in the car you saved in, or on foot with no car (it used to give
+  you the starter car every time)
+- **Cars that explode with you inside now kill you.** When your car catches fire you always get at
+  least 4 seconds, and you can bail out (R) at any speed. A crash on its own still never kills you
+- No more sound when your wanted level goes up
+- Pause menu shows "RADIO: OFF" instead of "RADIO: RADIO OFF"
+
+## v0.20
+- **More realistic cars.** Every car model was reworked:
+  - Rounded roofs, hoods and trunks (they curve down to the sides instead of being flat slabs)
+  - Side mirrors sit on the doors instead of floating next to them
+  - Every car has a rear windshield now, including the sports coupes and muscle cars whose sloped
+    rear glass used to be painted over, and the cargo van (windows in its rear doors)
+  - Windows show a faint sky reflection instead of looking like black holes
+  - A solid dark shadow right under each car, so cars sit on the road instead of floating
+  - Fixed rendering glitches on the back of every boxy vehicle (vans, SUVs, wagons, minivans,
+    hatchbacks): their rear windows and tail panels used to show swirly noise
+  - Pickup: a clean open bed with a proper cab back wall and rear window (the old one had a raised
+    slab in the bed and streaky noise behind the cab). Box truck: a real cargo box behind the cab
+- **Faster.** About 27% higher frame rate on the same drive (14.4 -> 18.2 fps; most frames now run
+  at 20 fps), cutscenes 10 -> 15 fps, title screen 10.5 -> 13 fps, and no more slowdown to 9-11
+  fps on the coast road
+- **Five radio stations.** Press Up / Down in a car to change station (or pick one in the pause
+  menu); the station name shows when you change it or get in a car:
+  HARBOR FM (synth-pop), KICK 104.5 (club house), IRON 97 (rock), LOW END 88 (hip-hop),
+  SMOOTH 101 (late-night jazz)
+- **New sound effects:** radio tuning static, engine cranking when you get in a car, breaking glass
+  on hard crashes, a pickup chime, a cash register at Marta's garage, a two-tone alert when your
+  wanted level goes up, a jingle for a finished job and a sad one for WASTED / BUSTED / failed jobs,
+  a yelp when someone goes down, and bullets pinging off cars and walls
+- Fixed a sound bug: after the first gunshot, two sound voices kept running forever (a faint hiss
+  that also cost CPU time)
+
+## v0.19
 - **New story and missions.** The races are gone; all nine jobs are now crime jobs, tied together by
   one story (see the table below)
 - **Cutscenes.** Every job starts with an in-engine cutscene at its marker: letterbox bars, the

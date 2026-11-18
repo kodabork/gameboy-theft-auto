@@ -3,6 +3,7 @@
 #include "engine.h"
 #include "game.h"
 #include "logo.h"
+#include "portraits.h"
 #include "ground.h"
 
 #define COL_RED 252
@@ -61,7 +62,21 @@ static inline void put_px(int x, int y, int c)
 
 static void rect(int x, int y, int w, int h, int c)
 {
-    for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) put_px(x + i, y + j, c);
+    /* clip, then fill whole 2-pixel words; only the odd edge pixels need read-modify-write */
+    int x1 = x + w, y1 = y + h;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x1 > 240) x1 = 240;
+    if (y1 > 160) y1 = 160;
+    if (x >= x1 || y >= y1) return;
+    const u16 cc = (u16)(c | (c << 8));
+    for (int j = y; j < y1; j++) {
+        int a = x, b = x1;
+        if (a & 1) { put_px(a, j, c); a++; }
+        if (b & 1) { b--; put_px(b, j, c); }
+        u16 *p = FBH + j * SCR_W + (a >> 1), *e = FBH + j * SCR_W + (b >> 1);
+        while (p < e) *p++ = cc;
+    }
 }
 
 static int text_width(const char *s, int scale) { int n = 0; while (*s++) n++; return n * 6 * scale; }
@@ -125,19 +140,24 @@ static char *fmt_int(char *p, int v)
 
 static void blit_img(const Img *im, int x0, int y0)     /* palette-index image, 0 = transparent */
 {
-    u8 *fb8 = (u8 *)FBH;
+    int xs = x0 < 0 ? 0 : x0, xe = x0 + im->w > 240 ? 240 : x0 + im->w;
+    if (xs >= xe) return;
     for (int y = 0; y < im->h; y++) {
         int sy = y0 + y; if (sy < 0 || sy >= 160) continue;
-        const u8 *src = im->px + y * im->w;
+        const u8 *src = im->px + y * im->w - x0;     /* indexed by screen x */
         u16 *row = FBH + sy * 120;
-        for (int x = 0; x < im->w; x++) {
-            int v = src[x]; if (!v) continue;
-            int sx = x0 + x; if (sx < 0 || sx >= 240) continue;
+        int sx = xs;
+        if (sx & 1) { int v = src[sx]; if (v) row[sx >> 1] = (u16)((row[sx >> 1] & 0x00FF) | (v << 8)); sx++; }
+        for (; sx + 1 < xe; sx += 2) {               /* whole 2-pixel words */
+            int a = src[sx], b = src[sx + 1];
+            if (!(a | b)) continue;
             u16 *w = &row[sx >> 1];
-            *w = (sx & 1) ? (u16)((*w & 0x00FF) | (v << 8)) : (u16)((*w & 0xFF00) | v);
+            if (a && b) *w = (u16)(a | (b << 8));
+            else if (a) *w = (u16)((*w & 0xFF00) | a);
+            else *w = (u16)((*w & 0x00FF) | (b << 8));
         }
+        if (sx < xe) { int v = src[sx]; if (v) row[sx >> 1] = (u16)((row[sx >> 1] & 0xFF00) | v); }
     }
-    (void)fb8;
 }
 static void shade_band(int y0, int y1)          /* darken a strip of the frame (checker of black) */
 {
@@ -157,9 +177,41 @@ static void draw_menu(int y)
     }
 }
 
+int g_face = -1, g_face_x, g_face_y;            /* portrait to show as a hardware sprite (GBA) */
+static int face_of(const char *who)
+{
+    if (!who) return -1;
+    for (int k = 0; k < NFACES; k++) {
+        const char *a = who, *b = face_names[k];
+        while (*a && *a == *b) { a++; b++; }
+        if (!*a && !*b) return k;
+    }
+    return -1;
+}
+/* join the page's two lines and word-wrap them to 'width' characters (up to 3 lines) */
+static int wrap_lines(const char *l1, const char *l2, int width, char out[3][40])
+{
+    char buf[96]; int n = 0;
+    for (const char *p = l1; p && *p && n < 94; p++) buf[n++] = *p;
+    if (l2 && *l2 && n < 94) { buf[n++] = ' '; for (const char *p = l2; *p && n < 95; p++) buf[n++] = *p; }
+    buf[n] = 0;
+    int nl = 0, i = 0;
+    while (buf[i] && nl < 3) {
+        while (buf[i] == ' ') i++;
+        int end = i, last = -1;
+        while (buf[end] && end - i < width) { if (buf[end] == ' ') last = end; end++; }
+        if (buf[end] && buf[end] != ' ' && last > i) end = last;     /* break at the last space */
+        int k = 0; for (int j = i; j < end && k < 39; j++) out[nl][k++] = buf[j];
+        while (k > 0 && out[nl][k - 1] == ' ') k--;
+        out[nl][k] = 0; nl++; i = end;
+    }
+    return nl;
+}
+
 void hud_draw(u16 *fb)
 {
     FBH = fb;
+    g_face = -1;
 #ifndef HOST
     g_ntxt = 0;
 #endif
@@ -175,13 +227,27 @@ void hud_draw(u16 *fb)
         blit_img(&img_press, (240 - img_press.w) / 2, 142);
         return;
     }
-    if (g_hud.dlg_l1) {                          /* story dialogue */
-        if (g_hud.cutscene) { rect(0, 0, 240, 12, COL_BLACK); rect(0, 113, 240, 47, COL_BLACK); }
-        else shade_band(112, 156);
-        if (g_hud.dlg_who && g_hud.dlg_who[0]) text(8, 116, g_hud.dlg_who, COL_YELLOW, 1);
-        text(8, 128, g_hud.dlg_l1, COL_WHITE, 1);
-        if (g_hud.dlg_l2) text(8, 138, g_hud.dlg_l2, COL_WHITE, 1);
-        text(214, 148, "A >", COL_YELLOW, 1);
+    if (g_hud.dlg_l1) {                          /* story dialogue: RPG-style box with the speaker's portrait */
+        int face = face_of(g_hud.dlg_who);
+        if (g_hud.cutscene) { rect(0, 0, 240, 12, COL_BLACK); rect(0, 107, 240, 53, COL_BLACK); }
+        else shade_band(107, 160);
+        int tx = 8, width = 37;
+        if (face >= 0) {
+            /* 64x64 portrait in a white frame, standing a little above the box like an RPG */
+            rect(3, 92, 66, 1, COL_WHITE); rect(3, 157, 66, 1, COL_WHITE);
+            rect(3, 92, 1, 66, COL_WHITE); rect(68, 92, 1, 66, COL_WHITE);
+#ifdef HOST
+            blit_img(&img_faces[face], 4, 93);
+#else
+            g_face = face; g_face_x = 4; g_face_y = 93;                           /* drawn as a hardware sprite */
+#endif
+            tx = 74; width = 27;
+        }
+        if (g_hud.dlg_who && g_hud.dlg_who[0]) text(tx, 112, g_hud.dlg_who, COL_YELLOW, 1);
+        static char lines[3][40];
+        int n = wrap_lines(g_hud.dlg_l1, g_hud.dlg_l2, width, lines);
+        for (int i = 0; i < n; i++) text(tx, 123 + i * 10, lines[i], COL_WHITE, 1);
+        text(228, 150, ">", COL_YELLOW, 1);
         return;
     }
     if (g_hud.menu_n) {                          /* pause menu */
@@ -191,6 +257,7 @@ void hud_draw(u16 *fb)
         if (g_hud.menu_note) text_center(116, g_hud.menu_note, COL_WHITE, 1);
         return;
     }
+    if (g_hud.radio_t > 0 && g_hud.radio_name) text_center(4, g_hud.radio_name, COL_YELLOW, 1);   /* radio station */
     /* money, top right */
     buf[0] = '$'; fmt_int(buf + 1, g_hud.money);
     text(236 - text_width(buf, 1), 4, buf, COL_WHITE, 1);
@@ -252,19 +319,26 @@ void radar_init(void) {}
 #else
 #define IWRAM_ARM __attribute__((section(".iwram"), target("arm"), noinline))
 #endif
-IWRAM_ARM void radar_build(u32 *t)
+/* Built a quarter of the disc per frame (part 0..3) from values latched at part 0, so the cost is
+   spread evenly instead of landing on one frame; the finished picture is shown after part 3. */
+IWRAM_ARM void radar_build(u32 *t, int part)
 {
-    for (int i = 0; i < 64 * 8; i++) t[i] = 0;
-    int c = icos(g_hud.pang), s = isin(g_hud.pang);
+    static int c, s, ox, oy, px0, py0;
     const int R = 28, SCALE = M(2.5);              /* 2.5 m per radar pixel */
-    /* minimap texel coordinates in 16.16, stepped incrementally */
-    const int ox = (g_hud.px - TMAP_ORIGIN) << 11, oy = (g_hud.py - TMAP_ORIGIN) << 11;   /* units/32 << 16 */
+    if (part == 0) {
+        for (int i = 0; i < 64 * 8; i++) t[i] = 0;
+        c = icos(g_hud.pang); s = isin(g_hud.pang);
+        px0 = g_hud.px; py0 = g_hud.py;
+        /* minimap texel coordinates in 16.16, stepped incrementally */
+        ox = (px0 - TMAP_ORIGIN) << 11; oy = (py0 - TMAP_ORIGIN) << 11;   /* units/32 << 16 */
+    }
     const int sxx = (SCALE * s) >> 3, sxy = -(SCALE * c) >> 3;     /* per +x radar px (>>14, <<11) */
     const int syx = -(SCALE * c) >> 3, syy = -(SCALE * s) >> 3;    /* per +y radar px */
     /* disc spans per row: outer half-width and inner (non-rim) half-width; 8 pixels packed per word write */
     static const u8 span_o[29] = { 28,27,27,27,27,27,27,27,26,26,26,25,25,24,24,23,22,22,21,20,19,18,17,15,14,12,10,7,0 };
     static const s8 span_i[29] = { 27,26,26,26,26,26,26,26,25,25,25,24,24,23,23,22,21,20,20,19,18,16,15,14,12,10,7,0,-1 };
-    for (int y = -R; y <= R; y++) {
+    static const s8 ystart[5] = { -28, -14, 0, 14, 29 };
+    for (int y = ystart[part]; y < ystart[part + 1]; y++) {
         int ay = y < 0 ? -y : y;
         int xo = span_o[ay], xi = span_i[ay];
         int u = ox + y * syx - xo * sxx, v = oy + y * syy - xo * sxy;
@@ -282,9 +356,31 @@ IWRAM_ARM void radar_build(u32 *t)
             if ((px & 7) == 7 || x == xo) { trow[(px >> 3) * 8] = acc; acc = 0; }
         }
     }
+    if (part != 3) return;
+    /* pickups: a pistol (cyan, white outline) for guns, a first-aid box (red cross on white) for
+       health; only inside the disc, never clamped to the rim */
+    {
+        /* 7x5 icons: '#' body, 'o' outline/background */
+        static const char gun[5][8] = { "ooooooo", "o#####o", "o######", "ooo#o##", "  ooo##" };
+        static const char aid[5][8] = { " ooooo ", " oo#oo ", " o###o ", " oo#oo ", " ooooo " };
+        for (int i = 0; i < g_hud.npk; i++) {
+            int dx = g_hud.pk_x[i] - px0, dy = g_hud.pk_y[i] - py0;
+            int f = (dx * c + dy * s) >> 14, rr = (dx * s - dy * c) >> 14;
+            int x = rr / SCALE, y = -f / SCALE;
+            if (x * x + y * y > (R - 5) * (R - 5)) continue;
+            int health = g_hud.pk_t[i] == 2;
+            const char (*ic)[8] = health ? aid : gun;
+            for (int j = 0; j < 5; j++) for (int k = 0; k < 7; k++) {
+                char ch = ic[j][k];
+                if (ch == ' ') continue;
+                int col = ch == '#' ? (health ? 14 : g_hud.pk_t[i] == 5 ? 8 : 13) : (health ? 4 : 15);   /* rockets: orange */
+                rpx(t, 32 + x - 3 + k, 32 + y - 2 + j, col);
+            }
+        }
+    }
     /* blips (clamped to the rim) */
     for (int i = 0; i < g_hud.nblips; i++) {
-        int dx = g_hud.bx[i] - g_hud.px, dy = g_hud.by[i] - g_hud.py;
+        int dx = g_hud.bx[i] - px0, dy = g_hud.by[i] - py0;
         int f = (dx * c + dy * s) >> 14, rr = (dx * s - dy * c) >> 14;
         int x = rr / SCALE, y = -f / SCALE;
         int d2 = x * x + y * y, lim = R - 3;

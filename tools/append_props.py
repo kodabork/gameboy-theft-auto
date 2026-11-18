@@ -3,7 +3,7 @@
 import sys, os, re, numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
 from sprites_sdf import render
-from props import TrafficLight, Hydrant, TrashCan, Bench, StreetTree, WaterTower
+from props import TrafficLight, Hydrant, TrashCan, Bench, StreetTree, WaterTower, Cat
 
 cfile, hfile, bfile = sys.argv[1:4]
 csrc = open(cfile).read()
@@ -55,6 +55,13 @@ begin('PROP_BENCH')                       # 4 view angles
 for i in range(4): add(Bench(), i * 2 * np.pi / 4, 14, 0.02, 110, 50, 20)
 begin('PROP_STREETTREE'); add(StreetTree(), 0.0, 10, 0.04, 100, 158, 12)
 begin('PROP_WATERTOWER'); add(WaterTower(), 0.3, 6, 0.05, 80, 130, 10)
+# cats: per coat, 8 view directions x (sit, walk 0..3) = 40 frames
+for coat, name in (('tabby', 'CAT_TABBY'), ('black', 'CAT_BLACK'), ('grey', 'CAT_GREY')):
+    begin(name)
+    for d in range(8):
+        yaw = d * 2 * np.pi / 8
+        add(Cat(coat, 'sit'), yaw, 15, 0.016, 56, 40, 8)
+        for f in range(4): add(Cat(coat, 'walk', f * 2 * np.pi / 4), yaw, 15, 0.016, 56, 40, 8)
 print('rendered', len(table), flush=True)
 
 open(bfile, 'wb').write(blob)
