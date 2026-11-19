@@ -27,6 +27,20 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
     swung forward with the leg on the same side, like a robot march). The hips and shoulders turn
     against each other with every step.
   - Running uses bent elbows that pump forward and back, instead of one arm folding back to the hip.
+- **Weapon stances.** Each gun now has its own pose when you fire:
+  - Pistol: one hand out.
+  - SMG: held compact at the chest with both hands.
+  - Shotgun and rifle: butt against the shoulder, left foot forward. The rifle has a scope and the
+    shotgun a pump.
+  - Rocket launcher: an olive-green tube resting on your right shoulder.
+- **New gun sounds.** Every gun was re-voiced:
+  - Pistol: snappy, with a tinkle of brass hitting the pavement.
+  - SMG: tight, so bursts stay crisp.
+  - Shotgun: a deep blast and a pump rack after each shot.
+  - Rifle: a hard crack, a long echo and a bolt cycle.
+  - Rocket launcher: its own launch thump with a rising motor whistle (it used to borrow the
+    shotgun sound).
+  - Also new: a click when you run dry, and a clack when you switch weapons.
 
 ## What's new in v0.24
 - **Faster.** About 4% more frames per second on the standard test drive (18.1 to 19.0 fps), with

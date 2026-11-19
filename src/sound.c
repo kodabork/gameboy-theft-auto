@@ -196,13 +196,14 @@ __attribute__((section(".romcode"))) void sound_init(void)   /* runs once: ROM, 
    pitch) + room tail (dark noise, slow decay). Per-weapon recipes; two voices so the player's
    and the cops' shots can overlap. Envelopes are 8.8 fixed point, decaying by e -= e >> k. */
 typedef struct { u8 crack, kc, body, kb, lpb, boom, kbo, tail, kt, lpt; u16 f0, f1; } GunRecipe;
-static const GunRecipe recipes[6] = {
+static const GunRecipe recipes[7] = {
     { 0 },
-    {  96, 5,  64, 8, 1,  72,  9, 20, 10, 3, 150, 55 },    /* pistol */
-    {  80, 5,  46, 7, 1,  44,  8, 12,  9, 3, 120, 70 },    /* SMG */
-    { 104, 6,  92, 9, 2,  96, 10, 30, 11, 4,  95, 38 },    /* shotgun */
-    { 124, 4,  70, 8, 1,  64,  9, 26, 11, 4, 180, 60 },    /* rifle */
+    { 110, 4,  70, 8, 1,  80,  9, 24, 11, 3, 170, 60 },    /* pistol: snappy crack, short room tail */
+    {  92, 4,  56, 8, 1,  46,  8, 18, 10, 3, 200, 90 },    /* SMG: light and tight, so bursts stay crisp */
+    { 115, 5, 115, 9, 2, 127, 10, 46, 12, 5,  80, 30 },    /* shotgun: deep blast, long rolling tail */
+    { 127, 3,  80, 8, 1,  76,  9, 40, 12, 4, 230, 52 },    /* rifle: hard supersonic snap, long echo */
     { 110, 6, 120, 10, 2, 127, 11, 60, 12, 5,  70, 24 },   /* explosion */
+    {  70, 6, 110, 11, 3, 100, 10, 80, 12, 5,  55, 28 },   /* rocket launch: thump and a long breathy whoosh */
 };
 typedef struct { int ec, eb, ebo, et, lb, lt; u32 ph, f, f1; u8 kc, kb, kbo, kt, lpb, lpt; } GunVoice;
 static GunVoice gv[2]; static int gv_next;
@@ -237,8 +238,18 @@ static const SfxNote sfx_fail[] = { {0, W_SQUARE, 392, 392, 40, 12, 0}, {9, W_SQ
 static const SfxNote sfx_yelp[] = { {0, W_SQUARE, 950, 380, 34, 11, 10}, {0, W_SINE, 1250, 520, 30, 11, 10}, {0} };
 static const SfxNote sfx_cash[] = { {0, W_SQUARE, 1568, 1568, 30, 9, 0}, {3, W_SQUARE, 2093, 2093, 30, 9, 0}, {6, W_SINE, 2637, 2637, 60, 11, 0}, {0} };
 static const SfxNote sfx_ricochet[] = { {0, W_SINE, 3400, 900, 44, 11, 11}, {0, W_NOISE_HI, 0, 0, 30, 8, 0}, {0} };
+/* weapon mechanics, played after the shot itself */
+static const SfxNote sfx_pump[] = { {16, W_NOISE_HI, 0, 0, 62, 7, 0}, {16, W_SQUARE, 900, 650, 22, 8, 8},          /* shotgun: rack back... */
+                                    {23, W_NOISE_HI, 0, 0, 72, 7, 0}, {23, W_SQUARE, 650, 1100, 24, 8, 8}, {0} };  /* ...and forward */
+static const SfxNote sfx_bolt[] = { {18, W_NOISE_HI, 0, 0, 50, 7, 0}, {18, W_SQUARE, 1400, 1000, 16, 7, 8},
+                                    {25, W_NOISE_HI, 0, 0, 62, 7, 0}, {25, W_SQUARE, 1000, 1500, 18, 7, 8}, {0} };
+static const SfxNote sfx_shell[] = { {12, W_SINE, 5200, 5100, 16, 9, 0}, {15, W_SINE, 6300, 6200, 11, 8, 0}, {0} };   /* brass on the pavement */
+static const SfxNote sfx_launch[] = { {0, W_NOISE_LO, 0, 0, 56, 12, 0}, {0, W_SINE, 300, 1400, 24, 12, 11}, {3, W_NOISE_HI, 0, 0, 28, 11, 0}, {0} };
+static const SfxNote sfx_dry[] = { {0, W_SQUARE, 1800, 1500, 26, 7, 8}, {0, W_NOISE_HI, 0, 0, 30, 6, 0}, {0} };     /* empty: click */
+static const SfxNote sfx_swap[] = { {0, W_NOISE_HI, 0, 0, 40, 7, 0}, {3, W_SQUARE, 1200, 900, 18, 7, 8}, {0} };     /* weapon switch */
 static const SfxNote *const sfx_list[NSFX] = { sfx_tune, sfx_pickup, sfx_glass, sfx_start, sfx_pass,
-                                               sfx_fail, sfx_yelp, sfx_cash, sfx_ricochet, sfx_meow };
+                                               sfx_fail, sfx_yelp, sfx_cash, sfx_ricochet, sfx_meow,
+                                               sfx_pump, sfx_bolt, sfx_shell, sfx_launch, sfx_dry, sfx_swap };
 typedef struct { u32 ph, f, f1; int env, lp; u8 wave, decay, glide; } SfxVoice;
 #define NSV 4
 static SfxVoice sv[NSV]; static int sv_next;
@@ -280,7 +291,7 @@ static void mix(s8 *out)
     if (g_snd.door) { door_env = 60 * 256; g_snd.door = 0; }
     if (g_snd.hit) { hit_env = 64 * 256; g_snd.hit = 0; hit_ph = 0; }
     int nit = g_snd.nitro;
-    if (g_snd.shot) { int vol = g_snd.shot_vol ? g_snd.shot_vol : 64; gun_trigger(g_snd.shot > 5 ? 1 : g_snd.shot, vol); g_snd.shot = 0; g_snd.shot_vol = 0; }
+    if (g_snd.shot) { int vol = g_snd.shot_vol ? g_snd.shot_vol : 64; gun_trigger(g_snd.shot > 6 ? 1 : g_snd.shot, vol); g_snd.shot = 0; g_snd.shot_vol = 0; }
     siren_vol += (g_snd.siren - siren_vol) / 4;
     int i;
 

@@ -87,6 +87,12 @@ PED_DOWN = PED_DIRS * PED_DIR_FRAMES
 PED_TUMBLE = PED_DOWN + 8
 PED_BLOCK = PED_TUMBLE + 24
 begin('PED_PLAYER'); ped_block('player', 17, 0.022, 56, 92, 8)
+# the player's two-handed weapon stances, stored after the player's (only) block:
+# PED_PLAYER + PED_STANCE + direction * PED_NSTANCE + (SMG, shotgun, rifle, rocket launcher)
+STANCES = ('smg', 'shotgun', 'rifle', 'rocket')
+for d in range(PED_DIRS):
+    for wpn in STANCES:
+        add(Human('player', 0, mode='aim', weapon=wpn), d * 2 * np.pi / 16, np.radians(17), 0.022, 100, 96, 8)
 print('PED_PLAYER', round(time.time() - t0, 1), flush=True)
 for name, outfit in (('PED_GREY', 'grey'), ('PED_RED', 'red'), ('PED_NAVY', 'navy'), ('PED_SUIT', 'suit'),
                      ('PED_GREEN', 'green'), ('PED_WHITE', 'white'), ('PED_COP', 'cop')):
@@ -227,7 +233,8 @@ H = ['#ifndef ASSETS_H', '#define ASSETS_H',
      'extern const unsigned char car_dims[][2];   /* half length, half width per car set (1/16 m) */',
      '#define CAR_SET_FRAMES %d' % sum(n // 2 + 1 for n in CAR_ANGLES), '#define CAR_NSETS %d' % len(car_dims),
      '#define PED_DIR_FRAMES %d' % PED_DIR_FRAMES, '#define PED_CYCLE %d' % PED_CYCLE, '#define PED_DOWN %d' % PED_DOWN,
-     '#define PED_TUMBLE %d' % PED_TUMBLE, '#define PED_BLOCK %d' % PED_BLOCK]
+     '#define PED_TUMBLE %d' % PED_TUMBLE, '#define PED_BLOCK %d' % PED_BLOCK,
+     '#define PED_STANCE %d' % PED_BLOCK, '#define PED_NSTANCE %d' % len(STANCES)]
 for name, base in sets: H.append('#define %s %d' % (name, base))
 H.append('#define SPR_NFRAMES %d' % len(table))
 H.append('#endif')
