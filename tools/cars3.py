@@ -4,7 +4,7 @@
 # mirrors, handles, wheels) are painted onto the surface in shade(), and the lighting adds
 # SDF ambient occlusion and a clear-coat environment reflection.
 import numpy as np
-from sprites_sdf import nrm, length, f32
+from sprites_sdf import nrm, length, f32, smin
 
 def smooth_table(xs, ys, x0, x1, sig):
     gx = np.linspace(x0, x1, 1200).astype(f32)
@@ -17,80 +17,81 @@ def smooth_table(xs, ys, x0, x1, sig):
 # x: + front. Profiles: list of (x, z) points front to back. Lengths are real-world averages.
 SPECS = {
     # boxy 90s compact sedan
-    'compact': dict(L=4.45, W=1.72, wb=2.58, xf=1.30, wr=0.31, tw=0.20, zr=0.17, sharp=0.025,
-                    top=[(2.23, 0.56), (2.20, 0.74), (2.10, 0.78), (1.05, 0.88), (0.95, 0.89), (0.30, 1.37), (-0.75, 1.39), (-1.30, 1.00), (-2.18, 0.97), (-2.23, 0.80)],
-                    belt=[(0.95, 0.89), (-1.30, 0.99)], bot=[(2.23, 0.30), (2.00, 0.20), (-2.00, 0.20), (-2.23, 0.32)],
-                    gh=0.86, nose=7.0, tail=7.0, lamp='rect', grille='slim', tail_l='wrap', sport=False),
+    'compact': dict(L=4.50, W=1.76, wb=2.65, xf=1.32, wr=0.32, tw=0.21, zr=0.15, sharp=0.07,
+                    top=[(2.25, 0.58), (2.22, 0.72), (2.05, 0.80), (1.30, 0.90), (0.85, 0.95), (0.40, 1.24), (0.05, 1.40), (-0.40, 1.44), (-0.85, 1.38),
+                         (-1.40, 1.09), (-1.75, 1.07), (-2.15, 1.04), (-2.25, 0.86)],
+                    belt=[(0.85, 0.95), (-1.40, 1.08)], bot=[(2.25, 0.32), (2.00, 0.21), (-2.00, 0.21), (-2.25, 0.34)],
+                    gh=0.88, nose=4.0, tail=5.0, lamp='swept', grille='slim', tail_l='wrap', sport=False),
     # long full-size sedan (cop / taxi archetype)
-    'fullsize': dict(L=5.30, W=1.95, wb=2.95, xf=1.52, wr=0.33, tw=0.22, zr=0.19, sharp=0.025,
+    'fullsize': dict(L=5.30, W=1.95, wb=2.95, xf=1.52, wr=0.33, tw=0.22, zr=0.19, sharp=0.06,
                      top=[(2.65, 0.60), (2.63, 0.80), (2.50, 0.84), (1.25, 0.92), (1.12, 0.93), (0.45, 1.40), (-0.85, 1.42), (-1.45, 1.03), (-2.60, 1.00), (-2.65, 0.82)],
                      belt=[(1.12, 0.93), (-1.45, 1.03)], bot=[(2.65, 0.32), (2.35, 0.22), (-2.30, 0.22), (-2.65, 0.34)],
-                     gh=0.88, nose=9.0, tail=9.0, lamp='rect', grille='wide', tail_l='bar', sport=False),
+                     gh=0.88, nose=5.5, tail=6.0, lamp='rect', grille='wide', tail_l='bar', sport=False),
     # boxy 5-door hatch
-    'hatch5': dict(L=4.10, W=1.70, wb=2.50, xf=1.18, wr=0.30, tw=0.19, zr=0.17, sharp=0.025,
+    'hatch5': dict(L=4.10, W=1.70, wb=2.50, xf=1.18, wr=0.30, tw=0.19, zr=0.17, sharp=0.07,
                    top=[(2.05, 0.58), (2.02, 0.74), (1.90, 0.78), (1.05, 0.88), (0.92, 0.90), (0.25, 1.42), (-1.55, 1.43), (-1.95, 1.35), (-2.05, 0.82)],
                    belt=[(0.92, 0.90), (-1.95, 0.98)], bot=[(2.05, 0.30), (1.80, 0.19), (-1.80, 0.19), (-2.05, 0.34)],
-                   gh=0.86, nose=6.0, tail=10.0, lamp='rect', grille='slim', tail_l='hatch', sport=False),
+                   gh=0.88, nose=4.0, tail=7.0, lamp='rect', grille='slim', tail_l='hatch', sport=False),
     # 80s wedge sports coupe
-    'gt': dict(L=4.40, W=1.78, wb=2.45, xf=1.15, wr=0.32, tw=0.23, zr=0.13, sharp=0.025,
+    'gt': dict(L=4.40, W=1.78, wb=2.45, xf=1.15, wr=0.32, tw=0.23, zr=0.13, sharp=0.08,
                top=[(2.20, 0.50), (2.16, 0.62), (1.30, 0.80), (0.70, 0.86), (0.05, 1.24), (-0.55, 1.25), (-1.55, 0.98), (-2.15, 0.96), (-2.20, 0.82)],
                belt=[(0.70, 0.86), (-1.55, 0.99)], bot=[(2.20, 0.26), (1.90, 0.15), (-1.90, 0.15), (-2.20, 0.32)],
-               gh=0.80, nose=4.5, tail=6.0, lamp='slit', grille='intake', tail_l='bar', sport=True),
+               gh=0.82, nose=3.2, tail=4.5, lamp='slit', grille='intake', tail_l='bar', sport=True),
     # mid-engine wedge exotic
-    'super': dict(L=4.40, W=1.95, wb=2.60, xf=1.20, wr=0.34, tw=0.28, zr=0.11, sharp=0.025,
+    'super': dict(L=4.40, W=1.95, wb=2.60, xf=1.20, wr=0.31, tw=0.28, zr=0.11, sharp=0.05,
                   top=[(2.20, 0.42), (2.10, 0.52), (1.25, 0.70), (0.85, 0.74), (0.20, 1.10), (-0.45, 1.12), (-0.70, 1.04), (-2.10, 0.98), (-2.20, 0.86)],
                   belt=[(0.85, 0.75), (-0.70, 1.00)], bot=[(2.20, 0.22), (1.90, 0.12), (-1.90, 0.12), (-2.20, 0.30)],
-                  gh=0.70, nose=3.5, tail=5.0, lamp='slit', grille='intake', tail_l='bar', sport=True),
+                  gh=0.72, nose=3.0, tail=4.0, lamp='slit', grille='intake', tail_l='bar', sport=True),
     # classic muscle: long hood, short deck, fastback
-    'muscle': dict(L=4.85, W=1.88, wb=2.75, xf=1.40, wr=0.33, tw=0.24, zr=0.16, sharp=0.025,
+    'muscle': dict(L=4.85, W=1.88, wb=2.75, xf=1.40, wr=0.33, tw=0.24, zr=0.16, sharp=0.045,
                    top=[(2.43, 0.66), (2.40, 0.86), (2.25, 0.90), (0.70, 0.95), (0.60, 0.96), (0.00, 1.30), (-0.60, 1.30), (-1.75, 1.00), (-2.38, 0.99), (-2.43, 0.82)],
                    belt=[(0.60, 0.96), (-1.75, 1.01)], bot=[(2.43, 0.32), (2.10, 0.19), (-2.05, 0.19), (-2.43, 0.36)],
-                   gh=0.82, nose=8.0, tail=8.0, lamp='quad', grille='wide', tail_l='bar3', sport=True, scoop=True),
+                   gh=0.84, nose=6.0, tail=6.0, lamp='quad', grille='wide', tail_l='bar3', sport=True, scoop=True),
     # boxy 90s SUV
-    'suv': dict(L=4.75, W=1.88, wb=2.80, xf=1.30, wr=0.37, tw=0.24, zr=0.30, sharp=0.025,
+    'suv': dict(L=4.75, W=1.88, wb=2.80, xf=1.30, wr=0.37, tw=0.24, zr=0.30, sharp=0.06,
                 top=[(2.38, 0.84), (2.35, 1.04), (2.20, 1.10), (1.15, 1.16), (1.02, 1.18), (0.40, 1.80), (-2.20, 1.82), (-2.36, 1.76), (-2.38, 1.12)],
                 belt=[(1.02, 1.18), (-2.30, 1.24)], bot=[(2.38, 0.50), (2.10, 0.34), (-2.10, 0.34), (-2.38, 0.52)],
-                gh=0.90, nose=8.0, tail=12.0, lamp='rect', grille='tall', tail_l='vertical', sport=False),
+                gh=0.92, nose=5.0, tail=8.0, lamp='rect', grille='tall', tail_l='vertical', sport=False),
     # square-body pickup: regular cab + long bed
-    'pickup': dict(L=5.50, W=2.00, wb=3.30, xf=1.65, wr=0.38, tw=0.24, zr=0.36, sharp=0.02,
+    'pickup': dict(L=5.50, W=2.00, wb=3.30, xf=1.65, wr=0.38, tw=0.24, zr=0.36, sharp=0.045,
                    top=[(2.75, 1.00), (2.73, 1.22), (2.60, 1.26), (1.35, 1.32), (1.25, 1.34), (0.75, 1.92), (0.05, 1.93), (-0.30, 1.91), (-0.40, 1.34), (-2.73, 1.34), (-2.75, 1.31)],
                    belt=[(1.25, 1.34), (-0.40, 1.36)], bot=[(2.75, 0.56), (2.40, 0.42), (-2.40, 0.42), (-2.75, 0.56)],
-                   gh=0.90, nose=12.0, tail=24.0, lamp='rect', grille='truck', tail_l='vertical', sport=False, bed=True, crown=0.015, tail_xn=0.985),
+                   gh=0.92, nose=8.0, tail=12.0, lamp='rect', grille='truck', tail_l='vertical', sport=False, bed=True, crown=0.015, tail_xn=0.985),
     # box van
-    'van': dict(L=5.20, W=2.00, wb=3.25, xf=1.05, wr=0.35, tw=0.22, zr=0.24, sharp=0.02,
+    'van': dict(L=5.20, W=2.00, wb=3.25, xf=1.05, wr=0.35, tw=0.22, zr=0.24, sharp=0.05,
                 top=[(2.60, 0.80), (2.58, 1.02), (2.40, 1.12), (1.90, 1.24), (1.30, 1.84), (1.05, 2.06), (-2.55, 2.08), (-2.60, 2.00)],
                 belt=[(1.90, 1.24), (0.80, 1.30)], bot=[(2.60, 0.44), (2.30, 0.30), (-2.30, 0.30), (-2.60, 0.44)],
-                gh=0.95, nose=8.0, tail=16.0, lamp='rect', grille='slim', tail_l='vertical', sport=False, van=True),
+                gh=0.96, nose=5.0, tail=12.0, lamp='rect', grille='slim', tail_l='vertical', sport=False, van=True),
     # long-roof station wagon
-    'wagon': dict(L=4.95, W=1.82, wb=2.85, xf=1.40, wr=0.32, tw=0.21, zr=0.17, sharp=0.025,
+    'wagon': dict(L=4.95, W=1.82, wb=2.85, xf=1.40, wr=0.32, tw=0.21, zr=0.17, sharp=0.07,
                   top=[(2.48, 0.58), (2.45, 0.76), (2.33, 0.80), (1.15, 0.90), (1.02, 0.91), (0.40, 1.42), (-2.15, 1.44), (-2.40, 1.36), (-2.48, 0.84)],
                   belt=[(1.02, 0.91), (-2.40, 0.98)], bot=[(2.48, 0.30), (2.20, 0.20), (-2.20, 0.20), (-2.48, 0.34)],
-                  gh=0.86, nose=8.0, tail=12.0, lamp='rect', grille='slim', tail_l='vertical', sport=False, rails=True),
+                  gh=0.88, nose=4.0, tail=8.0, lamp='rect', grille='slim', tail_l='vertical', sport=False, rails=True),
     # 2-door tuner coupe with a big rear wing
-    'tuner': dict(L=4.25, W=1.74, wb=2.50, xf=1.20, wr=0.32, tw=0.23, zr=0.10, sharp=0.025,
+    'tuner': dict(L=4.25, W=1.74, wb=2.50, xf=1.20, wr=0.32, tw=0.23, zr=0.10, sharp=0.06,
                   top=[(2.12, 0.50), (2.08, 0.66), (1.95, 0.70), (0.95, 0.80), (0.85, 0.81), (0.15, 1.26), (-0.65, 1.27), (-1.20, 0.96), (-2.08, 0.92), (-2.12, 0.76)],
                   belt=[(0.85, 0.81), (-1.20, 0.95)], bot=[(2.12, 0.20), (1.95, 0.11), (-1.95, 0.11), (-2.12, 0.24)],
-                  gh=0.84, nose=5.0, tail=6.0, lamp='swept', grille='intake', tail_l='round', sport=True, wing=True),
+                  gh=0.86, nose=4.0, tail=5.0, lamp='swept', grille='intake', tail_l='round', sport=True, wing=True),
     # long luxury sedan with a formal roofline and upright grille
-    'luxury': dict(L=5.40, W=1.95, wb=3.20, xf=1.50, wr=0.35, tw=0.24, zr=0.18, sharp=0.025,
+    'luxury': dict(L=5.40, W=1.95, wb=3.20, xf=1.50, wr=0.35, tw=0.24, zr=0.18, sharp=0.065,
                    top=[(2.70, 0.64), (2.68, 0.86), (2.55, 0.90), (1.30, 0.96), (1.18, 0.97), (0.50, 1.45), (-1.05, 1.47), (-1.40, 1.40), (-1.65, 1.05), (-2.65, 1.03), (-2.70, 0.86)],
                    belt=[(1.18, 0.97), (-1.65, 1.06)], bot=[(2.70, 0.32), (2.40, 0.21), (-2.40, 0.21), (-2.70, 0.34)],
-                   gh=0.86, nose=10.0, tail=10.0, lamp='rect', grille='tall', tail_l='bar', sport=False),
+                   gh=0.88, nose=5.0, tail=6.0, lamp='rect', grille='tall', tail_l='bar', sport=False),
     # one-box minivan
-    'minivan': dict(L=5.05, W=1.95, wb=3.00, xf=1.25, wr=0.34, tw=0.22, zr=0.18, sharp=0.025,
+    'minivan': dict(L=5.05, W=1.95, wb=3.00, xf=1.25, wr=0.34, tw=0.22, zr=0.18, sharp=0.07,
                     top=[(2.52, 0.66), (2.48, 0.86), (2.25, 0.94), (1.60, 1.04), (0.70, 1.70), (-2.30, 1.74), (-2.48, 1.62), (-2.52, 0.90)],
                     belt=[(1.60, 1.04), (-2.45, 1.10)], bot=[(2.52, 0.34), (2.20, 0.21), (-2.20, 0.21), (-2.52, 0.36)],
-                    gh=0.88, nose=5.0, tail=12.0, lamp='swept', grille='slim', tail_l='vertical', sport=False, rails=True),
+                    gh=0.9, nose=3.5, tail=9.0, lamp='swept', grille='slim', tail_l='vertical', sport=False, rails=True),
     # small box truck: cab + tall cargo box
     'boxtruck': dict(L=6.40, W=2.10, wb=3.70, xf=1.95, wr=0.40, tw=0.26, zr=0.40, sharp=0.02,
                      top=[(3.20, 1.05), (3.18, 1.30), (3.00, 1.36), (2.55, 1.42), (2.15, 2.18), (1.80, 2.20), (1.72, 1.46), (-3.18, 1.46), (-3.20, 1.40)],
                      belt=[(2.55, 1.42), (1.72, 1.46)], box_x=(-3.20, 1.70), box_z=(0.72, 2.97), bot=[(3.20, 0.60), (2.80, 0.46), (-2.90, 0.50), (-3.20, 0.60)],
                      gh=0.92, nose=10.0, tail=20.0, lamp='rect', grille='truck', tail_l='vertical', sport=False, box=True),
     # 70s two-door land yacht: enormous hood, vinyl roof
-    'yacht': dict(L=5.70, W=2.00, wb=3.10, xf=1.75, wr=0.34, tw=0.23, zr=0.18, sharp=0.025,
+    'yacht': dict(L=5.70, W=2.00, wb=3.10, xf=1.75, wr=0.34, tw=0.23, zr=0.18, sharp=0.04,
                   top=[(2.85, 0.66), (2.83, 0.86), (2.70, 0.90), (0.95, 0.98), (0.85, 0.99), (0.20, 1.36), (-0.75, 1.37), (-1.20, 1.04), (-2.80, 1.02), (-2.85, 0.84)],
                   belt=[(0.85, 0.99), (-1.20, 1.05)], bot=[(2.85, 0.34), (2.50, 0.22), (-2.50, 0.22), (-2.85, 0.36)],
-                  gh=0.84, nose=12.0, tail=12.0, lamp='quad', grille='wide', tail_l='bar', sport=False, vinyl=True),
+                  gh=0.86, nose=9.0, tail=9.0, lamp='quad', grille='wide', tail_l='bar', sport=False, vinyl=True),
 }
 
 class Car3:
@@ -110,6 +111,7 @@ class Car3:
         x0, x1 = -L / 2, L / 2
         tx, tz = zip(*sorted(S['top']))
         bx, bz = zip(*sorted(S['bot']))
+        if kind not in ('pickup', 'boxtruck', 'van', 'suv'): bz = tuple(v - 0.025 for v in bz)   # sit lower
         sh = S.get('sharp', 0.05)
         self.gx, self.gT = smooth_table(tx, tz, x0, x1, sh)
         _, self.gB = smooth_table(bx, bz, x0, x1, sh * 1.5)
@@ -121,7 +123,7 @@ class Car3:
         _, self.gTb = smooth_table(self.gx, tb, x0, x1, sh)
         self.cowl, self.blx = cx, rx
         self.wx = (S['xf'], S['xf'] - S['wb'])
-        self.wr, self.tw = S['wr'], S['tw']
+        self.wr, self.tw = S['wr'] * 1.10, S['tw'] * 1.12   # v0.23: bigger wheels, filling the arches
         self.hw = S['W'] / 2
         # Lipschitz factors: the profiles are height fields, and where one drops steeply (an upright
         # tailgate, rear window or nose) "z - T(x)" overstates the true distance by sqrt(1 + T'^2).
@@ -158,9 +160,18 @@ class Car3:
         Wp = self.plan(x)
         # wheel-arch flares: a touch wider around each axle
         for wx in self.wx:
-            Wp = Wp + 0.018 * np.exp(-((x - wx) / 0.45) ** 2)
+            Wp = Wp + 0.030 * np.exp(-((x - wx) / 0.42) ** 2)      # pronounced wheel-arch flares
         # crowned panels: hood, deck and roof curve down toward the sides instead of being flat slabs
-        Tb = Tb0 - S.get('crown', 0.035) * np.clip(ay / np.maximum(Wp, 0.05), 0, 1) ** 2
+        # crowned hood and deck, flattening out at the very nose and tail so the front edge (and the
+        # headlights under it) stays dead level instead of sagging toward the corners
+        ends = np.clip((S['L'] / 2 - np.abs(x)) / 0.45, 0, 1)
+        Tb = Tb0 - S.get('crown', 0.035) * ends * np.clip(ay / np.maximum(Wp, 0.05), 0, 1) ** 2
+        # fenders rise over the wheels where the body is low (sports cars): no hole above the tyre
+        for wx in self.wx:
+            need = (self.wr * 2 + 0.06) - np.interp(wx, self.gx, self.gTb)
+            if need > -0.02:
+                edge = np.clip((ay / np.maximum(Wp, 0.05) - 0.45) / 0.35, 0, 1)
+                Tb = Tb + (need + 0.04) * np.exp(-((x - wx) / 0.42) ** 2) * edge * edge * (3 - 2 * edge)
         T = T0 - S.get('roof_crown', 0.06) * np.clip(ay / np.maximum(Wp * S['gh'], 0.05), 0, 1) ** 2
         # body cross-section: tuck at the rocker, widest at the shoulder, rolled top edge
         zn = np.clip((z - B) / np.maximum(Tb - B, 0.05), 0, 1)
@@ -204,28 +215,30 @@ class Car3:
         if S.get('rails'):                                 # roof rails
             rx0, rx1 = self.cowl - 0.75, self.blx + 0.25
             rzt = np.interp(np.clip(x, rx1, rx0), self.gx, self.gT)
-            qr = np.stack([np.maximum(x - rx0, rx1 - x), np.abs(ay - self.hw * (S['gh'] - 0.17)) - 0.02, np.abs(z - (rzt + 0.04)) - 0.02], -1)
+            ry = self.hw * (S['gh'] - 0.17)
+            rzt = rzt - S.get('roof_crown', 0.06) * min(1.0, (S['gh'] - 0.17) / S['gh']) ** 2      # sit on the curved roof
+            qr = np.stack([np.maximum(x - rx0, rx1 - x), np.abs(ay - ry) - 0.016, np.abs(z - (rzt + 0.025)) - 0.016], -1)
             shell = np.minimum(shell, length(np.maximum(qr, 0)) + np.minimum(qr.max(-1), 0))
         if S.get('scoop'):
             hz = np.interp(1.4, self.gx, self.gTb)
-            qs = np.stack([np.abs(x - 1.35) - 0.30, ay - 0.22, np.abs(z - hz) - 0.06], -1)
-            shell = np.minimum(shell, length(np.maximum(qs, 0)) + np.minimum(qs.max(-1), 0) - 0.01)
+            qs = np.stack([np.abs(x - 1.25) - 0.26, ay - 0.16, np.abs(z - hz) - 0.022], -1)       # low power bulge, not a brick
+            shell = smin(shell, length(np.maximum(qs, 0)) + np.minimum(qs.max(-1), 0) - 0.02, 0.06)
         # wheel arches cut out of the outer body
         tires = 9.0
         for wx in self.wx:
             rad = np.sqrt((x - wx) ** 2 + (z - self.wr) ** 2)
-            arch = np.maximum(rad - (self.wr + 0.045), (self.hw - 0.34) - ay)
+            arch = np.maximum(rad - (self.wr + 0.028), (self.hw - 0.34) - ay)
             shell = np.maximum(shell, -arch)
-            yc = self.hw - self.tw / 2 - 0.015
+            yc = self.hw - self.tw / 2 - 0.004                  # flush with the body side
             qt = np.stack([rad - self.wr + 0.04, np.abs(ay - yc) - self.tw / 2 + 0.04], -1)
             t = length(np.maximum(qt, 0)) + np.minimum(qt.max(-1), 0) - 0.04
             tires = np.minimum(tires, t)
         # side mirrors
         # side mirrors: housing on a short arm from the door's front window corner (not floating)
         mx, mz, may = self.mirror_pos()
-        qm = np.stack([np.abs(x - mx) - 0.04, np.abs(ay - may) - 0.065, np.abs(z - mz) - 0.04], -1)
+        qm = np.stack([np.abs(x - mx) - 0.028, np.abs(ay - may) - 0.050, np.abs(z - mz) - 0.030], -1)   # slimmer mirror housing
         mirror = length(np.maximum(qm, 0)) + np.minimum(qm.max(-1), 0) - 0.015
-        a0 = self.hw * S['gh'] - 0.06
+        a0 = max(self.hw * S['gh'] - 0.06, self.hw - 0.16)
         qa = np.stack([np.abs(x - mx - 0.02) - 0.05, np.abs(ay - (a0 + may) / 2) - (may - a0) / 2, np.abs(z - (mz - 0.035)) - 0.02], -1)
         mirror = np.minimum(mirror, length(np.maximum(qa, 0)) + np.minimum(qa.max(-1), 0) - 0.005)
         shell = np.minimum(shell, mirror)
@@ -311,30 +324,103 @@ class Car3:
         fz = z - B                                           # height above the bumper bottom
         hood_z = np.interp(L2 - 0.1, self.gx, self.gTb) - np.interp(L2 - 0.1, self.gx, self.gB)
         rz = np.interp(-L2 + 0.1, self.gx, self.gTb) - np.interp(-L2 + 0.1, self.gx, self.gB)
-        lamp_y0, lamp_y1 = self.hw * 0.50, self.hw * 0.93
-        hz0, hz1 = hood_z - 0.20, hood_z - 0.04
-        lk = S['lamp']
-        if lk == 'oval':
-            hl = front & (((ay - self.hw * 0.72) / (self.hw * 0.24)) ** 2 + ((fz - (hood_z - 0.11)) / 0.08) ** 2 < 1)
-        elif lk == 'slit':
-            hl = front & (ay > self.hw * 0.45) & (ay < self.hw * 0.92) & (np.abs(fz - (hood_z - 0.05) + (ay - self.hw * 0.45) * 0.15) < 0.035)
-        elif lk == 'quad':
-            hl = front & (((((ay - self.hw * 0.58) ** 2 + (fz - (hood_z - 0.13)) ** 2) < 0.075 ** 2)) |
-                          (((ay - self.hw * 0.80) ** 2 + (fz - (hood_z - 0.13)) ** 2) < 0.075 ** 2))
-        elif lk == 'swept':
-            hl = front & (ay > lamp_y0) & (ay < lamp_y1) & (fz > hz0 + (ay - lamp_y0) * 0.18) & (fz < hz1)
-        else:
-            hl = front & (ay > lamp_y0) & (ay < lamp_y1) & (fz > hz0) & (fz < hz1)
-        # lamp internals: bright projector / bulbs on a chrome reflector, a light strip on top
-        bulb = hl & ((((ay - (lamp_y0 + lamp_y1) / 2 - 0.04) ** 2 + (fz - (hz0 + hz1) / 2) ** 2) < 0.045 ** 2) |
-                     (((ay - lamp_y0 - 0.08) ** 2 + (fz - (hz0 + hz1) / 2) ** 2) < 0.035 ** 2))
-        if lk in ('oval', 'quad'): bulb = hl & (np.abs(fz - (hood_z - 0.12)) < 0.035)
-        drl = hl & (fz > hz1 - 0.025)
-        alb[hl] = (0.62, 0.64, 0.66); mat[hl] = 7
-        alb[bulb] = (1.0, 1.0, 0.96); mat[bulb] = 4
-        alb[drl & ~bulb] = (0.95, 0.97, 1.0); mat[drl & ~bulb] = 4
-        ind = front & (ay > lamp_y1 - 0.02) & (ay < self.hw + 0.02) & (fz > hz0) & (fz < hz0 + 0.06) & ~hl
-        alb[ind] = (1.0, 0.55, 0.08); mat[ind] = 8
+        # ---- headlights: a distinct, period-correct design per vehicle. Top edges stay level (set
+        # below the lowest point of the crowned hood so nothing droops), lower edges level or rising
+        # toward the outside, no light bars.
+        lk = {'compact': 'teardrop', 'luxury': 'teardrop', 'minivan': 'teardrop', 'fullsize': 'composite',
+              'pickup': 'composite', 'wagon': 'composite', 'van': 'composite', 'hatch5': 'twinround',
+              'gt': 'popup', 'super': 'popup', 'muscle': 'quad', 'suv': 'stacked', 'boxtruck': 'stacked',
+              'tuner': 'slim', 'yacht': 'quadrect'}.get(self.kind, 'composite')
+        crown = S.get('crown', 0.035)
+        top_z = hood_z - 0.085                             # inner top edge; the outer end rises 7 cm toward the hood line
+        LH = {'composite': 0.15, 'teardrop': 0.17, 'twinround': 0.16, 'quad': 0.15, 'quadrect': 0.12,
+              'stacked': 0.24, 'slim': 0.09, 'popup': 0.06}[lk]
+        lamp_y0, lamp_y1 = self.hw * (0.38 if lk != 'stacked' else 0.46), self.hw * (0.84 if lk != 'stacked' else 0.82)   # flat part of the nose only
+        hz0, hz1 = top_z - LH, top_z
+        if lk == 'popup': hz0, hz1 = 0.10, 0.10 + LH        # pop-ups stay closed: only slim bumper lamps show
+        lw, lh = lamp_y1 - lamp_y0, hz1 - hz0
+        u = (ay - lamp_y0) / lw                             # 0 inner .. 1 outer
+        v = (fz - hz0 - 0.07 * np.clip(u, 0, 1)) / lh        # the whole lamp sweeps 7 cm up toward the outside, so from the
+                                                             # game's raised 3/4 camera it never reads as drooping (measured)
+        def rrect(m=0.0, p=6):
+            return (np.abs((u - 0.5) / (0.5 + m)) ** p + np.abs((v - 0.5) / (0.5 + m * lw / lh)) ** p) < 1
+        def disc(cu, cv, r):
+            return np.sqrt(((u - cu) * lw) ** 2 + ((v - cv) * lh) ** 2) < r
+        CHROME, LENS, BULB, AMBER, DARK = (0.80, 0.81, 0.84), (0.20, 0.22, 0.26), (1.0, 1.0, 0.96), (1.0, 0.56, 0.10), (0.035, 0.035, 0.04)
+        hl = np.zeros_like(front); bezel = np.zeros_like(front); wrap = np.zeros_like(front)
+        def paint(m, col, mt):
+            alb[m] = col; mat[m] = mt
+        if lk == 'composite':                              # flat-topped rectangle, ribbed reflector, amber corner
+            hl = front & rrect(); bezel = front & rrect(0.03) & ~hl
+            paint(hl, LENS, 1)
+            refl = hl & (u < 0.80)
+            paint(refl, CHROME, 7)
+            ribs = refl & ((((fz * 55).astype(np.int32)) & 1) == 0)
+            alb[ribs] = (0.62, 0.63, 0.66)
+            paint(hl & disc(0.38, 0.5, 0.032), BULB, 4)
+            paint(hl & (u >= 0.82), AMBER, 8)
+            wrap = car & (np.abs(ny) > 0.45) & (x > L2 - 0.16) & (fz > hz0 + 0.02) & (fz < hz1 - 0.01) & ~front
+            paint(wrap, AMBER, 8)
+        elif lk == 'teardrop':                             # rises toward the outside, twin projectors
+            bot = 0.02 + 0.42 * np.clip(u, 0, 1)
+            inner_round = np.sqrt(np.clip(1 - (np.clip(0.15 - u, 0, 1) / 0.15) ** 2, 0, 1))
+            hl = front & (u > 0) & (u < 1.0) & (v > bot + (1 - inner_round) * 0.45) & (v < 1)
+            bezel = front & (u > -0.04) & (u < 1.03) & (v > bot - 0.10) & (v < 1.10) & ~hl
+            paint(hl, LENS, 1)
+            for cu in (0.22, 0.47):
+                cv = 0.5 + 0.21 * cu
+                paint(hl & disc(cu, cv, 0.055), CHROME, 7); paint(hl & disc(cu, cv, 0.030), BULB, 4)
+            paint(hl & (u > 0.80), AMBER, 8)
+            wrap = car & (np.abs(ny) > 0.45) & (x > L2 - 0.18) & (fz > hz0 + 0.07) & (fz < hz1 - 0.01) & ~front
+            paint(wrap, (0.92, 0.92, 0.88), 4)
+        elif lk == 'twinround':                            # two round reflectors behind one lens
+            hl = front & rrect(0, 4); bezel = front & rrect(0.03, 4) & ~hl
+            paint(hl, LENS, 1)
+            for cu in (0.30, 0.70):
+                paint(hl & disc(cu, 0.5, 0.42 * lh), CHROME, 7); paint(hl & disc(cu, 0.5, 0.15 * lh), BULB, 4)
+            ind = front & (u > 0.75) & (u < 1.02) & (v > -0.55) & (v < -0.15)
+            paint(ind, AMBER, 8)
+        elif lk == 'quad':                                 # classic quad round lamps set in the grille
+            for cu in (0.27, 0.73):
+                d1 = front & disc(cu, 0.5, 0.40 * lh)
+                hl |= d1; bezel |= front & disc(cu, 0.5, 0.52 * lh) & ~d1
+            paint(bezel, CHROME, 7); paint(hl, LENS, 1)
+            for cu in (0.27, 0.73):
+                paint(front & disc(cu, 0.5, 0.30 * lh), (0.86, 0.87, 0.88), 7); paint(front & disc(cu, 0.5, 0.12 * lh), BULB, 4)
+            bezel = np.zeros_like(front)
+        elif lk == 'quadrect':                             # 70s: side-by-side rectangular pairs
+            for c0, c1 in ((0.0, 0.47), (0.53, 1.0)):
+                m_ = front & (u > c0) & (u < c1) & (v > 0) & (v < 1)
+                hl |= m_
+                paint(m_, CHROME, 7)
+                paint(m_ & disc((c0 + c1) / 2, 0.5, 0.25 * lh), BULB, 4)
+            bezel = front & (u > -0.04) & (u < 1.04) & (v > -0.18) & (v < 1.18) & ~hl
+        elif lk == 'stacked':                              # tall unit: headlamp above, amber below
+            hl = front & rrect(0, 8); bezel = front & rrect(0.03, 8) & ~hl
+            paint(hl, LENS, 1)
+            up = hl & (v > 0.36)
+            paint(up, CHROME, 7)
+            alb[up & ((((fz * 55).astype(np.int32)) & 1) == 0)] = (0.62, 0.63, 0.66)
+            paint(hl & disc(0.45, 0.68, 0.04), BULB, 4)
+            paint(hl & (v <= 0.30), AMBER, 8)
+        elif lk == 'slim':                                 # tuner: slim, angular, twin projectors
+            bot = 0.0 + 0.55 * np.clip(u, 0, 1)
+            hl = front & (u > 0) & (u < 1) & (v > bot * 0.6) & (v < 1)
+            bezel = front & (u > -0.04) & (u < 1.03) & (v > bot * 0.6 - 0.2) & (v < 1.2) & ~hl
+            paint(hl, LENS, 1)
+            for cu in (0.20, 0.45):
+                paint(hl & disc(cu, 0.55, 0.036), CHROME, 7); paint(hl & disc(cu, 0.55, 0.020), BULB, 4)
+            paint(hl & (u > 0.82), AMBER, 8)
+        elif lk == 'popup':                                # closed pop-ups: panel seams on the nose, bumper lamps
+            seam_x0, seam_x1 = L2 - 0.48, L2 - 0.12
+            top_face = car & (nz > 0.55) & (x > seam_x0 - 0.01) & (x < seam_x1 + 0.01) & (ay > self.hw * 0.42) & (ay < self.hw * 0.86)
+            inside = (x > seam_x0 + 0.012) & (x < seam_x1 - 0.012) & (ay > self.hw * 0.42 + 0.012) & (ay < self.hw * 0.86 - 0.012)
+            paint(top_face & ~inside, DARK, 5)
+            hl = front & rrect(0, 8); bezel = front & rrect(0.04, 8) & ~hl
+            paint(hl, (0.85, 0.86, 0.88), 4)
+            paint(hl & (u > 0.55), AMBER, 8)
+        alb[bezel] = DARK; mat[bezel] = 5
+        hl = hl | bezel | wrap
         # grille and lower intake
         gk = S['grille']
         if gk == 'truck':
@@ -348,6 +434,16 @@ class Car3:
         else:
             gr = front & (ay < lamp_y0 - 0.04) & (fz > hood_z - 0.15) & (fz < hood_z - 0.07)
         slats = ((fz * 40).astype(np.int32) & 1) == 0
+        if gk != 'intake':                                  # bright surround frames the grille: the car's "face"
+            ring = np.zeros_like(gr)
+            for dy_, dz_ in ((0.022, 0), (0, 0.022), (0, -0.022)):
+                if gk == 'truck':  g2 = (ay < lamp_y0 - 0.03 + dy_) & (fz > hood_z - 0.42 - abs(dz_)) & (fz < hood_z - 0.04 + abs(dz_))
+                elif gk == 'tall': g2 = (ay < lamp_y0 - 0.02 + dy_) & (fz > hood_z - 0.30 - abs(dz_)) & (fz < hood_z - 0.05 + abs(dz_))
+                elif gk == 'wide': g2 = (ay < lamp_y1 - 0.02 + dy_) & (fz > hood_z - 0.22 - abs(dz_)) & (fz < hood_z - 0.06 + abs(dz_))
+                else:              g2 = (ay < lamp_y0 - 0.04 + dy_) & (fz > hood_z - 0.15 - abs(dz_)) & (fz < hood_z - 0.07 + abs(dz_))
+                ring |= front & g2
+            ring &= ~gr & ~hl
+            alb[ring] = (0.70, 0.71, 0.73); mat[ring] = 7
         alb[gr] = (0.035, 0.035, 0.04); mat[gr] = 5
         alb[gr & slats] = (0.20, 0.20, 0.22) if gk == 'truck' else (0.09, 0.09, 0.10)
         if gk == 'truck': mat[gr & slats] = 7
@@ -446,7 +542,7 @@ class Car3:
         dx = x - wxs[k]; dz = z - self.wr
         rad = np.sqrt(dx ** 2 + dz ** 2)
         outer = wheel & (np.abs(ny) > 0.6)
-        rim_r = self.wr * (0.70 if self.sport else 0.64)
+        rim_r = self.wr * (0.74 if self.sport else 0.68)
         rim = outer & (rad < rim_r)
         ang = np.arctan2(dz, dx)
         nsp = 10 if self.sport else 5

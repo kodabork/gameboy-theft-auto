@@ -58,6 +58,8 @@ typedef struct {
     u8 active, down, pool, type, state, run, aim;
     s16 timer, hp, cd;
     int fx, fy;      /* threat / goal point (units) */
+    int rvx, rvy, rvz, rh;   /* ragdoll: velocity (q8 units/s) and height above the ground (q8 units) */
+    u16 rang; s16 rspin; u8 rag, rbounce;   /* tumble pitch (4096/turn), spin (per s), flying?, bounces */
 } Ped;
 
 typedef struct { int x, y, h, vx, vy, vh; s16 life; } Drop;
@@ -748,20 +750,24 @@ static void place_ped_near(Ped *p, int min_d)
         p->head = Q8(iatan2(y1 - y0, x1 - x0));
         if (dist_approx((p->x >> 8) - plx(), (p->y >> 8) - ply()) > min_d) break;
     }
-    p->down = 0; p->pool = 0; p->state = S_WALK; p->hp = 100; p->run = 0; p->aim = 0; p->active = 1;
+    p->down = 0; p->pool = 0; p->state = S_WALK; p->hp = 100; p->run = 0; p->aim = 0; p->active = 1; p->rag = 0;
 }
 
 static void kill_ped(Ped *p, int vx, int vy, int by_player, int fling_m)
 {
     spray_blood(p->x >> 8, p->y >> 8, vx, vy);
     g_snd.sfx |= SFX_YELP;
-    if (fling_m > 0) {
+    {   /* ragdoll: launched with the car's speed (or knocked back by a shot), tumbling */
         int sp = dist_approx(vx, vy); if (sp < 1) sp = 1;
-        int scale = Q8(M(fling_m)) * 256 / sp;
-        if (scale > 1024) scale = 1024;
-        p->x += (vx * scale) >> 8; p->y += (vy * scale) >> 8;
-        int px = p->x >> 8, py = p->y >> 8;
-        world_collide(&px, &py, M(0.5)); p->x = Q8(px); p->y = Q8(py);
+        int hs, up, spin;
+        if (fling_m > 0) {
+            hs = sp * 9 / 10; if (hs > Q8(M(17))) hs = Q8(M(17));
+            up = Q8(M(1.6)) + sp / 5; if (up > Q8(M(7.0))) up = Q8(M(7.0));
+            spin = sp / 9; if (spin < 2600) spin = 2600; if (spin > 11000) spin = 11000;
+        } else { hs = Q8(M(1.4)); up = Q8(M(1.1)); spin = 1500; }                    /* shot: stagger and fall */
+        int a = iatan2(vy, vx);
+        p->rvx = (icos(a) >> 6) * (hs >> 8); p->rvy = (isin(a) >> 6) * (hs >> 8);   /* (q14 >> 6) * units = q8 */
+        p->rvz = up; p->rh = Q8(M(0.05)); p->rang = 0; p->rspin = (s16)spin; p->rag = 1; p->rbounce = 0;
     }
     p->head = Q8(iatan2(vy, vx));
     p->down = 1; p->pool = 0; p->timer = 30 * 256; p->run = 0; p->aim = 0;
@@ -770,6 +776,56 @@ static void kill_ped(Ped *p, int vx, int vy, int by_player, int fling_m)
         if (p->type == P_COP) crime(wanted + 2 > 2 ? wanted + 2 : 2);
         else if (p->type == P_CIV) crime(1);
     }
+}
+
+/* ragdoll step: gravity, bounces off the road with damping, rebounds off walls, slides to rest
+   and settles flat, then hands over to the lying-down pose */
+static void update_ragdoll(Ped *p, int dt)
+{
+    const int G = Q8(M(9.8));
+    int ox = p->x >> 8, oy = p->y >> 8;
+    p->x += (p->rvx >> 6) * dt / (TICKS >> 6);
+    p->y += (p->rvy >> 6) * dt / (TICKS >> 6);
+    {   /* walls: push out and bounce back */
+        int x = p->x >> 8, y = p->y >> 8;
+        if (world_collide(&x, &y, M(0.35))) {
+            if (x != (p->x >> 8)) p->rvx = -p->rvx * 4 / 10;
+            if (y != (p->y >> 8)) p->rvy = -p->rvy * 4 / 10;
+            p->x = Q8(x); p->y = Q8(y);
+            p->rspin = (s16)(-p->rspin / 2);
+            g_snd.hit = 1;
+        }
+    }
+    (void)ox; (void)oy;
+    p->rvz -= (G >> 6) * dt / (TICKS >> 6);
+    p->rh += (p->rvz >> 6) * dt / (TICKS >> 6);
+    if (p->rh <= 0) {
+        p->rh = 0;
+        if (p->rvz < -Q8(M(1.8)) && p->rbounce < 4) {        /* bounce, losing energy */
+            p->rvz = -p->rvz * 35 / 100;
+            p->rvx = p->rvx * 6 / 10; p->rvy = p->rvy * 6 / 10;
+            p->rspin = (s16)(p->rspin * 6 / 10);
+            p->rbounce++;
+            g_snd.hit = 1;
+        } else {                                               /* sliding along the road */
+            p->rvz = 0;
+            int sp = dist_approx(p->rvx >> 8, p->rvy >> 8);   /* units/s */
+            int dec = M(10) * dt / TICKS + 1;
+            if (sp <= dec) p->rvx = p->rvy = 0;
+            else { p->rvx = p->rvx / sp * (sp - dec); p->rvy = p->rvy / sp * (sp - dec); }
+            /* roll over to lie flat */
+            int a = p->rang & 4095, target = (a < 2048) ? 1024 : 3072;
+            int step = 5000 * dt / TICKS + 1, d = target - a;
+            if (d > step) d = step; else if (d < -step) d = -step;
+            p->rang = (u16)((a + d) & 4095); p->rspin = 0;
+            if (!p->rvx && !p->rvy && p->rang == target) {     /* at rest: lie down for good */
+                p->rag = 0; p->timer = 30 * 256; p->pool = 0;
+                return;
+            }
+        }
+    }
+    p->rang = (u16)((p->rang + p->rspin * dt / TICKS) & 4095);
+    if (p->rvx || p->rvy) p->head = Q8(iatan2(p->rvy, p->rvx));
 }
 
 static void panic(int x, int y, int range)
@@ -785,7 +841,7 @@ static void panic(int x, int y, int range)
 static void ped_move(Ped *p, int head_target, int speed, int dt, int collide)
 {
     int diff = angdiff(head_target, p->head >> 8);
-    int mt = 2400 * dt / TICKS + 1;
+    int mt = 1000 * dt / TICKS + 1;              /* turn rate: ~100 degrees per second, no snapping */
     if (diff > mt) diff = mt; else if (diff < -mt) diff = -mt;
     p->head = (p->head + Q8(diff)) & (Q8(4096) - 1);
     int dist = (speed / 64) * dt / (TICKS / 64);
@@ -829,6 +885,10 @@ static void update_peds(int dt0)
         if (dpl > M(45) && p->state == S_WALK && !p->down) {      /* distant walkers: quarter rate */
             if (((frame_no + i) & 3) != 0) continue;
             dt = dt0 * 4;
+        }
+        if (p->down && p->rag) {             /* ragdoll flight, bounces and slide */
+            update_ragdoll(p, dt0);
+            continue;
         }
         if (p->down) {
             p->timer -= dt >> 6;
@@ -910,7 +970,7 @@ static void crew_exit(Car *c)
         int side = k ? 1 : -1;
         p->x = c->x + Q8(side * ((-isin(a) * M(1.7)) >> 14));
         p->y = c->y + Q8(side * ((icos(a) * M(1.7)) >> 14));
-        p->model = PED_COP; p->type = P_COP; p->state = S_CHASE; p->active = 1; p->down = 0;
+        p->model = PED_COP; p->type = P_COP; p->state = S_CHASE; p->active = 1; p->down = 0; p->rag = 0;
         p->hp = 100; p->cd = 128; p->speed = Q8(M(5)); p->head = c->head;
     }
 }
@@ -1150,7 +1210,7 @@ static void eject_driver(Car *c)
     int ex = (c->x >> 8) + ((isin(a) * M(1.9)) >> 14), ey = (c->y >> 8) - ((icos(a) * M(1.9)) >> 14);
     if (world_point_blocked(ex, ey, M(0.4))) { ex = (c->x >> 8) - ((isin(a) * M(1.9)) >> 14); ey = (c->y >> 8) + ((icos(a) * M(1.9)) >> 14); }
     p->x = Q8(ex); p->y = Q8(ey); p->head = Q8(a + 1024);
-    p->active = 1; p->down = 0; p->hp = 100; p->cd = 0;
+    p->active = 1; p->down = 0; p->hp = 100; p->cd = 0; p->rag = 0;
     p->type = P_CIV; p->model = civ_models[rnd() % 6];
     p->speed = Q8(M(1.3)); p->phase = rnd() & 511;
     p->bx = ex >> 10; p->by = ey >> 10;
@@ -1501,7 +1561,7 @@ static void mission_fail(const char *why)
 static void mission_ped(int k, int type, int model, int x, int y, int hp)
 {
     Ped *p = &peds[PED_MISSION0 + k];
-    p->active = 1; p->down = 0; p->hp = hp; p->cd = 160;
+    p->active = 1; p->down = 0; p->hp = hp; p->cd = 160; p->rag = 0;
     p->type = type; p->model = model; p->state = S_IDLE;
     p->x = Q8(x); p->y = Q8(y); p->head = Q8(rnd() & 4095); p->speed = Q8(M(1.4));
     p->bx = x >> 10; p->by = y >> 10; if (p->bx < 0) p->bx = 0; if (p->by < 0) p->by = 0; if (p->bx > 7) p->bx = 7; if (p->by > 7) p->by = 7;
@@ -2272,13 +2332,25 @@ static void push_h(int x, int y, int frame, int h)
 static void push(int x, int y, int frame) { push_h(x, y, frame, 0); }
 
 /* frame within a person set: idle / walk / run / aim, 18 per view direction */
-static int ped_frame(int base, int dir, int moving, int running, int aiming, int phase)
+/* frame within a person set from the view-relative heading (4096 per turn): 16 directions, of which
+   0..8 are stored and 9..15 drawn mirrored (bit 15); walk and run cycles have PED_CYCLE frames */
+static int ped_frame(int base, int rel, int moving, int running, int aiming, int phase)
 {
+    int d = ((rel + 128) >> 8) & 15, flip = 0;
+    if (d > 8) { d = 16 - d; flip = 0x8000; }
+    int cyc = ((phase & 511) * PED_CYCLE) >> 9;
     int k = 0;
-    if (aiming) k = 17;
-    else if (running) k = 9 + ((phase >> 6) & 7);
-    else if (moving) k = 1 + ((phase >> 6) & 7);
-    return base + dir * 18 + k;
+    if (aiming) k = 1 + 2 * PED_CYCLE;
+    else if (running) k = 1 + PED_CYCLE + cyc;
+    else if (moving) k = 1 + cyc;
+    return (base + d * PED_DIR_FRAMES + k) | flip;
+}
+/* ragdoll in flight: 3 stored views (behind, side, front) x 8 pitch angles; the other side mirrored */
+static int ped_tumble_frame(int base, int rel, int ang)
+{
+    int v = ((rel + 512) >> 10) & 3, flip = 0;
+    if (v == 3) { v = 1; flip = 0x8000; }
+    return (base + PED_TUMBLE + v * 8 + ((ang >> 9) & 7)) | flip;
 }
 
 /* camera elevation level for a car at this distance: 16, 11, 7 or 4 degrees */
@@ -2378,8 +2450,8 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         if (dd >= 0) {
             int rel = ((pl.head >> 8) - view) & 4095;
             int dir = ((rel + 256) >> 9) & 7;
-            if (pl.dead_t > 0 && pl.dead_kind == 0) push(plx(), ply(), PED_GREY + 144 + dir);
-            else push(plx(), ply(), ped_frame(PED_PLAYER, dir, pl.moving, pl.running, pl.aim_t > 0, pl.phase));
+            if (pl.dead_t > 0 && pl.dead_kind == 0) push(plx(), ply(), PED_GREY + PED_DOWN + dir);
+            else push(plx(), ply(), ped_frame(PED_PLAYER, rel, pl.moving, pl.running, pl.aim_t > 0, pl.phase));
         }
     }
     view_lim = M(110);
@@ -2402,15 +2474,19 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         if (dd < 0) continue;
         int rel = ((p->head >> 8) - view) & 4095;
         int dir = ((rel + 256) >> 9) & 7;
-        int base = p->model + (dd > M(13) ? 152 : 0);
-        if (p->down) {
+        int base = p->model + (dd > M(13) ? PED_BLOCK : 0);
+        if (p->rag) {                                           /* tumbling through the air */
+            int c = icos(p->rang); if (c < 0) c = -c;
+            int hc = (p->rh >> 8) + M(0.12) + ((c * M(0.83)) >> 14);              /* pelvis height */
+            push_h(x, y, ped_tumble_frame(base, rel, p->rang), hc - M(1.0));
+        } else if (p->down) {
             int el = dd < M(10) ? 0 : dd < M(25) ? 1 : 2;
             int hx = (icos(p->head >> 8) * M(0.55)) >> 14, hy = (isin(p->head >> 8) * M(0.55)) >> 14;
             push_h(x + hx, y + hy, BLOOD_POOL + el * 4 + p->pool, SPR_DECAL);
-            push(x, y, base + 144 + dir);
+            push(x, y, base + PED_DOWN + dir);
         } else {
             int moving = p->state != S_IDLE && !p->aim;
-            push(x, y, ped_frame(base, dir, moving, p->run, p->aim, p->phase));
+            push(x, y, ped_frame(base, rel, moving, p->run, p->aim, p->phase));
         }
     }
     view_lim = M(40);
@@ -2543,7 +2619,20 @@ void game_debug(void)
     for (int i = 0; i < MAX_CATS; i++) if (street_cats[i].active) printf("cat%d %5d,%5d state %d coat %d d=%d\n", i, street_cats[i].x, street_cats[i].y, street_cats[i].state, street_cats[i].coat, dist_approx(street_cats[i].x - plx(), street_cats[i].y - ply()) / 16);
     for (int i = 0; i < MAX_ROCKETS; i++) if (rockets[i].active) printf("rocket%d %d,%d\n", i, rockets[i].x >> 8, rockets[i].y >> 8);
     printf("weapon %d ammo %d owned %d\n", pl.weapon, pl.ammo[pl.weapon], pl.owned);
+    for (int i = 0; i < MAX_PEDS; i++) if (peds[i].rag) printf("ragdoll%d h %.2fm speed %.1fm/s up %.1fm/s pitch %d bounces %d\n", i, peds[i].rh / 4096.0, dist_approx(peds[i].rvx >> 8, peds[i].rvy >> 8) / 16.0, peds[i].rvz / 4096.0, peds[i].rang, peds[i].rbounce);
     if (pl.in_car >= 0) { Car *c = &cars[pl.in_car]; printf("player car %d,%d g=%d camgh=%d head=%d\n", c->x >> 8, c->y >> 8, ground_h(c->x >> 8, c->y >> 8), cam_gh, c->head >> 8); }
+}
+void game_debug_ragdoll(void)              /* test: the nearest standing ped is hit by a car doing ~55 km/h */
+{
+    int bi = -1, bd = 0x7fffffff;
+    for (int i = 0; i < PED_CIV_END; i++) { Ped *p = &peds[i]; if (!p->active || p->down) continue;
+        int d = dist_approx((p->x >> 8) - plx(), (p->y >> 8) - ply()); if (d < bd) { bd = d; bi = i; } }
+    if (bi < 0) return;
+    Ped *p = &peds[bi];
+    pl.x = p->x - Q8((icos(cam_ang >> 8) * M(6)) >> 14); pl.y = p->y - Q8((isin(cam_ang >> 8) * M(6)) >> 14);
+    if (pl.in_car >= 0) { cars[pl.in_car].x = pl.x; cars[pl.in_car].y = pl.y; cars[pl.in_car].head = cam_ang; }
+    int a = cam_ang >> 8;
+    kill_ped(p, (icos(a) >> 4) * Q8(M(15)) >> 10, (isin(a) >> 4) * Q8(M(15)) >> 10, 0, 5);
 }
 void game_debug_near_cat(void)              /* test: stand 4 m from the nearest cat, facing it */
 {
@@ -2562,7 +2651,7 @@ void game_debug_knock(int ahead_m, int age)
     Ped *p = &peds[0];
     p->x = c->x + ((icos(a) * Q8(M(ahead_m))) >> 14);
     p->y = c->y + ((isin(a) * Q8(M(ahead_m))) >> 14);
-    p->down = 1; p->timer = 30 * 256 - age; p->pool = 3; p->head = Q8(700);
+    p->down = 1; p->rag = 0; p->timer = 30 * 256 - age; p->pool = 3; p->head = Q8(700);
     Ped *q = &peds[1]; q->x = p->x + Q8(M(3)); q->y = p->y - Q8(M(3.5)); q->down = 0;
 }
 void game_debug_play(void) { new_game_state(); gstate = GS_PLAY; }

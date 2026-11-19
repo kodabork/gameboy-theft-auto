@@ -70,12 +70,17 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - `src/sound.c`: DirectSound mixer (engine, horn, skid, guns, siren, effect synth) and PSG radio. Five stations (`stations[]`): 64-step patterns for lead, chord stabs, bass and drums.
 - Effects: `g_snd.sfx |= SFX_*` from game code. Each effect is a short note list (`SfxNote`) played on 4 synth voices. `tools/sfx_wav.c` renders every effect to WAV with the real mixer.
 
+## People
+- `tools/sprites_people.py` (skeleton + gait curves). Per set: 9 stored view directions of 16 (the rest mirrored), 26 frames each (idle, walk 12, run 12, aim), 8 down frames, 24 ragdoll tumble frames (3 views x 8 pitch angles). Offsets `PED_DIR_FRAMES`, `PED_DOWN`, `PED_TUMBLE`, `PED_BLOCK` (far set) come from `assets.h`.
+- Ragdolls: `update_ragdoll` in `game.c` (velocity, gravity, bounces, wall rebounds, slide, settle); `kill_ped` launches them.
+
 ## Car models
+- Headlights: one design per vehicle class (`lk` map in `Car3.shade`). The owner is very sensitive to "droopy" lamps: keep top and bottom edges sweeping UP toward the outside (currently 7 cm over the lamp width) and stay on the flat part of the nose, because the game's raised 3/4 camera makes level lamps look like they sag. Check with a straight-on and a 3/4 render before showing anything.
 - `tools/cars3.py` builds each car from side profiles (height fields). Profile distances are scaled by `1/sqrt(1+slope^2)` (`kfac`) so steep faces (tailgates, upright rear glass) render cleanly. The box truck's cargo box is a separate rounded box (`box_x`, `box_z`); the pickup cab's back wall is a plane.
 - Preview a model quickly with `tools/frame_render.render_frame` before running the full sprite render.
 
 ## Story and missions
-See `STORY.md`. There are nine jobs; the races were removed in v0.19. Cutscenes run in-engine: the giver actor stands in ped slot `PED_ACTOR`, the camera logic is in `game_build_scene`. The RPG-style dialogue box is in `hud.c`: the speaker's portrait is 64x64 anime-style pixel art (`tools/make_portraits.py` -> `src/portraits.c`; shapes drawn 4x and reduced by majority vote, cel shading, coloured outlines). On the GBA it is an 8bpp 64x64 OBJ at tiles 896.., colours in OBJ palette entries 96..255, OAM 127, uploaded when the speaker changes; text is word-wrapped to 27 characters.
+See `STORY.md`. There are nine jobs; the races were removed in v0.19. Cutscenes run in-engine: the giver actor stands in ped slot `PED_ACTOR`, the camera logic is in `game_build_scene`. The dialogue box is in `hud.c`. **Portraits are switched off (`SHOW_PORTRAITS 0`) at the owner's request:** five code-drawn styles (flat pixel, 3D-rendered, painted, anime, SNES) were all rejected. Don't try to generate faces in code again; if the owner supplies art, convert it. The plumbing still works: an 8bpp 64x64 OBJ at tiles 896.., colours in OBJ palette entries 96..255, OAM 127, uploaded when the speaker changes (`src/portraits.c`).
 
 ## Ideas not done yet
 - More performance work: walls (`band`/`vspan`) and sprite blits are now the largest costs.

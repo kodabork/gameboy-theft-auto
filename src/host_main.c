@@ -49,6 +49,7 @@ int main(int argc, char **argv)
             if (keys == 0xFFE) { game_debug_set(3, 1); keys = 0; }
             if (keys == 0xF00) { void game_debug_burn_self(void); game_debug_burn_self(); keys = 0; }
             if (keys == 0xF01) { void game_debug_near_cat(void); game_debug_near_cat(); keys = 0; }
+            if (keys == 0xF02) { void game_debug_ragdoll(void); game_debug_ragdoll(); keys = 0; }
             if (keys >= 0xFC0 && keys < 0xFD0) { void game_debug_burn(int); game_debug_burn((keys - 0xFC0) * 100); keys = 0; }
             if (keys == 0xFD0) { void game_debug_play(void); game_debug_play(); keys = 0; }
             if (keys >= 0xFE0 && keys <= 0xFE8) { void game_debug_tp_mission(int); game_debug_tp_mission(keys - 0xFE0); keys = 0; }

@@ -16,7 +16,23 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
-## What's new in v0.22
+## What's new in v0.23
+- **Smoother people.** The player and pedestrians now face 16 directions instead of 8, so they turn
+  smoothly instead of snapping in 45-degree steps; walk and run cycles have 12 frames instead of 8;
+  the run has natural pumping arms (no more stiff forward arms); pedestrians turn corners gently
+- **Ragdolls.** Someone hit by a car is thrown with the car's speed, tumbles through the air,
+  bounces off the road and off walls, and slides to a stop before lying still. Shot people stagger
+  and fall instead of dropping instantly
+- **Cars look like real cars.** Modern curved bodies (rounded roofs, raked windscreens, rounded
+  noses), bigger wheels that fill the arches, a lower stance, fender bulges on the sports cars
+- **New headlights, a different design for each vehicle:** wrap-around composite lamps on the
+  cop/taxi sedan, pickup, wagon and van; teardrop projectors on the compact, luxury car and minivan;
+  twin round lamps on the hatchback; pop-up headlights on the 90s coupe and the supercar; quad round
+  lamps on the muscle car; stacked lamps on the SUV and box truck; slim projectors on the tuner. They
+  sweep up toward the outside, so they never look droopy
+- Cutscene portraits are switched off for now: the dialogue box shows the speaker's name and lines
+
+## v0.22
 - **New cutscene portraits:** the faces in the dialogue box are now bigger (64x64) anime-style pixel
   art with cel shading, big expressive eyes and proper hair, using up to 160 colours each instead
   of 15
