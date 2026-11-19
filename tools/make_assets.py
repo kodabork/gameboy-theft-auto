@@ -67,23 +67,32 @@ for name, car in CARS:
     if hasattr(car, 'S'): car_dims.append((int(round((car.S['L'] / 2 - 0.05) * 16)), int(round((car.S['W'] / 2) * 16))))
     print(name, round(time.time() - t0, 1), flush=True)
 group()
-# people: per view direction 18 frames = idle, walk 0-7, run 0-7, aim; then 8 knocked-down frames
+# people: 16 view directions, of which 9 (0..180 degrees) are stored and the rest drawn mirrored.
+# Per stored direction 26 frames = idle, walk 0-11, run 0-11, aim; then 8 knocked-down frames
+# (8 directions) and 24 ragdoll tumble frames (3 views: from behind, side, front x 8 pitch angles).
+PED_DIRS, PED_DIR_FRAMES, PED_CYCLE = 9, 26, 12
 def ped_block(outfit, elev, s_, w, up, dn):
-    for d in range(8):
-        yaw = d * 2 * np.pi / 8
+    for d in range(PED_DIRS):
+        yaw = d * 2 * np.pi / 16
         add(Human(outfit, 0, mode='idle'), yaw, np.radians(elev), s_, w, up, dn)
-        for f in range(8): add(Human(outfit, f * 2 * np.pi / 8, mode='walk'), yaw, np.radians(elev), s_, w, up, dn)
-        for f in range(8): add(Human(outfit, f * 2 * np.pi / 8, mode='run'), yaw, np.radians(elev), s_, w, up, dn)
+        for f in range(PED_CYCLE): add(Human(outfit, f * 2 * np.pi / PED_CYCLE, mode='walk'), yaw, np.radians(elev), s_, w, up, dn)
+        for f in range(PED_CYCLE): add(Human(outfit, f * 2 * np.pi / PED_CYCLE, mode='run'), yaw, np.radians(elev), s_, w, up, dn)
         add(Human(outfit, 0, mode='aim'), yaw, np.radians(elev), s_, w, up, dn)
     for d in range(8):
         add(Human(outfit, 0, mode='down', down_seed=d % 3), d * 2 * np.pi / 8, np.radians(elev), s_, int(w * 2), up // 3, dn * 2)
+    for view in (0.0, np.pi / 2, np.pi):
+        for k in range(8):
+            add(Human(outfit, mode='tumble', tumble=k * 2 * np.pi / 8), view, np.radians(elev), s_, int(w * 2), int(up * 1.15), dn, shadow=False)
+PED_DOWN = PED_DIRS * PED_DIR_FRAMES
+PED_TUMBLE = PED_DOWN + 8
+PED_BLOCK = PED_TUMBLE + 24
 begin('PED_PLAYER'); ped_block('player', 17, 0.022, 56, 92, 8)
 print('PED_PLAYER', round(time.time() - t0, 1), flush=True)
 for name, outfit in (('PED_GREY', 'grey'), ('PED_RED', 'red'), ('PED_NAVY', 'navy'), ('PED_SUIT', 'suit'),
                      ('PED_GREEN', 'green'), ('PED_WHITE', 'white'), ('PED_COP', 'cop')):
     begin(name)
     ped_block(outfit, 15, 0.032, 40, 64, 6)          # near
-    ped_block(outfit, 6, 0.060, 22, 34, 4)           # far (index +152)
+    ped_block(outfit, 6, 0.060, 22, 34, 4)           # far (index + PED_BLOCK)
     print(name, round(time.time() - t0, 1), flush=True)
 begin('BLOOD_POOL')
 for e in (24, 12, 6):
@@ -216,7 +225,9 @@ H = ['#ifndef ASSETS_H', '#define ASSETS_H',
      'extern const SprFrame spr_frames[];', 'extern const unsigned short spr_palette[];',
      'extern const unsigned char spr_pixels[];', '#define SPR_NCOL %d' % NCOL, '#define SPR_PAL_BASE 103',
      'extern const unsigned char car_dims[][2];   /* half length, half width per car set (1/16 m) */',
-     '#define CAR_SET_FRAMES %d' % sum(n // 2 + 1 for n in CAR_ANGLES), '#define CAR_NSETS %d' % len(car_dims)]
+     '#define CAR_SET_FRAMES %d' % sum(n // 2 + 1 for n in CAR_ANGLES), '#define CAR_NSETS %d' % len(car_dims),
+     '#define PED_DIR_FRAMES %d' % PED_DIR_FRAMES, '#define PED_CYCLE %d' % PED_CYCLE, '#define PED_DOWN %d' % PED_DOWN,
+     '#define PED_TUMBLE %d' % PED_TUMBLE, '#define PED_BLOCK %d' % PED_BLOCK]
 for name, base in sets: H.append('#define %s %d' % (name, base))
 H.append('#define SPR_NFRAMES %d' % len(table))
 H.append('#endif')
@@ -229,7 +240,7 @@ if len(sys.argv) > 3:
     pal8 = np.zeros((256, 3)); pal8[1:NCOL + 1] = pal_rgb; pal8[0] = (0.42, 0.42, 0.44)
     names = dict(sets)
     pick = [names[n] + k for n in ('CAR_HATCH5_RED', 'CAR_PICKUP_WHITE', 'CAR_VAN_WHITE') for k in (4, 12, 20)] + [names['CAR_POLICE'] + 4] + \
-           [names['PED_PLAYER'] + k for k in (0, 3, 13, 17, 36, 39)] + [names['PED_COP'] + k for k in (13, 35, 152 + 13)] + \
+           [names['PED_PLAYER'] + k for k in (0, 3, 13, 17, 36, 39)] + [names['PED_COP'] + k for k in (13, 35, PED_BLOCK + 13)] + \
            [names['PED_WHITE'] + 4, names['PED_GREEN'] + 22, names['PED_GREY'] + 144, names['FX_MARKER'], names['FX_PICKUP'] + 1, names['FX_SIREN']]
     tiles = []
     for fi in pick:

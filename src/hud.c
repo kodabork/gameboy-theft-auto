@@ -4,6 +4,7 @@
 #include "game.h"
 #include "logo.h"
 #include "portraits.h"
+#define SHOW_PORTRAITS 0
 #include "ground.h"
 
 #define COL_RED 252
@@ -228,7 +229,8 @@ void hud_draw(u16 *fb)
         return;
     }
     if (g_hud.dlg_l1) {                          /* story dialogue: RPG-style box with the speaker's portrait */
-        int face = face_of(g_hud.dlg_who);
+        /* portraits are switched off until there is art the owner likes (SHOW_PORTRAITS) */
+        int face = SHOW_PORTRAITS ? face_of(g_hud.dlg_who) : -1;
         if (g_hud.cutscene) { rect(0, 0, 240, 12, COL_BLACK); rect(0, 107, 240, 53, COL_BLACK); }
         else shade_band(107, 160);
         int tx = 8, width = 37;

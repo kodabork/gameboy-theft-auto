@@ -64,21 +64,22 @@ GAIT = {   # hip flexion, knee flexion curves (radians) for one leg over its cyc
                  push=lambda f: 0.35 * bump(f, 3.45, 0.40),
                  sh=lambda f: -0.26 * np.cos(f), el=lambda f: 0.30 + 0.20 * max(0.0, -np.cos(f)),
                  lean=0.03, lift=0.0),
-    'run':  dict(hip=lambda f: 0.62 * np.cos(f) + 0.18,
-                 knee=lambda f: 0.42 * bump(f, 0.55, 0.35) + 1.90 * bump(f, 4.05, 0.75) + 0.12,
-                 push=lambda f: 0.55 * bump(f, 3.0, 0.40),
-                 sh=lambda f: -0.62 * np.cos(f), el=lambda f: 1.45,
-                 lean=0.17, lift=0.05),
+    'run':  dict(hip=lambda f: 0.58 * np.cos(f) + 0.12,
+                 knee=lambda f: 0.38 * bump(f, 0.55, 0.35) + 1.50 * bump(f, 4.05, 0.75) + 0.12,
+                 push=lambda f: 0.50 * bump(f, 3.0, 0.40),
+                 sh=lambda f: -0.75 * np.cos(f) + 0.22, el=lambda f: 0.70 + 0.85 * max(0.0, np.cos(f + np.pi)),
+                 lean=0.12, lift=0.03),
 }
 
 class Human:
-    def __init__(self, outfit, phase=0.0, moving=True, down=False, down_seed=0, mode=None, gun=False):
+    def __init__(self, outfit, phase=0.0, moving=True, down=False, down_seed=0, mode=None, gun=False, tumble=0.0):
         o = OUTFITS[outfit]
         self.o = {k: np.array(v, f32) for k, v in o.items() if k not in ('long', 'cap')}
         self.long = o['long']; self.cap = o.get('cap', False)
         if mode is None: mode = 'down' if down else ('walk' if moving else 'idle')
         self.down = down or mode == 'down'
         self.mode = mode
+        self.tumble = tumble if mode == 'tumble' else None   # ragdoll: limbs flung out, body pitched by this angle
         self.gun = gun or mode == 'aim'
         legs_rel, arms_spec = [], []
         lean = 0.0; lift = 0.0
@@ -88,6 +89,10 @@ class Human:
                 th = rng.uniform(-0.15, 0.35); kn = rng.uniform(0.0, 0.9); push = 0.0
                 spread = 0.10 + rng.uniform(0, 0.12)
                 ar_out = rng.uniform(0.5, 1.3); ar_fwd = rng.uniform(-0.6, 0.6); eb = rng.uniform(0.1, 1.0)
+            elif mode == 'tumble':                    # flung through the air: limbs splayed and flailing
+                th = (0.55 if sg > 0 else -0.25); kn = (0.9 if sg > 0 else 0.35); push = 0.0
+                spread = 0.16 if sg > 0 else 0.22
+                ar_out = 1.35 if sg > 0 else 1.0; ar_fwd = (2.3 if sg > 0 else -0.9); eb = 0.5
             elif mode in GAIT:
                 g = GAIT[mode]
                 f = phase + (0.0 if sg > 0 else np.pi)
@@ -114,7 +119,7 @@ class Human:
             legs_rel.append([hip, knee, ankle, heel, toe])
             arms_spec.append((sg, ar_fwd, ar_out, eb))
         # pelvis height: put the lowest foot on the ground (plus flight lift when running)
-        if mode == 'down':
+        if mode in ('down', 'tumble'):
             hz = 0.95
         else:
             lowest = min(min(l[3][2], l[4][2]) for l in legs_rel)
@@ -152,6 +157,16 @@ class Human:
         self.gun_b = hd + d * 0.15
 
     def _local(self, p):
+        if self.tumble is not None:
+            # pitch the whole body head-over-heels about its middle; the middle sits 1 m up so every
+            # angle stays above the ground plane (the game draws it at the right height)
+            c, s_ = np.cos(self.tumble), np.sin(self.tumble)
+            x, z = p[..., 0], p[..., 2] - 1.0
+            q = np.empty_like(p)
+            q[..., 0] = x * c - z * s_
+            q[..., 1] = p[..., 1]
+            q[..., 2] = x * s_ + z * c + 0.95
+            return q
         if not self.down:
             return p
         # lying on the back along +x (head towards +x), back resting on the ground

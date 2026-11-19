@@ -27,7 +27,7 @@ Eddie Vance arrives in Steel Harbor to work for his cousin Rudy and finds him go
 | 9 | Last Call | Rudy | Kill Moran (3 guards, 2 stars) at the old pier, then the ending cutscene | $10,000 |
 
 ## Cutscenes
-- In-engine, with letterbox bars and an RPG-style dialogue box: the speaker's face portrait, their name and the line (narration has no portrait).
+- In-engine, with letterbox bars and a dialogue box with the speaker's name and the line (portraits are switched off for now).
 - The mission giver appears in the street facing Eddie: an establishing two-shot first, then over-the-shoulder cuts to whoever is speaking.
 - Afterwards the giver walks away.
 - The intro (Marta) and the ending (Rudy) use the same system.
