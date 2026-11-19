@@ -62,13 +62,13 @@ GAIT = {   # hip flexion, knee flexion curves (radians) for one leg over its cyc
     'walk': dict(hip=lambda f: 0.36 * np.cos(f) + 0.03,
                  knee=lambda f: 0.20 * bump(f, 0.55, 0.45) + 1.05 * bump(f, 4.35, 0.55) + 0.05,
                  push=lambda f: 0.35 * bump(f, 3.45, 0.40),
-                 sh=lambda f: -0.26 * np.cos(f), el=lambda f: 0.30 + 0.20 * max(0.0, -np.cos(f)),
-                 lean=0.03, lift=0.0),
+                 sh=lambda f: -0.34 * np.cos(f) + 0.02, el=lambda f: 0.22 + 0.38 * max(0.0, -np.cos(f)),
+                 tw=0.07, lean=0.04, lift=0.0),
     'run':  dict(hip=lambda f: 0.58 * np.cos(f) + 0.12,
                  knee=lambda f: 0.38 * bump(f, 0.55, 0.35) + 1.50 * bump(f, 4.05, 0.75) + 0.12,
                  push=lambda f: 0.50 * bump(f, 3.0, 0.40),
-                 sh=lambda f: -0.75 * np.cos(f) + 0.22, el=lambda f: 0.70 + 0.85 * max(0.0, np.cos(f + np.pi)),
-                 lean=0.12, lift=0.03),
+                 sh=lambda f: -0.60 * np.cos(f) + 0.12, el=lambda f: 1.15 + 0.20 * max(0.0, -np.cos(f)),
+                 tw=0.13, lean=0.14, lift=0.03),
 }
 
 class Human:
@@ -82,7 +82,7 @@ class Human:
         self.tumble = tumble if mode == 'tumble' else None   # ragdoll: limbs flung out, body pitched by this angle
         self.gun = gun or mode == 'aim'
         legs_rel, arms_spec = [], []
-        lean = 0.0; lift = 0.0
+        lean = 0.0; lift = 0.0; twist = 0.0
         for sg in (1, -1):                         # sg=+1 left side (y>0), -1 right
             if mode == 'down':
                 rng = np.random.default_rng(down_seed * 7 + (sg > 0))
@@ -97,20 +97,21 @@ class Human:
                 g = GAIT[mode]
                 f = phase + (0.0 if sg > 0 else np.pi)
                 th = g['hip'](f); kn = g['knee'](f); push = g['push'](f)
-                spread = 0.0; ar_out = 0.07
-                ar_fwd = -g['sh'](f); eb = g['el'](f)       # arm swings opposite to the same-side leg
+                spread = 0.0; ar_out = 0.10
+                ar_fwd = g['sh'](f); eb = g['el'](f)        # arm swings opposite to the same-side leg
                 lean = g['lean']; lift = g['lift'] * max(0.0, np.cos(2 * phase))
+                twist = g['tw'] * np.cos(phase)             # hips turn with the left leg, shoulders counter-turn
             elif mode == 'aim':
                 th = 0.10 * sg; kn = 0.10; push = 0.0; spread = 0.05
                 if sg < 0:  ar_fwd, ar_out, eb = 1.50, -0.12, 0.02      # right arm straight out
                 else:       ar_fwd, ar_out, eb = 1.15, -0.55, 0.45      # left hand supports
             else:   # idle
-                th = 0.02 * sg; kn = 0.04; push = 0.0; spread = 0.02
-                ar_fwd, ar_out, eb = 0.04, 0.07, 0.14
-            hip = np.array((0, sg * 0.092, -0.04), f32)
-            knee = hip + np.array((np.sin(th), sg * spread, -np.cos(th)), f32) * 0.45
+                th = 0.03 * sg; kn = 0.06 if sg > 0 else 0.02; push = 0.0; spread = 0.045
+                ar_fwd, ar_out, eb = 0.02, 0.11, 0.24
+            hip = np.array((sg * 0.098 * np.sin(twist), sg * 0.098 * np.cos(twist), -0.045), f32)
+            knee = hip + np.array((np.sin(th), sg * spread, -np.cos(th)), f32) * 0.43
             sha = th - kn
-            ankle = knee + np.array((np.sin(sha), sg * spread * 0.5, -np.cos(sha)), f32) * 0.43
+            ankle = knee + np.array((np.sin(sha), sg * spread * 0.5, -np.cos(sha)), f32) * 0.415
             fa = sha + np.pi / 2 - push                      # foot roughly perpendicular to the shin
             if mode == 'down': fa = np.radians(60)
             fdir = np.array((np.sin(fa), 0, -np.cos(fa)), f32)
@@ -118,6 +119,7 @@ class Human:
             toe = ankle + fdir * 0.17 + np.array((0, 0, -0.05), f32)
             legs_rel.append([hip, knee, ankle, heel, toe])
             arms_spec.append((sg, ar_fwd, ar_out, eb))
+        self.twist = twist
         # pelvis height: put the lowest foot on the ground (plus flight lift when running)
         if mode in ('down', 'tumble'):
             hz = 0.95
@@ -132,22 +134,23 @@ class Human:
         J = {}
         J['pelvis'] = P.copy()
         J['waist'] = leaned(np.array((0.005, 0, 0.18), f32))
-        J['chest'] = leaned(np.array((0.01, 0, 0.37), f32))
+        J['chest'] = leaned(np.array((0.01, 0, 0.355), f32))
         J['neck0'] = leaned(np.array((0.0, 0, 0.53), f32))
-        J['neck1'] = leaned(np.array((0.015, 0, 0.62), f32))
-        J['head'] = leaned(np.array((0.008, 0, 0.715), f32))
+        J['neck1'] = leaned(np.array((0.018, 0, 0.60), f32))
+        J['head'] = leaned(np.array((0.012, 0, 0.705), f32))
         legs = [[v + P for v in l] for l in legs_rel]
         arms = []
         for sg, ar_fwd, ar_out, eb in arms_spec:
-            shoulder = leaned(np.array((0.0, sg * 0.185, 0.49), f32))
+            ts = -twist * 1.2                             # shoulders counter-rotate against the hips
+            shoulder = leaned(np.array((-sg * 0.19 * np.sin(ts), sg * 0.19 * np.cos(ts), 0.455), f32))
             up_dir = np.array((np.sin(ar_fwd) * np.cos(ar_out), sg * np.sin(ar_out), -np.cos(ar_fwd) * np.cos(ar_out)), f32)
             up_dir /= np.linalg.norm(up_dir)
-            elbow = shoulder + up_dir * 0.29
+            elbow = shoulder + up_dir * 0.28
             fa = ar_fwd + eb
             fa_dir = np.array((np.sin(fa) * np.cos(ar_out), sg * np.sin(ar_out) * 0.8, -np.cos(fa) * np.cos(ar_out)), f32)
             fa_dir /= np.linalg.norm(fa_dir)
-            wrist = elbow + fa_dir * 0.26
-            hand = wrist + fa_dir * 0.065
+            wrist = elbow + fa_dir * 0.25
+            hand = wrist + fa_dir * 0.05
             arms.append((shoulder, elbow, wrist, hand))
         self.J, self.legs, self.arms = J, legs, arms
         # pistol in the right hand, pointing along the forearm
@@ -179,13 +182,13 @@ class Human:
     def parts(self, p):
         p = self._local(p)
         J = self.J
-        pelvis = sd_ellipsoid(p, J['pelvis'], (0.105, 0.165, 0.11))
-        waist = sd_ellipsoid(p, J['waist'], (0.098, 0.150, 0.13))
-        chest = sd_ellipsoid(p, J['chest'], (0.115, 0.178, 0.165))
-        torso = smin(smin(waist, chest, 0.06), pelvis, 0.05)
-        neck = sd_round_cone(p, J['neck0'], J['neck1'], 0.052, 0.046)
+        pelvis = sd_ellipsoid(p, J['pelvis'], (0.112, 0.172, 0.115))
+        waist = sd_ellipsoid(p, J['waist'], (0.108, 0.160, 0.13))
+        chest = sd_ellipsoid(p, J['chest'], (0.128, 0.188, 0.160))
+        torso = smin(smin(waist, chest, 0.07), pelvis, 0.06)
+        neck = sd_round_cone(p, J['neck0'], J['neck1'], 0.056, 0.050)
         h = J['head']
-        head = sd_ellipsoid(p, h, (0.094, 0.077, 0.111))
+        head = sd_ellipsoid(p, h, (0.103, 0.085, 0.118))
         jaw = sd_ellipsoid(p, h + (0.022, 0, -0.050), (0.070, 0.060, 0.062))
         nose = sd_ellipsoid(p, h + (0.090, 0, -0.012), (0.022, 0.012, 0.024))
         ears = np.minimum(sd_ellipsoid(p, h + (-0.005, 0.077, -0.005), (0.018, 0.010, 0.028)),
@@ -203,21 +206,29 @@ class Human:
             hair = smin(hair, back, 0.03)
         legd = np.full(p.shape[:-1], 9, f32); shoe = legd.copy(); arm = legd.copy(); hand = legd.copy()
         for hip, knee, ankle, heel, toe in self.legs:
-            thigh = sd_round_cone(p, hip, knee, 0.084, 0.056)
-            shin = sd_round_cone(p, knee, ankle, 0.054, 0.037)
-            calf = sd_ellipsoid(p, knee + (ankle - knee) * 0.32 + np.array((-0.018, 0, 0), f32), (0.05, 0.05, 0.11))
-            legd = np.minimum(legd, smin(smin(thigh, shin, 0.02), calf, 0.03))
+            thigh = sd_round_cone(p, hip, knee, 0.096, 0.064)
+            shin = sd_round_cone(p, knee, ankle, 0.060, 0.044)
+            calf = sd_ellipsoid(p, knee + (ankle - knee) * 0.30 + np.array((-0.012, 0, 0), f32), (0.056, 0.055, 0.12))
+            legd = np.minimum(legd, smin(smin(thigh, shin, 0.03), calf, 0.04))
             sh = sd_round_cone(p, heel, toe, 0.046, 0.038)
             sh = np.maximum(sh, -(p[..., 2] - (heel[2] - 0.035)) if not self.down else sh)
             shoe = np.minimum(shoe, sh)
         for shoulder, elbow, wrist, hnd in self.arms:
-            up = sd_round_cone(p, shoulder, elbow, 0.056, 0.044)
-            fo = sd_round_cone(p, elbow, wrist, 0.043, 0.032)
-            arm = np.minimum(arm, smin(up, fo, 0.015))
-            hand = np.minimum(hand, sd_ellipsoid(p, hnd, (0.034, 0.024, 0.048)))
-        shoulders = np.minimum(sd_sphere(p, self.arms[0][0] + np.array((0, 0, -0.01), f32), 0.050), sd_sphere(p, self.arms[1][0] + np.array((0, 0, -0.01), f32), 0.050))
-        top = smin(smin(torso, shoulders, 0.06), arm, 0.025)
-        hips_legs = smin(pelvis, legd, 0.03)
+            up = sd_round_cone(p, shoulder, elbow, 0.064, 0.050)
+            fo = sd_round_cone(p, elbow, wrist, 0.049, 0.040)
+            arm = np.minimum(arm, smin(up, fo, 0.025))
+            # a fist: one rounded lump at the end of the sleeve, never a thin paddle sticking out
+            hand = np.minimum(hand, sd_ellipsoid(p, hnd + (hnd - wrist) * 0.15, (0.047, 0.044, 0.047)))
+        # deltoids: low, wide ellipsoids that melt into the chest and the upper arm (no bumps on top)
+        delts = 9
+        for sh_, el_, _, _ in self.arms:
+            c = sh_ + (el_ - sh_) * 0.15 + np.array((0, 0, -0.010), f32)
+            delts = np.minimum(delts, sd_ellipsoid(p, c, (0.066, 0.064, 0.066)))
+            # trapezius: a sloping ridge from the base of the neck down to the shoulder
+            base = J['neck0'] + np.array((-0.01, 0, 0.0), f32)
+            delts = np.minimum(delts, sd_round_cone(p, base, sh_ + np.array((-0.005, 0, 0.0), f32), 0.058, 0.050))
+        top = smin(smin(torso, delts, 0.06), arm, 0.04)
+        hips_legs = smin(pelvis, legd, 0.04)
         gun = sd_round_cone(p, self.gun_a, self.gun_b, 0.022, 0.018) if self.gun else np.full(p.shape[:-1], 9, f32)
         if self.gun:
             grip = sd_round_cone(p, self.gun_a, self.gun_a + np.array((0, 0, -0.08), f32), 0.018, 0.016)
