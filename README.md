@@ -16,6 +16,17 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.24
+- **Faster.** About 4% more frames per second on the standard test drive (18.1 to 19.0 fps), with
+  nothing removed: the same number of people, cars and props, and the picture is pixel-for-pixel
+  the same apart from sprite edges that move by at most one pixel from rounding.
+  - Sprites are placed on screen with multiplies instead of divides, drawn with fewer checks per
+    pixel, and sorted by depth with smaller keys.
+  - Street lamps are sorted into map blocks, so each frame only checks the lamps near you.
+  - People only do the exact car-collision test when a car is within a few metres.
+  - The minimap draws its round frame and its map in separate passes (the output is identical).
+  - The sky gradient table moved to fast memory.
+
 ## What's new in v0.23
 - **Smoother people.** The player and pedestrians now face 16 directions instead of 8, so they turn
   smoothly instead of snapping in 45-degree steps; walk and run cycles have 12 frames instead of 8;

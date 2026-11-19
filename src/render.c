@@ -512,7 +512,7 @@ static void draw_sky(void)
     /* sky: 6-level gradient into the haze, with clouds (palette 6 = white, 7 = shade) that
        scroll with the camera heading. Filled column-pair by column-pair, only down to each
        column's first covered row, so hidden sky costs nothing. */
-    EWRAM_BSS static u32 grad[HORIZON + 1];   /* gradient colour pair per row */
+    static u32 grad[HORIZON + 1];             /* gradient colour pair per row (IWRAM: read for every sky pixel) */
     for (int y = 0; y <= HORIZON; y++) {
         int g = (y * 5 * 16) / HORIZON;
         int l = g >> 4, fr = g & 15;
@@ -549,7 +549,7 @@ static void draw_sky(void)
 
 /* -------------------------------------------------------------- sprites */
 typedef struct { s16 idx; s16 pad; s32 z; s32 x; } SprEnt;
-EWRAM_BSS static SprEnt sprs[MAX_SPRITES];
+static u32 skey[MAX_SPRITES]; EWRAM_BSS static s16 sprx[MAX_SPRITES];   /* depth sort keys (IWRAM: hot) */
 
 /* Sprites are stored at full horizontal resolution (240 px). Each logical column
    covers two physical pixels, which are merged into one halfword write. */
@@ -577,6 +577,13 @@ static void blit(const SprFrame *f, int sx8, int sb8, int z, const u8 *occ, int 
     const u8 *pix = spr_pixels + f->off;
     int h = f->h, w = f->w;
     int v0 = (((rs << 8) + 128 - yt) * i4) >> 4;
+    while (v0 < 0 && rs < re) { v0 += inv; rs++; }              /* rows above the image */
+    {   /* last row still inside the image, worked out once instead of testing every pixel */
+        int left = (h << 16) - v0;
+        if (left <= 0) return;
+        int rows = (left + inv - 1) / inv;
+        if (rs + rows < re) re = rs + rows;
+    }
     for (int c = cs; c < ce; c++) {
         int pa = c << 1, pb = pa + 1;
         int ua = ((((pa << 8) + 128 - xl) * i4) >> 4) >> 16;
@@ -593,27 +600,31 @@ static void blit(const SprFrame *f, int sx8, int sb8, int z, const u8 *occ, int 
         const u8 *sb = pix + (vb ? ub : ua) * h;
         u16 *p = FB + rs * SCR_W + c;
         int v = v0;
-        if (va && vb) {
+        if (va && vb && sa == sb) {                    /* magnified: both pixels of the pair share a source column */
+            for (int r = rs; r < rend; r++) {
+                int a = sa[v >> 16];
+                if (a) *p = (u16)((a + SPR_PAL_BASE) * 0x0101);
+                p += SCR_W; v += inv;
+            }
+        } else if (va && vb) {
             for (int r = rs; r < rend; r++) {
                 int vi = v >> 16;
-                if (vi < h) {
-                    int a = sa[vi], b = sb[vi];
-                    if (a && b) *p = (u16)((a + SPR_PAL_BASE) | ((b + SPR_PAL_BASE) << 8));
-                    else if (a) *p = (u16)((*p & 0xFF00) | (a + SPR_PAL_BASE));
-                    else if (b) *p = (u16)((*p & 0x00FF) | ((b + SPR_PAL_BASE) << 8));
-                }
+                int a = sa[vi], b = sb[vi];
+                if (a && b) *p = (u16)((a + SPR_PAL_BASE) | ((b + SPR_PAL_BASE) << 8));
+                else if (a) *p = (u16)((*p & 0xFF00) | (a + SPR_PAL_BASE));
+                else if (b) *p = (u16)((*p & 0x00FF) | ((b + SPR_PAL_BASE) << 8));
                 p += SCR_W; v += inv;
             }
         } else if (va) {
             for (int r = rs; r < rend; r++) {
                 int vi = v >> 16;
-                if (vi < h) { int a = sa[vi]; if (a) *p = (u16)((*p & 0xFF00) | (a + SPR_PAL_BASE)); }
+                int a = sa[vi]; if (a) *p = (u16)((*p & 0xFF00) | (a + SPR_PAL_BASE));
                 p += SCR_W; v += inv;
             }
         } else {
             for (int r = rs; r < rend; r++) {
                 int vi = v >> 16;
-                if (vi < h) { int b = sb[vi]; if (b) *p = (u16)((*p & 0x00FF) | ((b + SPR_PAL_BASE) << 8)); }
+                int b = sb[vi]; if (b) *p = (u16)((*p & 0x00FF) | ((b + SPR_PAL_BASE) << 8));
                 p += SCR_W; v += inv;
             }
         }
@@ -630,17 +641,22 @@ static void draw_sprites(const Sprite *spr, int n)
         if (z < M(2.0) || z > 4000) continue;
         if (x * FX > z * 90 || -x * FX > z * 90) continue;
         int key = z + (IS_DECAL(spr[i].frame) ? M(3) : 0);   /* decals sort behind things standing on them */
+        /* sort compact 32-bit keys (depth, then sprite index) instead of whole records */
+        u32 kk = ((u32)key << 8) | (u32)i;
+        sprx[i] = (s16)x;
         int j = nv++;
-        while (j > 0 && sprs[j - 1].z < key) { sprs[j] = sprs[j - 1]; j--; }
-        sprs[j].idx = i; sprs[j].z = key; sprs[j].x = x; sprs[j].pad = 0;
+        while (j > 0 && skey[j - 1] < kk) { skey[j] = skey[j - 1]; j--; }
+        skey[j] = kk;
     }
     int first = nv > 64 ? nv - 64 : 0;          /* draw at most the 64 nearest */
     for (int k = first; k < nv; k++) {
-        const Sprite *s = &spr[sprs[k].idx];
-        int x = sprs[k].x;
-        int z = sprs[k].z - (IS_DECAL(s->frame) ? M(3) : 0);
-        int sx8 = (60 << 8) + ((x * FX) << 8) / z;
-        int sb8 = (HORIZON << 8) + (((C->h - s->h) * FY) << 8) / z;
+        int i = skey[k] & 255;
+        const Sprite *s = &spr[i];
+        int x = sprx[i];
+        int z = (int)(skey[k] >> 8) - (IS_DECAL(s->frame) ? M(3) : 0);
+        /* x*FX*256/z == x*recip_z[z]/512 and dh*FY*256/z == dh*recip_z[z]/256: multiplies, no divisions */
+        int sx8 = (60 << 8) + (int)(((s64)x * recip_z[z]) >> 9);
+        int sb8 = (HORIZON << 8) + (int)(((s64)(C->h - s->h) * recip_z[z]) >> 8);
         blit(&spr_frames[s->frame & 0x7FFF], sx8, sb8, z, 0, s->frame >> 15);
     }
 }

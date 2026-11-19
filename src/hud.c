@@ -246,7 +246,7 @@ void hud_draw(u16 *fb)
             tx = 74; width = 27;
         }
         if (g_hud.dlg_who && g_hud.dlg_who[0]) text(tx, 112, g_hud.dlg_who, COL_YELLOW, 1);
-        static char lines[3][40];
+        EWRAM_BSS static char lines[3][40];
         int n = wrap_lines(g_hud.dlg_l1, g_hud.dlg_l2, width, lines);
         for (int i = 0; i < n; i++) text(tx, 123 + i * 10, lines[i], COL_WHITE, 1);
         text(228, 150, ">", COL_YELLOW, 1);
@@ -347,16 +347,21 @@ IWRAM_ARM void radar_build(u32 *t, int part)
         int py = 32 + y;
         u32 *trow = t + (py >> 3) * 64 + (py & 7);
         u32 acc = 0;
-        for (int x = -xo; x <= xo; x++, u += sxx, v += sxy) {
-            int px = 32 + x, col;
-            if (x < -xi || x > xi) col = 4;
-            else {
-                unsigned mx = (unsigned)u >> 16, my = (unsigned)v >> 16;
-                col = (mx < MM_W && my < MM_W) ? minimap[my * MM_W + mx] : 3;
-            }
-            acc |= (u32)col << ((px & 7) * 4);
-            if ((px & 7) == 7 || x == xo) { trow[(px >> 3) * 8] = acc; acc = 0; }
+        /* left rim, interior (map lookups), right rim: same pixels as a per-pixel rim test */
+        int lo = xi < 0 ? xo + 1 : -xi, hi = xi < 0 ? xo : xi;
+        int px = 32 - xo, sh = (px & 7) * 4;
+        u32 *dst = trow + (px >> 3) * 8;
+#define RPUT(c) do { acc |= (u32)(c) << sh; sh += 4; if (sh == 32) { *dst = acc; dst += 8; acc = 0; sh = 0; } } while (0)
+        int x = -xo;
+        for (; x < lo; x++) RPUT(4);
+        u += (x + xo) * sxx; v += (x + xo) * sxy;
+        for (; x <= hi; x++, u += sxx, v += sxy) {
+            unsigned mx = (unsigned)u >> 16, my = (unsigned)v >> 16;
+            RPUT((mx < MM_W && my < MM_W) ? minimap[my * MM_W + mx] : 3);
         }
+        for (; x <= xo; x++) RPUT(4);
+#undef RPUT
+        if (sh) *dst = acc;
     }
     if (part != 3) return;
     /* pickups: a pistol (cyan, white outline) for guns, a first-aid box (red cross on white) for
