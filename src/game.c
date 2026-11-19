@@ -70,7 +70,7 @@ EWRAM_BSS static Car cars[MAX_CARS];
 static int ncars;
 EWRAM_BSS static Ped peds[MAX_PEDS];
 EWRAM_BSS static Drop drops[MAX_DROPS];
-static Flash flashes[MAX_FLASH];
+EWRAM_BSS static Flash flashes[MAX_FLASH];
 EWRAM_BSS static Pickup pickups[MAX_PICKUPS];
 
 static struct {
@@ -484,7 +484,7 @@ static void move_car(Car *c, int dt)
 typedef struct { int x, y; s16 t; } Boom;
 #define MAX_BOOMS 6
 #define BOOM_LEN (TICKS * 7 / 10)
-static Boom booms[MAX_BOOMS];
+EWRAM_BSS static Boom booms[MAX_BOOMS];
 static int mission, mstate;
 static int cut_on, cut_t;                     /* in-engine cutscene: letterbox + scripted camera */
 static void eject_driver(Car *c);
@@ -944,6 +944,8 @@ static void update_peds(int dt0)
         for (int k = 0; k < n_near; k++) {
             int c = near_cars[k];
             int ox, oy;
+            int qx = (cars[c].x >> 8) - x, qy = (cars[c].y >> 8) - y;
+            if (qx > M(4.5) || qx < -M(4.5) || qy > M(4.5) || qy < -M(4.5)) continue;   /* far apart: skip the full test */
             if (!point_vs_car(&cars[c], x, y, M(0.3), &ox, &oy)) continue;
             int vx, vy; car_vel(&cars[c], &vx, &vy);
             int sp = dist_approx(vx, vy);
@@ -1033,7 +1035,7 @@ static const u8 w_auto[NWEAP]   = { 0, 0, 1, 0, 0, 0 };
 /* rockets: real projectiles. A direct hit sets the car ablaze at once; the blast does the rest */
 #define MAX_ROCKETS 3
 typedef struct { int x, y, vx, vy; s16 life, h; u8 active; } Rocket;      /* x,y q8 units; v q8 units/s */
-static Rocket rockets[MAX_ROCKETS];
+EWRAM_BSS static Rocket rockets[MAX_ROCKETS];
 static int point_vs_car(const Car *c, int x, int y, int pad, int *ox, int *oy);
 static void rocket_fire(int head)
 {
@@ -1500,14 +1502,14 @@ static int is_eddie(const char *w) { return w && w[0] == 'E' && w[1] == 'D'; }
 #define NMISSIONS 9
 static int mission, mstate, mtimer;          /* mstate: 0 marker shown, 1 active */
 static int phase;                            /* step within the current job */
-static int mission_start_x[NMISSIONS], mission_start_y[NMISSIONS];
+EWRAM_BSS static int mission_start_x[NMISSIONS], mission_start_y[NMISSIONS];
 static int garage_x, garage_y, drop_x, drop_y, safe_x, safe_y, pier_x, pier_y;
 static int dock_x, dock_y, club_x, club_y, corner_x, corner_y, mill_x, mill_y;
 static int time_left, pressure, chase_phase;
 static const int hosp_bx = 2, hosp_by = 3, station_bx = 6, station_by = 6;
 /* what the current job wants shown: one ground marker and up to 6 radar targets */
 static int mk_x, mk_y, mk_col = -1;
-static int nmb, mb_x[6], mb_y[6], mb_c[6];
+static int nmb; EWRAM_BSS static int mb_x[6], mb_y[6], mb_c[6];
 static void mblip(int x, int y, int c) { if (nmb < 6) { mb_x[nmb] = x; mb_y[nmb] = y; mb_c[nmb++] = c; } }
 static const int gang_slot[3] = { SLOT_RIVAL0, SLOT_RIVAL0 + 1, SLOT_MISSION };
 
@@ -1825,6 +1827,20 @@ static void spawn_lamps(void)
         else           { l->x = off; l->y = along; l->head = side > 0 ? 2048 : 0; }
     }
 }
+/* lamps sorted into city blocks, so a frame only looks at the blocks around the camera */
+EWRAM_BSS static u16 lamp_start[64], lamp_count[64];
+static int lamp_block(const Lamp *l) { return clampi(l->y >> 10, 0, 7) * 8 + clampi(l->x >> 10, 0, 7); }
+static void bucket_lamps(void)
+{
+    EWRAM_BSS static Lamp tmp[MAX_LAMPS];
+    for (int b = 0; b < 64; b++) lamp_count[b] = 0;
+    for (int i = 0; i < nlamps; i++) lamp_count[lamp_block(&lamps[i])]++;
+    int at = 0;
+    for (int b = 0; b < 64; b++) { lamp_start[b] = (u16)at; at += lamp_count[b]; }
+    u16 fill[64]; for (int b = 0; b < 64; b++) fill[b] = lamp_start[b];
+    for (int i = 0; i < nlamps; i++) tmp[fill[lamp_block(&lamps[i])]++] = lamps[i];
+    for (int i = 0; i < nlamps; i++) lamps[i] = tmp[i];
+}
 
 /* ------------------------------------------------------------ street props */
 typedef struct { s16 x, y; u16 frame; s16 head; s16 h; } Prop;     /* head < 0: no view angles */
@@ -1915,7 +1931,7 @@ void game_init(void)
         q->speed = Q8(M(1.2)) + (int)(rnd() % (u32)Q8(M(0.5)));
         q->phase = rnd() & 511;
     }
-    spawn_lamps();
+    spawn_lamps(); bucket_lamps();
     spawn_props();
     setup_pickups();
     setup_missions();
@@ -2578,13 +2594,21 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         push(g_trees[i].x, g_trees[i].y, TREE);
     }
     view_lim = M(70);
-    for (int i = 0; i < nlamps; i++) {
-        int ldx = lamps[i].x - cm->x, ldy = lamps[i].y - cm->y;
-        if (iabs(ldx) > M(70) || iabs(ldy) > M(70)) continue;      /* cheap reject first */
-        int dd = view_dist(lamps[i].x, lamps[i].y, &view);
-        if (dd < 0) continue;
-        int rel = (lamps[i].head - view) & 4095;
-        push(lamps[i].x, lamps[i].y, LAMP + (((rel + 256) >> 9) & 7));
+    {   /* lamps within 70 m: only the 3x3 blocks around the camera (a block is 64 m) */
+        int cbx = cm->x >> 10, cby = cm->y >> 10;
+        for (int bj = cby - 1; bj <= cby + 1; bj++)
+        for (int bi = cbx - 1; bi <= cbx + 1; bi++) {
+            if ((unsigned)bi > 7 || (unsigned)bj > 7) continue;
+            int b = bj * 8 + bi;
+            for (int i = lamp_start[b], e = lamp_start[b] + lamp_count[b]; i < e; i++) {
+                int ldx = lamps[i].x - cm->x, ldy = lamps[i].y - cm->y;
+                if (iabs(ldx) > M(70) || iabs(ldy) > M(70)) continue;
+                int dd = view_dist(lamps[i].x, lamps[i].y, &view);
+                if (dd < 0) continue;
+                int rel = (lamps[i].head - view) & 4095;
+                push(lamps[i].x, lamps[i].y, LAMP + (((rel + 256) >> 9) & 7));
+            }
+        }
     }
     /* out of town: coastal street lights and the wooded hills */
     if (cm->x < M(150) || cm->y < M(150) || cm->x > M(380) || cm->y > M(380)) {

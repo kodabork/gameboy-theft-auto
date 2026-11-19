@@ -64,7 +64,7 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
   - `PROF=file PROF_FROM=sec` writes per-PC cycles; aggregate them with `tools/profsym.py` and `tools/byline.py`.
   - `SRAM_FILE=path` keeps save memory between runs (used for the save, reboot, CONTINUE test).
   - `FIXDT=819` fixes the game clock and indexes keys by displayed frame, so different builds play the identical game; `HIST=a-b` prints VBlanks per frame and fps over displayed frames a..b.
-  - **Benchmark:** `tools/bench.sh [rom]` (needs `build/bench.txt`, the standard drive script in displayed frames). v0.19: 14.4 fps, v0.20: 18.2 fps.
+  - **Benchmark:** `tools/bench.sh [rom]` (needs `build/bench.txt`, the standard drive script in displayed frames). v0.19: 14.4 fps, v0.20: 18.2 fps, v0.24: 19.0 fps.
 
 ## Sound
 - `src/sound.c`: DirectSound mixer (engine, horn, skid, guns, siren, effect synth) and PSG radio. Five stations (`stations[]`): 64-step patterns for lead, chord stabs, bass and drums.
