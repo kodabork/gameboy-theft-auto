@@ -23,12 +23,19 @@ static void wav(const char *path, const signed char *pcm, int n)
 
 int main(int argc, char **argv)
 {
-    static const char *names[NSFX] = { "tune", "pickup", "glass", "start", "pass", "fail", "yelp", "cash", "ricochet", "meow" };
+    static const char *names[NSFX] = { "tune", "pickup", "glass", "start", "pass", "fail", "yelp", "cash", "ricochet", "meow",
+                                            "pump", "bolt", "shell", "launch", "dry", "swap" };
     const char *pre = argc > 1 ? argv[1] : "sfx_";
     static signed char pcm[SAMPLES * 200];
-    for (int k = 0; k < NSFX; k++) {
-        memset(&g_snd, 0, sizeof g_snd); memset(sv, 0, sizeof sv); memset(sfx_pend, 0, sizeof sfx_pend);
-        g_snd.sfx = 1 << k;
+    /* every weapon as the game plays it: the shot plus its mechanical follow-up */
+    static const char *gnames[7] = { 0, "gun_pistol", "gun_smg", "gun_shotgun", "gun_rifle", "explosion", "gun_rocket" };
+    static const int gsfx[7] = { 0, SFX_SHELL, 0, SFX_PUMP, SFX_BOLT, 0, SFX_LAUNCH };
+    for (int k = 1 - 7; k < NSFX; k++) {
+        memset(&g_snd, 0, sizeof g_snd); memset(sv, 0, sizeof sv); memset(sfx_pend, 0, sizeof sfx_pend); memset(gv, 0, sizeof gv);
+        int gk = k + 7;
+        if (k < 0 && gk == 0) continue;
+        if (k < 0) { g_snd.shot = gk; g_snd.shot_vol = 64; g_snd.sfx = gsfx[gk]; }
+        else g_snd.sfx = 1 << k;
         int peak = 0, frames = 0;
         for (int fr = 0; fr < 200; fr++) {
             sfx_tick();
@@ -37,9 +44,9 @@ int main(int argc, char **argv)
             for (int i = 0; i < SAMPLES; i++) { int v = pcm[fr * SAMPLES + i]; if (v < 0) v = -v; if (v > peak) peak = v; if (v > 2) active = 1; }
             if (active) frames = fr + 1;
         }
-        char path[256]; snprintf(path, sizeof path, "%s%s.wav", pre, names[k]);
+        char path[256]; snprintf(path, sizeof path, "%s%s.wav", pre, k < 0 ? gnames[gk] : names[k]);
         wav(path, pcm, (frames + 6) * SAMPLES);
-        printf("%-9s %5.2f s  peak %3d/127\n", names[k], frames / 59.73, peak);
+        printf("%-11s %5.2f s  peak %3d/127\n", k < 0 ? gnames[gk] : names[k], frames / 59.73, peak);
     }
     return 0;
 }

@@ -68,10 +68,12 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 
 ## Sound
 - `src/sound.c`: DirectSound mixer (engine, horn, skid, guns, siren, effect synth) and PSG radio. Five stations (`stations[]`): 64-step patterns for lead, chord stabs, bass and drums.
-- Effects: `g_snd.sfx |= SFX_*` from game code. Each effect is a short note list (`SfxNote`) played on 4 synth voices. `tools/sfx_wav.c` renders every effect to WAV with the real mixer.
+- Effects: `g_snd.sfx |= SFX_*` from game code. Each effect is a short note list (`SfxNote`) played on 4 synth voices. `tools/sfx_wav.c` renders every effect, and every gun with its follow-up (`SFX_SHELL`, `SFX_PUMP`, `SFX_BOLT`, `SFX_LAUNCH`), to WAV with the real mixer. Gun recipes are in `recipes[]`: 1 pistol, 2 SMG, 3 shotgun, 4 rifle, 5 explosion, 6 rocket launch.
 
 ## People
 - `tools/sprites_people.py` (skeleton + gait curves). Per set: 9 stored view directions of 16 (the rest mirrored), 26 frames each (idle, walk 12, run 12, aim), 8 down frames, 24 ragdoll tumble frames (3 views x 8 pitch angles). Offsets `PED_DIR_FRAMES`, `PED_DOWN`, `PED_TUMBLE`, `PED_BLOCK` (far set) come from `assets.h`.
+- v0.25 body (owner said the old one was stiff and lanky, with odd bits on the arms): no shoulder balls (deltoid ellipsoids plus a trapezius cone from the neck), fists instead of flat hand ovals, fuller limbs. Arms swing *opposite* the same-side leg (`sh` in `GAIT` is used directly), hips and shoulders twist (`tw`), and running elbows stay bent at about 1.15-1.35 rad.
+- Weapon stances: `Human(mode='aim', weapon=...)` with 'pistol' (the normal aim frame) or 'smg', 'shotgun', 'rifle', 'rocket' (hands placed on the weapon by 2-bone IK, `GUNS`, `_gun_sdf`). These are player-only frames stored after the player block: `PED_PLAYER + PED_STANCE + dir * PED_NSTANCE + (weapon - 2)`.
 - Ragdolls: `update_ragdoll` in `game.c` (velocity, gravity, bounces, wall rebounds, slide, settle); `kill_ped` launches them.
 
 ## Car models

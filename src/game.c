@@ -1108,13 +1108,13 @@ static void player_fire(u16 keys, u16 pressed, int dt)
     if (pressed & KEY_L) {                      /* cycle owned weapons */
         for (int k = 1; k <= NWEAP; k++) {
             int w = (pl.weapon + k) % NWEAP;
-            if (w == 0 || (((pl.owned >> (w - 1)) & 1) && pl.ammo[w] > 0)) { pl.weapon = (u8)w; break; }
+            if (w == 0 || (((pl.owned >> (w - 1)) & 1) && pl.ammo[w] > 0)) { if (w != pl.weapon) g_snd.sfx |= SFX_SWAP; pl.weapon = (u8)w; break; }
         }
     }
     int w = pl.weapon;
     if (w == 0 || !(keys & KEY_A) || pl.fire_cd > 0) return;
     if (!w_auto[w] && !(pressed & KEY_A)) return;          /* semi-auto: one shot per press */
-    if (pl.ammo[w] <= 0) { pl.weapon = 0; return; }
+    if (pl.ammo[w] <= 0) { pl.weapon = 0; g_snd.sfx |= SFX_DRY; return; }
     pl.fire_cd = w_rate[w];
     pl.ammo[w]--;
     pl.aim_t = TICKS / 2;
@@ -1132,7 +1132,7 @@ static void player_fire(u16 keys, u16 pressed, int dt)
         pl.head = Q8(aim);
         rocket_fire(aim);
         muzzle(plx(), ply(), aim, M(1.35));
-        g_snd.shot = 3; g_snd.shot_vol = 52;
+        g_snd.shot = 6; g_snd.shot_vol = 64; g_snd.sfx |= SFX_LAUNCH;
         panic(plx(), ply(), M(50));
         return;
     }
@@ -1193,6 +1193,7 @@ static void player_fire(u16 keys, u16 pressed, int dt)
     }
     muzzle(plx(), ply(), aimang, M(1.35));
     g_snd.shot = w; g_snd.shot_vol = 64;
+    if (w == 3) g_snd.sfx |= SFX_PUMP; else if (w == 4) g_snd.sfx |= SFX_BOLT; else if (w == 1) g_snd.sfx |= SFX_SHELL;
     panic(plx(), ply(), w == 1 ? M(35) : M(50));
     if (cop_nearby(M(40))) crime(1);
 }
@@ -2467,6 +2468,11 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
             int rel = ((pl.head >> 8) - view) & 4095;
             int dir = ((rel + 256) >> 9) & 7;
             if (pl.dead_t > 0 && pl.dead_kind == 0) push(plx(), ply(), PED_GREY + PED_DOWN + dir);
+            else if (pl.aim_t > 0 && pl.weapon >= 2) {     /* two-handed stance for the SMG, shotgun, rifle, rocket launcher */
+                int d = ((rel + 128) >> 8) & 15, flip = 0;
+                if (d > 8) { d = 16 - d; flip = 0x8000; }
+                push(plx(), ply(), (PED_PLAYER + PED_STANCE + d * PED_NSTANCE + pl.weapon - 2) | flip);
+            }
             else push(plx(), ply(), ped_frame(PED_PLAYER, rel, pl.moving, pl.running, pl.aim_t > 0, pl.phase));
         }
     }
