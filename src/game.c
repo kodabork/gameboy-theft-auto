@@ -1391,7 +1391,7 @@ static void update_pickups(int dt)
 }
 
 /* ------------------------------------------------------------ story */
-/* Act One of STORY.md. Niko Reyes comes home to Steel Harbor after eight years on cargo ships to
+/* Act One of STORY.md. Niko B comes home to Steel Harbor after eight years on cargo ships to
    bury his father Sal, a tugboat captain whose boat, the Lucky Marie, sank with him aboard. Victor
    Moran says Sal owed him $10,000, and that the debt and the family house (where Niko's sister
    Ana still lives) now belong to Moran. Niko works it off: cars for Marta, product for Jinx, and
@@ -1406,7 +1406,7 @@ static const Page *dlg; static int dlg_n, dlg_i, dlg_then;      /* dlg_then: 1 =
 static const Page st_intro[] = {
     { "", "STEEL HARBOR. A CITY THAT RUNS", "ON FAVOURS AND DIRTY MONEY." },
     { "NIKO", "EIGHT YEARS ON CARGO SHIPS.", "AND I COME HOME FOR A FUNERAL." },
-    { "MARTA", "NIKO REYES. SAL'S BOY. I'M SORRY.", "YOUR DAD WAS A GOOD MAN." },
+    { "MARTA", "NIKO B. SAL'S BOY. I'M SORRY.", "YOUR DAD WAS A GOOD MAN." },
     { "MARTA", "BAD NEWS. MORAN SAYS SAL OWED HIM", "$10,000. NOW IT'S YOURS." },
     { "NIKO", "DAD NEVER BORROWED A DIME", "IN HIS LIFE." },
     { "MARTA", "MORAN DOESN'T CARE. HE'LL TAKE THE", "HOUSE. AND ANA STILL LIVES THERE." },
@@ -1422,7 +1422,7 @@ static const Page st_m1[] = {
     { "NIKO", "WHAT'S IN IT?", 0 },
     { "JINX", "THE KIND OF STUFF THAT GETS YOU", "TEN YEARS. SO DON'T GET CAUGHT." } };
 static const Page st_m2[] = {
-    { "MORAN", "NIKO REYES. VICTOR MORAN.", "YOUR FATHER'S DEBT IS YOURS NOW." },
+    { "MORAN", "NIKO B. VICTOR MORAN.", "YOUR FATHER'S DEBT IS YOURS NOW." },
     { "MORAN", "MY BOOKKEEPER IS TALKING TO COPS.", "THE MAN IN THE SUIT. SHUT HIM UP." },
     { "NIKO", "AND THAT COMES OFF THE DEBT?", 0 },
     { "MORAN", "$1,500 OF IT. SAY HELLO TO ANA", "FOR ME. LOVELY GIRL." } };

@@ -5,7 +5,7 @@ The plan for a story of about **6 hours**: 4 acts, 40 story missions, plus side 
 **Act One is in the game now**: the 9 existing jobs, rewritten for Niko. Acts Two to Four are the plan: their missions get built once the map grows.
 
 ## Premise
-**Niko Reyes** grew up on the Steel Harbor waterfront, the son of a tugboat captain. At 18 he left to work container ships around the world and stayed away for eight years. He comes home for one reason: his father **Sal** is dead, lost when his tug, the *Lucky Marie*, sank in a storm. The police called it an accident.
+**Niko B** grew up on the Steel Harbor waterfront, the son of a tugboat captain. At 18 he left to work container ships around the world and stayed away for eight years. He comes home for one reason: his father **Sal** is dead, lost when his tug, the *Lucky Marie*, sank in a storm. The police called it an accident.
 
 At the funeral, loan shark **Victor Moran** turns up holding a page from his ledger. It says Sal owed him $10,000, and that the debt passed to his son, with the family house as collateral. Niko's younger sister **Ana**, a night-shift nurse, still lives in that house.
 
@@ -16,9 +16,9 @@ Theme: **debts, who invents them, and who pays.** Steel Harbor runs on favours, 
 ## Cast (all original)
 | Character | Who they are | Outfit in game | Acts |
 |---|---|---|---|
-| **Niko Reyes** | The player. Ex-merchant sailor; calm, dry, protective of Ana. Knows boats better than cars, at first. | Player model | 1-4 |
-| **Ana Reyes** | Niko's younger sister, nurse at Harbor General. Furious at Niko for leaving, the one person he can't lie to. | (new: female) | 1-4 |
-| **Sal Reyes** | Niko's father (dead). Refused to run Moran's cargo on his tug. | — | (memory) |
+| **Niko B** | The player. Ex-merchant sailor; calm, dry, protective of Ana. Knows boats better than cars, at first. | Player model | 1-4 |
+| **Ana** | Niko's younger sister, nurse at Harbor General. Furious at Niko for leaving, the one person he can't lie to. | (new: female) | 1-4 |
+| **Sal** | Niko's father (dead). Refused to run Moran's cargo on his tug. | — | (memory) |
 | **Marta Kowal** | Runs a garage under the elevated rail. Sal's old friend; tough, practical. First to give Niko work. | Red | 1-4 |
 | **Jinx** | Courier who moves anything for anyone. Funny, nervous, always three moves ahead or behind. | Green | 1-3 |
 | **Victor Moran** | Loan shark and docks boss. Invents debts to seize waterfront homes. | Suit | 1 |

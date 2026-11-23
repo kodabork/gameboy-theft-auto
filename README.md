@@ -16,6 +16,18 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.26
+- **New hero: Niko B.** After eight years working cargo ships, Niko comes home to Steel Harbor to
+  bury his father Sal, a tugboat captain whose boat, the *Lucky Marie*, sank with him aboard.
+  Loan shark Victor Moran says Sal owed him $10,000 and comes after the family house, where Niko's
+  sister Ana still lives.
+- **Act One rewritten.** The nine jobs play the same, with new dialogue: the ledger proves Moran
+  invents debts to take waterfront homes, Sal's deckhand Rudy reveals Moran's men sank the
+  *Lucky Marie*, and the ending points at the real villain, Councilman Pryce.
+- **The full story is planned** in `STORY.md`: 4 acts and 40 missions (about 6 hours) across
+  Docks, Downtown, the Industrial port and Hills, and Gull Island. Acts Two to Four get built as
+  the map grows.
+
 ## What's new in v0.25
 - **Reworked people.** The player and every pedestrian were rebuilt:
   - The lumps on the arms are gone. Each shoulder had a ball on top that stuck up like a pad, and
