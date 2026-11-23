@@ -28,7 +28,7 @@
 #define PED_CIV_END 42      /* 0..41 street population (incl. beat cops) */
 #define PED_CREW0 42        /* 42..44 cops that jump out of police cars */
 #define PED_MISSION0 45     /* 45..54 job targets and gunmen */
-#define PED_ACTOR 55        /* the person Eddie talks to in a cutscene */
+#define PED_ACTOR 55        /* the person Niko talks to in a cutscene */
 
 enum { AI_NONE, AI_TRAFFIC, AI_POLICE, AI_RIVAL };
 enum { P_CIV, P_COP, P_TARGET, P_GUARD };
@@ -1391,73 +1391,80 @@ static void update_pickups(int dt)
 }
 
 /* ------------------------------------------------------------ story */
-/* Eddie Vance comes to Steel Harbor to work for his cousin Rudy and finds Rudy gone, with a
-   $10,000 "debt" to the loan shark Victor Moran pinned on him. He works it off: stealing cars for
-   Marta, running product for Jinx, and doing Moran's dirty work, some of it ordered by
-   Detective Shaw, Moran's man on the force. Jinx steals Moran's ledger, which proves the debts
-   are invented. Eddie takes Shaw's cash run apart, Rudy comes out of hiding, and it ends at the
-   old pier. */
+/* Act One of STORY.md. Niko Reyes comes home to Steel Harbor after eight years on cargo ships to
+   bury his father Sal, a tugboat captain whose boat, the Lucky Marie, sank with him aboard. Victor
+   Moran says Sal owed him $10,000, and that the debt and the family house (where Niko's sister
+   Ana still lives) now belong to Moran. Niko works it off: cars for Marta, product for Jinx, and
+   Moran's dirty work, some of it ordered by Detective Shaw. Jinx steals Moran's ledger, which
+   proves the debts are invented to seize waterfront homes. Niko takes Shaw's cash run apart, and
+   Rudy, Sal's deckhand, comes out of hiding: Moran sank the Lucky Marie. It ends at the old pier,
+   and Moran's phone points at Councilman Pryce (Act Two). */
 typedef struct { const char *who, *l1, *l2; } Page;
 static const Page *dlg; static int dlg_n, dlg_i, dlg_then;      /* dlg_then: 1 = start mission */
+#define NPAGES(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 static const Page st_intro[] = {
     { "", "STEEL HARBOR. A CITY THAT RUNS", "ON FAVOURS AND DIRTY MONEY." },
-    { "EDDIE", "RUDY SAID HE HAD WORK FOR ME.", "NOW HIS PHONE'S DEAD." },
-    { "MARTA", "YOU'RE RUDY'S COUSIN? HE'S GONE.", "SKIPPED TOWN OWING VICTOR MORAN." },
-    { "MARTA", "MORAN SAYS FAMILY PAYS FAMILY DEBTS.", "THAT MEANS YOU. $10,000." },
-    { "EDDIE", "I DON'T HAVE TEN GRAND.", "I DON'T HAVE TEN BUCKS." },
-    { "MARTA", "THEN YOU WORK. I RUN A GARAGE.", "FOLLOW THE YELLOW MARKER." },
+    { "NIKO", "EIGHT YEARS ON CARGO SHIPS.", "AND I COME HOME FOR A FUNERAL." },
+    { "MARTA", "NIKO REYES. SAL'S BOY. I'M SORRY.", "YOUR DAD WAS A GOOD MAN." },
+    { "MARTA", "BAD NEWS. MORAN SAYS SAL OWED HIM", "$10,000. NOW IT'S YOURS." },
+    { "NIKO", "DAD NEVER BORROWED A DIME", "IN HIS LIFE." },
+    { "MARTA", "MORAN DOESN'T CARE. HE'LL TAKE THE", "HOUSE. AND ANA STILL LIVES THERE." },
+    { "MARTA", "I RUN A GARAGE. I'VE GOT WORK.", "FOLLOW THE YELLOW MARKER." },
 };
 static const Page st_m0[] = {
     { "MARTA", "A RICH KID LEFT A YELLOW SUPERCAR", "ON THE STREET. I HAVE A BUYER." },
-    { "EDDIE", "AND IF THE KID COMES BACK?", 0 },
-    { "MARTA", "THEN DRIVE FASTER. BRING IT TO MY", "GARAGE. AND DON'T WRECK IT." } };
+    { "NIKO", "I DRIVE TUGBOATS, NOT SUPERCARS.", 0 },
+    { "MARTA", "THEN LEARN FAST. BRING IT TO MY", "GARAGE. AND DON'T WRECK IT." } };
 static const Page st_m1[] = {
-    { "JINX", "YOU'RE THE NEW GUY? I'M JINX.", "I MOVE PRODUCT FOR WHOEVER PAYS." },
+    { "JINX", "YOU'RE SAL'S KID? I'M JINX.", "I MOVE PRODUCT FOR WHOEVER PAYS." },
     { "JINX", "A PACKAGE IS WAITING AT THE DOCKS.", "PICK IT UP. BRING IT TO THE CLUB." },
-    { "EDDIE", "WHAT'S IN IT?", 0 },
+    { "NIKO", "WHAT'S IN IT?", 0 },
     { "JINX", "THE KIND OF STUFF THAT GETS YOU", "TEN YEARS. SO DON'T GET CAUGHT." } };
 static const Page st_m2[] = {
-    { "MORAN", "SO YOU'RE THE COUSIN. VICTOR MORAN.", "RUDY'S DEBT IS YOURS NOW." },
+    { "MORAN", "NIKO REYES. VICTOR MORAN.", "YOUR FATHER'S DEBT IS YOURS NOW." },
     { "MORAN", "MY BOOKKEEPER IS TALKING TO COPS.", "THE MAN IN THE SUIT. SHUT HIM UP." },
-    { "EDDIE", "AND THAT COMES OFF THE DEBT?", 0 },
-    { "MORAN", "$1,500 OF IT.", "DON'T MAKE ME ASK TWICE." } };
+    { "NIKO", "AND THAT COMES OFF THE DEBT?", 0 },
+    { "MORAN", "$1,500 OF IT. SAY HELLO TO ANA", "FOR ME. LOVELY GIRL." } };
 static const Page st_m3[] = {
     { "MORAN", "THE EASTSIDE KINGS ARE SELLING", "ON MY CORNER. SEND THEM A MESSAGE." },
     { "MORAN", "THREE CARS, PARKED LIKE THEY OWN", "THE STREET. BURN ALL THREE." },
-    { "EDDIE", "THEY'LL SHOOT BACK.", 0 },
+    { "NIKO", "THEY'LL SHOOT BACK.", 0 },
     { "MORAN", "THAT'S WHY I'M SENDING YOU.", 0 } };
 static const Page st_m4[] = {
     { "SHAW", "DETECTIVE SHAW. I WORK FOR MORAN", "WHEN THE CITY ISN'T PAYING ME." },
     { "SHAW", "TWO OF MY OFFICERS ARE DIGGING", "INTO HIS BUSINESS. HONEST ONES." },
-    { "EDDIE", "YOU WANT ME TO KILL COPS?", "YOUR OWN COPS?" },
-    { "SHAW", "THEY'RE PARKED BY THE OLD MILL.", "THEN LOSE THE HEAT. IT'LL BE BAD." } };
+    { "NIKO", "YOU WANT ME TO KILL COPS?", "YOUR OWN COPS?" },
+    { "SHAW", "YOUR SISTER WORKS NIGHTS, RIGHT?", "OLD MILL. THEN LOSE THE HEAT." } };
 static const Page st_m5[] = {
     { "MORAN", "A VAN FULL OF MY PRODUCT HAS TO", "REACH THE EAST COAST ROAD." },
     { "MORAN", "90 SECONDS. THE BUYER DOESN'T WAIT,", "AND NEITHER DO I." } };
 static const Page st_m6[] = {
-    { "JINX", "EDDIE! MORAN'S MEN ARE COMING.", "THEY KNOW I TOOK HIS LEDGER." },
-    { "JINX", "IT PROVES RUDY NEVER OWED A DIME.", "MORAN MAKES UP DEBTS TO OWN PEOPLE." },
-    { "EDDIE", "SO I'VE BEEN WORKING FOR NOTHING.", 0 },
+    { "JINX", "NIKO! MORAN'S MEN ARE COMING.", "THEY KNOW I TOOK HIS LEDGER." },
+    { "JINX", "SAL NEVER OWED HIM. NOBODY DID.", "MORAN INVENTS DEBTS TO TAKE HOMES." },
+    { "NIKO", "HOMES BY THE WATER. LIKE OURS.", 0 },
     { "JINX", "DEAL WITH HIS GUYS, THEN MEET ME", "AT THE SAFEHOUSE. LOSE THE COPS." } };
 static const Page st_m7[] = {
     { "MARTA", "THE LEDGER NAMES SHAW. TONIGHT HE", "MOVES MORAN'S CASH IN A BLACK SUV." },
     { "MARTA", "STAY ON HIS BUMPER UNTIL HE BAILS.", "THEN MAKE SURE HE STAYS DOWN." },
-    { "EDDIE", "MORAN WILL KNOW IT WAS ME.", 0 },
+    { "NIKO", "MORAN WILL KNOW IT WAS ME.", 0 },
     { "MARTA", "GOOD. LET HIM BE SCARED FOR ONCE.", 0 } };
 static const Page st_m8[] = {
-    { "RUDY", "EDDIE. I'M SORRY. I NEVER OWED HIM.", "HE MADE IT UP TO OWN US BOTH." },
-    { "EDDIE", "I KNOW. JINX SHOWED ME THE LEDGER.", "WHERE IS HE?" },
+    { "RUDY", "NIKO. I WAS ON THE LUCKY MARIE", "THE NIGHT SHE WENT DOWN." },
+    { "RUDY", "SAL WOULDN'T RUN MORAN'S CARGO.", "SO MORAN'S MEN SANK HER. WITH HIM." },
+    { "NIKO", "WHERE IS MORAN?", 0 },
     { "RUDY", "THE OLD PIER, NORTHWEST. HE'S GOT", "GUNS WITH HIM. COPS ON THE WAY." },
-    { "EDDIE", "THEN I'M PAYING HIM BACK.", "IN FULL." } };
+    { "NIKO", "THEN HE PAYS. IN FULL.", 0 } };
 static const Page st_end[] = {
-    { "RUDY", "IT'S OVER. MORAN'S GONE.", "NOBODY OWES ANYBODY ANYTHING." },
-    { "EDDIE", "THIS CITY STILL RUNS ON FAVOURS.", "NOW THEY'RE OURS." },
-    { "RUDY", "DRINKS ARE ON ME, COUSIN.", "FOR THE NEXT TEN YEARS." },
-    { "", "THE END.", "THANKS FOR PLAYING! THE CITY'S YOURS." } };
+    { "RUDY", "IT'S OVER. MORAN'S GONE.", "SAL CAN REST NOW." },
+    { "NIKO", "MORAN'S PHONE KEPT RINGING.", "ONE NAME. 'PRYCE'." },
+    { "RUDY", "COUNCILMAN PRYCE? HE WANTS THE", "WHOLE WATERFRONT FOR A CASINO." },
+    { "NIKO", "THEN THIS ISN'T OVER.", 0 },
+    { "", "END OF ACT ONE.", "THE CITY'S YOURS. FOR NOW." } };
 
 static const Page *const mission_intro[] = { st_m0, st_m1, st_m2, st_m3, st_m4, st_m5, st_m6, st_m7, st_m8 };
-static const u8 mission_intro_n[] = { 3, 4, 4, 4, 4, 2, 4, 4, 4 };
+static const u8 mission_intro_n[] = { NPAGES(st_m0), NPAGES(st_m1), NPAGES(st_m2), NPAGES(st_m3), NPAGES(st_m4),
+                                      NPAGES(st_m5), NPAGES(st_m6), NPAGES(st_m7), NPAGES(st_m8) };
 static const char *const mission_title[] = { "HOT WHEELS", "CANDY RUN", "THE BOOKKEEPER", "WRONG CORNER", "DIRTY BLUE",
                                              "SPECIAL DELIVERY", "THE LEDGER", "CASH RUN", "LAST CALL" };
 /* who gives each job, and what they wear */
@@ -1475,7 +1482,7 @@ static void dialog(const Page *pg, int n, int then)
     dlg = pg; dlg_n = n; dlg_i = 0; dlg_then = then; gstate = GS_DIALOG; cut_on = 0;
 }
 
-/* a cutscene: the speaker stands facing Eddie and the camera cuts between them */
+/* a cutscene: the speaker stands facing Niko and the camera cuts between them */
 static void cutscene(const Page *pg, int n, int then, int model)
 {
     Ped *a = &peds[PED_ACTOR];
@@ -1497,7 +1504,7 @@ static void cutscene(const Page *pg, int n, int then, int model)
     dialog(pg, n, then);
     cut_on = 1; cut_t = 0;
 }
-static int is_eddie(const char *w) { return w && w[0] == 'E' && w[1] == 'D'; }
+static int is_niko(const char *w) { return w && w[0] == 'N' && w[1] == 'I'; }
 
 /* ------------------------------------------------------------ missions */
 #define NMISSIONS 9
@@ -1547,7 +1554,7 @@ static void reward(int money, const char *text)
     if (done == NMISSIONS - 1) {                  /* the ending */
         wanted = 0; wanted_cool = 0;
         for (int i = 0; i < NPOLICE; i++) cars[SLOT_POLICE0 + i].active = 0;
-        cutscene(st_end, 4, 0, PED_WHITE);
+        cutscene(st_end, NPAGES(st_end), 0, PED_WHITE);
     }
     save_write(); has_save = 1;                   /* autosave after every job */
 }
@@ -2041,7 +2048,7 @@ static void meta_update(u16 keys, u16 pressed, int dt)
             if (menu_sel == 1) {
                 SaveData d;
                 if (save_read(&d)) { load_game(&d); gstate = GS_PLAY; msg("GAME LOADED", mission < NMISSIONS ? mission_title[mission] : "FREE ROAM", 3); }
-            } else { new_game_state(); cutscene(st_intro, 6, 0, PED_RED); }
+            } else { new_game_state(); cutscene(st_intro, NPAGES(st_intro), 0, PED_RED); }
         }
         return;
     }
@@ -2415,9 +2422,9 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         /* cutscene: an establishing two-shot, then over-the-shoulder cuts to whoever is talking */
         const Ped *ap = &peds[PED_ACTOR];
         int ax = ap->x >> 8, ay = ap->y >> 8, ex = plx(), ey = ply();
-        int a2 = iatan2(ay - ey, ax - ex);                       /* Eddie -> speaker */
+        int a2 = iatan2(ay - ey, ax - ex);                       /* Niko -> speaker */
         const char *who = dlg[dlg_i].who;
-        int shot = (dlg_i == 0 || !who || !who[0]) ? 0 : is_eddie(who) ? 2 : 1;
+        int shot = (dlg_i == 0 || !who || !who[0]) ? 0 : is_niko(who) ? 2 : 1;
         int cx = 0, cy = 0, ok = 0;
         if (shot) {
             int fx = shot == 1 ? ex : ax, fy = shot == 1 ? ey : ay;     /* listener: the camera stands behind them */
@@ -2427,7 +2434,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
             int side = (dir + 1024) & 4095;
             cx = fx - ((icos(dir) * back) >> 14) + ((icos(side) * M(1.6)) >> 14);
             cy = fy - ((isin(dir) * back) >> 14) + ((isin(side) * M(1.6)) >> 14);
-            if (shot == 1 && pl.in_car >= 0) {                       /* Eddie's car would block the view: swing round it */
+            if (shot == 1 && pl.in_car >= 0) {                       /* Niko's car would block the view: swing round it */
                 for (int k = 0; k < 2; k++) {
                     int look = (a2 + (k ? -480 : 480)) & 4095;
                     cx = ax - ((icos(look) * M(5.0)) >> 14); cy = ay - ((isin(look) * M(5.0)) >> 14);
