@@ -26,10 +26,11 @@ This is the plan the owner asked to queue up. Work goes down the **Next up** lis
 - **The full story (v0.33):** 40 missions in four acts on a scripted mission engine (`src/story_acts.h`).
   District locks were not added: every district is open from the start.
 
+- **Street crime (v0.34):** muggings, fights and carjackings near the player; cops chase, arrest or shoot,
+  patrol cars run down carjackers; killing a criminal pays a vigilante reward.
+
 ## Next up (owner's requests)
-1. **People and police react to each other.**
-   - Peds can commit crimes (mugging, carjacking, fights, running red lights). Nearby cops chase and arrest or shoot them, and peds flee, fight back or watch.
-   - Performance: evaluate a few peds per frame in round-robin rather than every ped every frame, so the CPU cost stays flat. Same number of peds and cars on screen as today.
+Nothing queued. Pick from the extras below, or ask for something new.
 
 ## Recommended extras (small ROM cost, little or no frame-rate cost)
 - **Side jobs with vehicles we already have:** taxi fares, ambulance runs, police vigilante, and car-thief export lists. No new art; mostly mission logic.

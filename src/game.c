@@ -34,7 +34,7 @@
 
 enum { AI_NONE, AI_TRAFFIC, AI_POLICE, AI_RIVAL };
 enum { P_CIV, P_COP, P_TARGET, P_GUARD };
-enum { S_WALK, S_FLEE, S_CHASE, S_IDLE };
+enum { S_WALK, S_FLEE, S_CHASE, S_IDLE, S_MUG, S_COPCHASE };
 
 typedef struct {
     int x, y;        /* q8 units */
@@ -62,6 +62,7 @@ typedef struct {
     int fx, fy;      /* threat / goal point (units) */
     int rvx, rvy, rvz, rh;   /* ragdoll: velocity (q8 units/s) and height above the ground (q8 units) */
     u16 rang; s16 rspin; u8 rag, rbounce;   /* tumble pitch (4096/turn), spin (per s), flying?, bounces */
+    s8 tgt; u8 crim;  /* street crime: target ped (or 100 + car), criminal flag (2 = armed) */
 } Ped;
 
 typedef struct { int x, y, h, vx, vy, vh; s16 life; } Drop;
@@ -238,6 +239,7 @@ static void approach_speed(Car *c, int target, int acc, int dec, int dt)
 }
 
 static int tail_mode;
+static int crim_ped = -1, crim_car = -1, crim_police = -1;   /* the current street crime */
 static void update_traffic(int i, int dt)
 {
     Car *c = &cars[i];
@@ -252,7 +254,8 @@ static void update_traffic(int i, int dt)
     } else if (dx * dx + dy * dy < M(3) * M(3)) ai_choose(c);
     int diff; steer_to(c, c->tx, c->ty, 1100, dt, &diff);
     int target = coast ? Q8(M(12)) : Q8(M(9));
-    if (i == SLOT_MISSION) target = tail_mode ? Q8(M(10)) : Q8(M(17));   /* a fleeing (or unaware, tailed) mission car */
+    if (i == SLOT_MISSION) target = tail_mode ? Q8(M(10)) : Q8(M(17));
+    if (i == crim_car) target = Q8(M(16));                    /* a carjacker making off */   /* a fleeing (or unaware, tailed) mission car */
     if (diff > 6 || diff < -6) target = Q8(M(5));
     int nearp = dist_approx(x - plx(), y - ply()) < M(70);
     if (nearp && c->wait > 0 && obstacle_ahead(i, c)) target = 0;
@@ -265,11 +268,14 @@ static void update_traffic(int i, int dt)
 /* ------------------------------------------------------------ police */
 static void crew_exit(Car *c);
 
+static void crim_target(int *tx, int *ty, int *spd);
 static void update_police(int i, int dt)
 {
     Car *c = &cars[i];
-    int tx = plx(), ty = ply();
-    if (pl.in_car >= 0) {          /* lead the target a little */
+    int tx = plx(), ty = ply(), chasing_crim = wanted == 0 && i == crim_police;
+    int crim_spd = 0;
+    if (chasing_crim) crim_target(&tx, &ty, &crim_spd);
+    else if (pl.in_car >= 0) {     /* lead the target a little */
         tx += cars[pl.in_car].vx / 512; ty += cars[pl.in_car].vy / 512;
     }
     int d = dist_approx(tx - (c->x >> 8), ty - (c->y >> 8));
@@ -285,8 +291,12 @@ static void update_police(int i, int dt)
     approach_speed(c, target, Q8(M(13)), Q8(M(24)), dt);
     if (c->speed < Q8(M(1.5)) && d > M(8)) { if (++c->stuck > 45) { c->stuck = 0; c->rev = 256; } }
     else c->stuck = 0;
-    int pspd = pl.in_car >= 0 ? iabs(cars[pl.in_car].speed) : 0;
-    if (c->crew && d < M(14) && pspd < Q8(M(3))) crew_exit(c);
+    int pspd = chasing_crim ? crim_spd : pl.in_car >= 0 ? iabs(cars[pl.in_car].speed) : 0;
+    if (c->crew && d < M(14) && pspd < Q8(M(3))) {
+        crew_exit(c);
+        if (chasing_crim && crim_ped >= 0)            /* the crew goes after the criminal, not you */
+            for (int k = PED_CREW0; k < PED_MISSION0; k++) if (peds[k].active && peds[k].state == S_CHASE) { peds[k].state = S_COPCHASE; peds[k].tgt = (s8)crim_ped; }
+    }
 }
 
 static int active_police(void)
@@ -753,7 +763,7 @@ static void place_ped_near(Ped *p, int min_d)
         p->head = Q8(iatan2(y1 - y0, x1 - x0));
         if (dist_approx((p->x >> 8) - plx(), (p->y >> 8) - ply()) > min_d) break;
     }
-    p->down = 0; p->pool = 0; p->state = S_WALK; p->hp = 100; p->run = 0; p->aim = 0; p->active = 1; p->rag = 0;
+    p->down = 0; p->pool = 0; p->state = S_WALK; p->hp = 100; p->run = 0; p->aim = 0; p->active = 1; p->rag = 0; p->crim = 0; p->tgt = -1;
 }
 
 static void kill_ped(Ped *p, int vx, int vy, int by_player, int fling_m)
@@ -775,6 +785,10 @@ static void kill_ped(Ped *p, int vx, int vy, int by_player, int fling_m)
     p->head = Q8(iatan2(vy, vx));
     p->down = 1; p->pool = 0; p->timer = 30 * 256; p->run = 0; p->aim = 0;
     g_snd.hit = 1;
+    if (by_player && p->crim) {                  /* a street criminal: the city thanks you */
+        p->crim = 0; pl.money += 100; g_snd.sfx |= SFX_CASH; msg("VIGILANTE  +$100", 0, 2);
+        by_player = 0;
+    }
     if (by_player) {
         if (p->type == P_COP) crime(wanted + 2 > 2 ? wanted + 2 : 2);
         else if (p->type == P_CIV) crime(1);
@@ -877,6 +891,8 @@ static void ped_shoot_at_player(Ped *p, int dt, int d)
     }
 }
 
+static void street_mug(Ped *p, int i, int dt);
+static void street_copchase(Ped *p, int dt);
 static void update_peds(int dt0)
 {
     for (int i = 0; i < MAX_PEDS; i++) {
@@ -923,13 +939,19 @@ static void update_peds(int dt0)
         case S_FLEE: {
             p->timer -= dt >> 6;
             int away = iatan2(y - p->fy, x - p->fx);
-            ped_move(p, away, Q8(M(5.2)), dt, 1);
+            ped_move(p, away, p->crim ? Q8(M(4.4)) : Q8(M(5.2)), dt, 1);
             if (p->timer <= 0) {
                 p->state = (p->type == P_TARGET) ? S_IDLE : S_WALK;
                 /* re-route on the nearest block */
                 p->bx = (u8)clampi((x - M(13)) >> 10, 0, NB - 1); p->by = (u8)clampi((y - M(13)) >> 10, 0, NB - 1);
             }
             break; }
+        case S_MUG:                                   /* a street criminal goes for a victim (or a car) */
+            street_mug(p, i, dt);
+            break;
+        case S_COPCHASE:                              /* a cop goes after a street criminal */
+            street_copchase(p, dt);
+            break;
         case S_CHASE: {
             int armed = (p->type == P_GUARD) || (p->type == P_COP && wanted >= 2);
             if (p->type == P_COP && wanted == 0) { p->state = S_WALK; break; }
@@ -975,8 +997,168 @@ static void crew_exit(Car *c)
         int side = k ? 1 : -1;
         p->x = c->x + Q8(side * ((-isin(a) * M(1.7)) >> 14));
         p->y = c->y + Q8(side * ((icos(a) * M(1.7)) >> 14));
-        p->model = PED_COP; p->type = P_COP; p->state = S_CHASE; p->active = 1; p->down = 0; p->rag = 0;
+        p->model = PED_COP; p->type = P_COP; p->state = S_CHASE; p->active = 1; p->down = 0; p->rag = 0; p->crim = 0; p->tgt = -1;
         p->hp = 100; p->cd = 128; p->speed = Q8(M(5)); p->head = c->head;
+    }
+}
+
+
+/* ------------------------------------------------------------ street crime */
+/* Every so often a passer-by near you mugs someone, picks a fight or carjacks a car. Beat cops
+   chase criminals on foot and arrest them (armed ones get shot); if no cop is near, a patrol car
+   comes, and it runs carjackers down. Only one crime at a time and only a few people involved, so
+   it costs next to nothing. Take a criminal down yourself and it's a reward, not a crime. */
+static int crime_t = 20 * TICKS, crim_kind, crim_age;
+static int st_crimes, st_arrests, st_shot, st_carjacks, st_carstops;   /* counters for tools/street_test.c */
+enum { CR_MUG, CR_FIGHT, CR_CARJACK };
+static void crim_target(int *tx, int *ty, int *spd)
+{
+    if (crim_car >= 0) { Car *c = &cars[crim_car]; *tx = (c->x >> 8) + c->vx / 512; *ty = (c->y >> 8) + c->vy / 512; *spd = iabs(c->speed); }
+    else if (crim_ped >= 0) { *tx = peds[crim_ped].x >> 8; *ty = peds[crim_ped].y >> 8; *spd = 0; }
+}
+static void street_say(int x, int y, const char *a, const char *b)
+{
+    if (dist_approx(x - plx(), y - ply()) < M(45) && g_hud.msg_t <= 0) msg(a, b, 2);
+}
+static void street_end(void)
+{
+    if (crim_police >= 0) { Car *c = &cars[crim_police]; if (c->ai == AI_POLICE && wanted == 0) c->ai = AI_NONE; }
+    if (crim_car >= 0 && cars[crim_car].active && cars[crim_car].ai == AI_TRAFFIC) cars[crim_car].ai = AI_TRAFFIC;
+    crim_ped = -1; crim_car = -1; crim_police = -1;
+    crime_t = (18 + (int)(rnd() % 20)) * TICKS;
+}
+static void dispatch_police(int x, int y)
+{
+    int best = -1, bd = M(70);                       /* a beat cop on foot nearby? */
+    for (int i = 0; i < PED_CIV_END; i++) {
+        Ped *c = &peds[i];
+        if (!c->active || c->down || c->type != P_COP || c->state == S_CHASE) continue;
+        int d = dist_approx((c->x >> 8) - x, (c->y >> 8) - y);
+        if (d < bd) { bd = d; best = i; }
+    }
+    if (best >= 0 && crim_ped >= 0) { peds[best].state = S_COPCHASE; peds[best].tgt = (s8)crim_ped; return; }
+    if (wanted > 0) return;                          /* the patrol cars are busy with you */
+    for (int i = 0; i < NPOLICE; i++) {              /* else a patrol car */
+        Car *c = &cars[SLOT_POLICE0 + i];
+        if (c->active) continue;
+        spawn_traffic_near(c);
+        c->model = CAR_POLICE; c->police = 1; c->ai = AI_POLICE; c->crew = 1; c->speed = Q8(M(15)); c->dmg = 0; c->burn = 0;
+        c->stuck = 0; c->rev = 0;
+        crim_police = SLOT_POLICE0 + i;
+        return;
+    }
+}
+static void crime_happens(Ped *p, int x, int y)
+{
+    static const char *const mug[3] = { "HELP! MY BAG!", "THIEF! STOP HIM!", "HE TOOK MY WALLET!" };
+    static const char *const fight[3] = { "A FIGHT'S BROKEN OUT!", "HEY! BREAK IT UP!", "SOMEBODY STOP THEM!" };
+    street_say(x, y, crim_kind == CR_FIGHT ? fight[rnd() % 3] : mug[rnd() % 3], 0);
+    panic(x, y, M(14));
+    p->state = S_FLEE; p->timer = 40 * 256; p->fx = x; p->fy = y;
+    g_snd.sfx |= SFX_YELP;
+    dispatch_police(x, y);
+}
+static void street_mug(Ped *p, int i, int dt)
+{
+    int x = p->x >> 8, y = p->y >> 8;
+    if (p->tgt >= 100) {                             /* a carjacking: run to the driver's door */
+        Car *c = &cars[p->tgt - 100];
+        if (!c->active || IS_WRECK(c) || pl.in_car == p->tgt - 100) { p->state = S_WALK; p->crim = 0; return; }
+        int cx = c->x >> 8, cy = c->y >> 8, d = dist_approx(cx - x, cy - y);
+        if (d < M(10)) { c->ai = AI_NONE; c->speed = 0; }              /* the driver brakes for him */
+        if (d > M(2.4)) { ped_move(p, iatan2(cy - y, cx - x), Q8(M(4.8)), dt, 1); return; }
+        street_say(cx, cy, "CARJACKING!", "SOMEBODY CALL THE COPS");
+        int hit_msg = g_hud.msg_t; eject_driver(c); g_hud.msg_t = hit_msg;   /* the driver runs; keep our line */
+        c->ai = AI_TRAFFIC; c->wait = 1; c->speed = Q8(M(6));
+        lane_point(c->dir, c->road, c->cross, &c->tx, &c->ty);
+        crim_car = p->tgt - 100; crim_ped = -1; crim_age = 0; st_carjacks++;
+        place_ped_near(p, M(50));                    /* he's in the car now */
+        panic(cx, cy, M(14));
+        dispatch_police(cx, cy);
+        return;
+    }
+    Ped *v = &peds[p->tgt];
+    if (!v->active || v->down) { p->state = S_WALK; p->crim = 0; return; }
+    int vx = v->x >> 8, vy = v->y >> 8, d = dist_approx(vx - x, vy - y);
+    if (d > M(1.2)) { ped_move(p, iatan2(vy - y, vx - x), Q8(M(4.6)), dt, 1); return; }
+    v->state = S_FLEE; v->timer = 8 * 256; v->fx = x; v->fy = y;
+    crim_age = 0; st_crimes++;
+    crime_happens(p, x, y);
+    (void)i;
+}
+static void street_copchase(Ped *p, int dt)
+{
+    if (p->tgt < 0) { p->state = S_WALK; return; }
+    Ped *t = &peds[p->tgt];
+    if (!t->active || t->down || !t->crim) { p->state = S_WALK; p->tgt = -1; return; }
+    int x = p->x >> 8, y = p->y >> 8, tx = t->x >> 8, ty = t->y >> 8, d = dist_approx(tx - x, ty - y);
+    if (t->crim == 2 && d < M(16) && d > M(3)) {     /* armed: the cop opens fire */
+        p->aim = 1; int a = iatan2(ty - y, tx - x); p->head = Q8(a);
+        p->cd -= dt >> 6;
+        if (p->cd <= 0) {
+            p->cd = 200 + (int)(rnd() % 80);
+            muzzle(x, y, a, M(1.35)); g_snd.shot = 1; g_snd.shot_vol = dist_approx(x - plx(), y - ply()) < M(20) ? 40 : 20;
+            if (rnd() % 100 < 45) { kill_ped(t, (tx - x) * 16, (ty - y) * 16, 0, 0); street_say(tx, ty, "SUSPECT DOWN", 0); st_shot++; }
+        }
+        return;
+    }
+    if (d > M(1.4)) { ped_move(p, iatan2(ty - y, tx - x), Q8(M(5.0)), dt, 1); return; }
+    street_say(tx, ty, "ARRESTED", 0); st_arrests++;  /* caught: cuffed and taken away */
+    place_ped_near(t, M(50));
+    p->state = S_WALK; p->tgt = -1;
+}
+
+static void street_life(int dt)
+{
+    if (cut_on) return;
+    if (crim_ped >= 0 || crim_car >= 0) {            /* a crime is under way */
+        crim_age += dt;
+        if (crim_ped >= 0) {
+            Ped *p = &peds[crim_ped];
+            if (!p->active || p->down || !p->crim || crim_age > 45 * TICKS) { p->crim = 0; street_end(); }
+        } else {
+            Car *c = &cars[crim_car];
+            int far = dist_approx((c->x >> 8) - plx(), (c->y >> 8) - ply()) > M(200);
+            int caught = 0;
+            if (crim_police >= 0 && cars[crim_police].active) {
+                Car *pc = &cars[crim_police];
+                if (dist_approx((pc->x >> 8) - (c->x >> 8), (pc->y >> 8) - (c->y >> 8)) < M(7) && iabs(c->speed) < Q8(M(4))) caught = 1;
+            }
+            if (caught) { c->ai = AI_NONE; c->speed = 0; street_say(c->x >> 8, c->y >> 8, "CARJACKER ARRESTED", 0); st_carstops++; }
+            if (!c->active || IS_WRECK(c) || caught || far || pl.in_car == crim_car || crim_age > 60 * TICKS) street_end();
+        }
+        return;
+    }
+    if ((crime_t -= dt) > 0) return;
+    crime_t = 4 * TICKS;                             /* nobody suitable: look again soon */
+    if (wanted > 0 || mstate == 1 || pl.dead_t > 0) return;
+    int kind = (int)(rnd() % 10); kind = kind < 5 ? CR_MUG : kind < 7 ? CR_FIGHT : CR_CARJACK;
+    for (int tries = 0; tries < 8; tries++) {
+        int i = (int)(rnd() % PED_CIV_END);
+        Ped *p = &peds[i];
+        if (!p->active || p->down || p->type != P_CIV || p->state != S_WALK) continue;
+        int x = p->x >> 8, y = p->y >> 8, d = dist_approx(x - plx(), y - ply());
+        if (d < M(14) || d > M(45)) continue;
+        int best = -1, bd = kind == CR_CARJACK ? M(26) : M(18);
+        if (kind == CR_CARJACK) {
+            for (int k = SLOT_TRAFFIC0; k < SLOT_TRAFFIC0 + NTRAFFIC; k++) {
+                Car *c = &cars[k];
+                if (!c->active || c->ai != AI_TRAFFIC || IS_WRECK(c) || c->police) continue;
+                int dd = dist_approx((c->x >> 8) - x, (c->y >> 8) - y);
+                if (dd < bd) { bd = dd; best = 100 + k; }
+            }
+        } else
+            for (int k = 0; k < PED_CIV_END; k++) {
+                Ped *v = &peds[k];
+                if (k == i || !v->active || v->down || v->type != P_CIV || v->state != S_WALK) continue;
+                int dd = dist_approx((v->x >> 8) - x, (v->y >> 8) - y);
+                if (dd < bd) { bd = dd; best = k; }
+            }
+        if (best < 0) continue;
+        p->state = S_MUG; p->tgt = (s8)best; p->crim = (rnd() % 5 == 0) ? 2 : 1;
+        crim_kind = kind; crim_age = 0;
+        crim_ped = i;
+        return;
     }
 }
 
@@ -1216,7 +1398,7 @@ static void eject_driver(Car *c)
     int ex = (c->x >> 8) + ((isin(a) * M(1.9)) >> 14), ey = (c->y >> 8) - ((icos(a) * M(1.9)) >> 14);
     if (world_point_blocked(ex, ey, M(0.4))) { ex = (c->x >> 8) - ((isin(a) * M(1.9)) >> 14); ey = (c->y >> 8) + ((icos(a) * M(1.9)) >> 14); }
     p->x = Q8(ex); p->y = Q8(ey); p->head = Q8(a + 1024);
-    p->active = 1; p->down = 0; p->hp = 100; p->cd = 0; p->rag = 0;
+    p->active = 1; p->down = 0; p->hp = 100; p->cd = 0; p->rag = 0; p->crim = 0; p->tgt = -1;
     p->type = P_CIV; p->model = civ_models[rnd() % 6];
     p->speed = Q8(M(1.3)); p->phase = rnd() & 511;
     p->bx = ex >> 10; p->by = ey >> 10;
@@ -1794,7 +1976,7 @@ static void mission_fail(const char *why)
 static void mission_ped(int k, int type, int model, int x, int y, int hp)
 {
     Ped *p = &peds[PED_MISSION0 + k];
-    p->active = 1; p->down = 0; p->hp = hp; p->cd = 160; p->rag = 0;
+    p->active = 1; p->down = 0; p->hp = hp; p->cd = 160; p->rag = 0; p->crim = 0; p->tgt = -1;
     p->type = type; p->model = model; p->state = S_IDLE;
     p->x = Q8(x); p->y = Q8(y); p->head = Q8(rnd() & 4095); p->speed = Q8(M(1.4));
     p->bx = (u8)clampi(x >> 10, 0, NB - 1); p->by = (u8)clampi(y >> 10, 0, NB - 1);
@@ -2791,9 +2973,10 @@ void game_update(u16 keys, int dt)
     } else {
         for (int i = 0; i < NPOLICE; i++) {
             Car *c = &cars[SLOT_POLICE0 + i];
-            if (c->active && c->ai == AI_POLICE) { c->ai = AI_NONE; }
+            if (c->active && c->ai == AI_POLICE && SLOT_POLICE0 + i != crim_police) { c->ai = AI_NONE; }
         }
     }
+    street_life(dt);
     pl.arrest_t = pl.arrest_t > 0 ? pl.arrest_t - dt / 2 : 0;
     update_mission(dt);
 

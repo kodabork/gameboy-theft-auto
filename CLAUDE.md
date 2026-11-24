@@ -65,6 +65,10 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - `tools/mini_test.c` plays 20 full games of each and checks they all end; `mini_test table` prints pins knocked per start spot and hook.
 - When the full-screen 2D screens (shops, minigames) are up, `gba_main` skips the 3D render.
 
+## Street crime (v0.34)
+- `street_life` (game.c, "street crime" section) starts one crime at a time near the player, 18-38 s apart, never during a job or while wanted: `S_MUG` (a civilian runs at a victim, or at a traffic car for a carjacking: `tgt` = ped, or 100 + car), then flees (criminals run 4.4 m/s, cops 5.0). `dispatch_police` sends the nearest beat cop (`S_COPCHASE`) or a patrol car (`crim_police`, which `update_police` aims at the criminal while `wanted == 0`). Armed criminals (`crim == 2`) get shot. `kill_ped` turns a player kill of a criminal into a $100 reward.
+- `tools/street_test.c` stands the player in free roam for 10 game minutes and prints the counts (and fails if the player ever gets wanted).
+
 ## Memory budget
 - **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
 - Put big arrays in EWRAM with `EWRAM_BSS`.
