@@ -4,6 +4,7 @@
 #include "game.h"
 #include "logo.h"
 #include "portraits.h"
+#include "interiors.h"
 #define SHOW_PORTRAITS 0
 #include "ground.h"
 
@@ -128,6 +129,12 @@ static void text(int x, int y, const char *s, int col, int scale)
 #undef text
 #endif
 static void text_center(int y, const char *s, int col, int scale) { text(120 - text_width(s, scale) / 2, y, s, col, scale); }
+/* text drawn into the frame buffer even on hardware (static screens with lots of text, like shops) */
+#ifdef HOST
+#define text_f text
+#else
+#define text_f text_fb
+#endif
 
 static char *fmt_int(char *p, int v)
 {
@@ -252,6 +259,29 @@ void hud_draw(u16 *fb)
         text(228, 150, ">", COL_YELLOW, 1);
         return;
     }
+    if (g_hud.shop) {                            /* shop interior: room, clerk, counter, then the menu */
+        int t = g_hud.shop - 1, pose = g_hud.shop_pose;
+        blit_img(room_img[t], 0, 0);
+        blit_img(clerk_img[t][pose], clerk_pos[t][pose][0], clerk_pos[t][pose][1]);
+        blit_img(front_img[t], 0, front_y[t]);
+        shade_band(98, 160);
+        text_f(6, 101, g_hud.shop_name, COL_YELLOW, 1);
+        buf[0] = '$'; fmt_int(buf + 1, g_hud.money);
+        text_f(234 - text_width(buf, 1), 101, buf, COL_WHITE, 1);
+        if (g_hud.menu_n) {
+            for (int i = 0; i < g_hud.menu_n; i++) {
+                int sel = i == g_hud.menu_sel;
+                if (sel) text_f(8, 111 + i * 8, ">", COL_YELLOW, 1);
+                text_f(16, 111 + i * 8, g_hud.menu_item[i], sel ? COL_YELLOW : COL_WHITE, 1);
+            }
+        } else {                                 /* hold-up: the take so far */
+            buf[0] = '$'; fmt_int(buf + 1, g_hud.shop_cash);
+            text_f(120 - text_width(buf, 3) / 2, 116, buf, COL_YELLOW, 3);
+        }
+        if (g_hud.shop_line) text_f(120 - text_width(g_hud.shop_line, 1) / 2, 151, g_hud.shop_line, COL_WHITE, 1);
+        if (g_hud.shop_note) { rect(0, 2, 240, 11, COL_BLACK); text_f(120 - text_width(g_hud.shop_note, 1) / 2, 4, g_hud.shop_note, COL_WHITE, 1); }
+        return;
+    }
     if (g_hud.menu_n) {                          /* pause menu */
         shade_band(40, 112);
         text_center(46, g_hud.menu_title, COL_YELLOW, 2);
@@ -321,12 +351,53 @@ void radar_init(void) {}
 #else
 #define IWRAM_ARM __attribute__((section(".iwram"), target("arm"), noinline))
 #endif
+/* pickups, shops and blips on the finished disc: runs once every 4 frames, so it lives in ROM */
+static void radar_icons(u32 *t, int c, int s, int px0, int py0)
+{
+    const int R = 28, SCALE = M(2.5);
+    /* pickups: a pistol (cyan, white outline) for guns, a first-aid box (red cross on white) for
+       health; only inside the disc, never clamped to the rim */
+    {
+        /* 7x5 icons: '#' body, 'o' outline/background */
+        static const char gun[5][8] = { "ooooooo", "o#####o", "o######", "ooo#o##", "  ooo##" };
+        static const char aid[5][8] = { " ooooo ", " oo#oo ", " o###o ", " oo#oo ", " ooooo " };
+        for (int i = 0; i < g_hud.npk; i++) {
+            int dx = g_hud.pk_x[i] - px0, dy = g_hud.pk_y[i] - py0;
+            int f = (dx * c + dy * s) >> 14, rr = (dx * s - dy * c) >> 14;
+            int x = rr / SCALE, y = -f / SCALE;
+            if (x * x + y * y > (R - 5) * (R - 5)) continue;
+            int health = g_hud.pk_t[i] == 2, shop = g_hud.pk_t[i] >= 10;
+            /* shops: a storefront with an awning, coloured by type (gun red, store green, pawn yellow, cars white) */
+            static const char store[5][8] = { "ooooooo", "o#o#o#o", "ooooooo", "o#ooo#o", "o#ooo#o" };
+            static const u8 shop_col[4] = { 14, 7, 6, 4 };
+            const char (*ic)[8] = shop ? store : health ? aid : gun;
+            for (int j = 0; j < 5; j++) for (int k = 0; k < 7; k++) {
+                char ch = ic[j][k];
+                if (ch == ' ') continue;
+                int col = shop ? (ch == '#' ? 1 : shop_col[(g_hud.pk_t[i] - 10) & 3])
+                        : ch == '#' ? (health ? 14 : g_hud.pk_t[i] == 5 ? 8 : 13) : (health ? 4 : 15);   /* rockets: orange */
+                rpx(t, 32 + x - 3 + k, 32 + y - 2 + j, col);
+            }
+        }
+    }
+    /* blips (clamped to the rim) */
+    for (int i = 0; i < g_hud.nblips; i++) {
+        int dx = g_hud.bx[i] - px0, dy = g_hud.by[i] - py0;
+        int f = (dx * c + dy * s) >> 14, rr = (dx * s - dy * c) >> 14;
+        int x = rr / SCALE, y = -f / SCALE;
+        int d2 = x * x + y * y, lim = R - 3;
+        if (d2 > lim * lim) { int d = isqrt((u32)d2); x = x * lim / d; y = y * lim / d; }
+        int col = 5 + g_hud.bc[i];
+        for (int j = -1; j <= 1; j++) for (int k = -1; k <= 1; k++) rpx(t, 32 + x + k, 32 + y + j, col);
+    }
+}
+
 /* Built a quarter of the disc per frame (part 0..3) from values latched at part 0, so the cost is
    spread evenly instead of landing on one frame; the finished picture is shown after part 3. */
 IWRAM_ARM void radar_build(u32 *t, int part)
 {
     static int c, s, ox, oy, px0, py0;
-    const int R = 28, SCALE = M(2.5);              /* 2.5 m per radar pixel */
+    const int SCALE = M(2.5);                      /* 2.5 m per radar pixel (disc radius 28) */
     if (part == 0) {
         for (int i = 0; i < 64 * 8; i++) t[i] = 0;
         c = icos(g_hud.pang); s = isin(g_hud.pang);
@@ -364,37 +435,7 @@ IWRAM_ARM void radar_build(u32 *t, int part)
         if (sh) *dst = acc;
     }
     if (part != 3) return;
-    /* pickups: a pistol (cyan, white outline) for guns, a first-aid box (red cross on white) for
-       health; only inside the disc, never clamped to the rim */
-    {
-        /* 7x5 icons: '#' body, 'o' outline/background */
-        static const char gun[5][8] = { "ooooooo", "o#####o", "o######", "ooo#o##", "  ooo##" };
-        static const char aid[5][8] = { " ooooo ", " oo#oo ", " o###o ", " oo#oo ", " ooooo " };
-        for (int i = 0; i < g_hud.npk; i++) {
-            int dx = g_hud.pk_x[i] - px0, dy = g_hud.pk_y[i] - py0;
-            int f = (dx * c + dy * s) >> 14, rr = (dx * s - dy * c) >> 14;
-            int x = rr / SCALE, y = -f / SCALE;
-            if (x * x + y * y > (R - 5) * (R - 5)) continue;
-            int health = g_hud.pk_t[i] == 2;
-            const char (*ic)[8] = health ? aid : gun;
-            for (int j = 0; j < 5; j++) for (int k = 0; k < 7; k++) {
-                char ch = ic[j][k];
-                if (ch == ' ') continue;
-                int col = ch == '#' ? (health ? 14 : g_hud.pk_t[i] == 5 ? 8 : 13) : (health ? 4 : 15);   /* rockets: orange */
-                rpx(t, 32 + x - 3 + k, 32 + y - 2 + j, col);
-            }
-        }
-    }
-    /* blips (clamped to the rim) */
-    for (int i = 0; i < g_hud.nblips; i++) {
-        int dx = g_hud.bx[i] - px0, dy = g_hud.by[i] - py0;
-        int f = (dx * c + dy * s) >> 14, rr = (dx * s - dy * c) >> 14;
-        int x = rr / SCALE, y = -f / SCALE;
-        int d2 = x * x + y * y, lim = R - 3;
-        if (d2 > lim * lim) { int d = isqrt((u32)d2); x = x * lim / d; y = y * lim / d; }
-        int col = 5 + g_hud.bc[i];
-        for (int j = -1; j <= 1; j++) for (int k = -1; k <= 1; k++) rpx(t, 32 + x + k, 32 + y + j, col);
-    }
+    radar_icons(t, c, s, px0, py0);
     /* player arrow */
     static const s8 arrow[][2] = { {0,-3},{0,-2},{-1,-1},{0,-1},{1,-1},{-1,0},{0,0},{1,0},{-2,1},{-1,1},{0,1},{1,1},{2,1} };
     for (unsigned i = 0; i < sizeof arrow / 2; i++) rpx(t, 32 + arrow[i][0], 32 + arrow[i][1], 5);

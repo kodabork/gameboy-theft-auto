@@ -1502,7 +1502,184 @@ typedef struct { u32 magic; u16 ver, mission; s32 money; s16 hp; u8 owned, weapo
 static int save_read(SaveData *d);
 static void save_write(void);
 static int menu_sel, menu_note, title_t, has_save;
-enum { GS_TITLE, GS_PLAY, GS_PAUSE, GS_DIALOG };
+enum { GS_TITLE, GS_PLAY, GS_PAUSE, GS_DIALOG, GS_SHOP };
+
+/* ------------------------------------------------------------ shops */
+/* Walk-in shops: a door marker on the east sidewalk of a block. Inside is a 2D room (interiors.c)
+   with a buy menu. Any shop can be held up at gunpoint in free roam (never during a job). */
+enum { SHOP_GUN, SHOP_STORE, SHOP_PAWN, SHOP_CARS };
+typedef struct { s16 x, y; u8 type, bx, by; int cd; } Shop;        /* cd: ticks until it can be robbed again */
+#define MAX_SHOPS 28
+EWRAM_BSS static Shop shops[MAX_SHOPS];
+static int nshops, shop_cur = -1, shop_away = 1, shop_rob, shop_take, shop_goal, shop_loose;
+static const char *shop_note; static int shop_note_t;
+static const char *const shop_names[4] = { "NY GUNS", "CORNER MART", "PAWN & LOAN", "MOTOR SALES" };
+enum { K_GUN, K_HEAL, K_SELL, K_CAR, K_ROB };
+typedef struct { const char *label; s16 price; u8 kind, arg; u16 amt; } ShopItem;
+static const ShopItem gun_items[] = {
+    { "PISTOL + 36", 200, K_GUN, 1, 36 }, { "SMG + 120", 600, K_GUN, 2, 120 }, { "SHOTGUN + 16", 800, K_GUN, 3, 16 },
+    { "RIFLE + 30", 1200, K_GUN, 4, 30 }, { "ROCKETS X5", 3000, K_GUN, 5, 5 } };
+static const ShopItem store_items[] = {
+    { "SNACK  +20 HP", 15, K_HEAL, 20, 0 }, { "HOT MEAL  +50 HP", 40, K_HEAL, 50, 0 }, { "FIRST AID KIT", 90, K_HEAL, 100, 0 } };
+static const ShopItem pawn_items[] = {
+    { "USED PISTOL + 24", 120, K_GUN, 1, 24 }, { "USED SHOTGUN + 8", 450, K_GUN, 3, 8 }, { "SELL YOUR GUNS", 0, K_SELL, 0, 0 } };
+static const ShopItem car_items[] = {
+    { "HATCHBACK", 1500, K_CAR, 0, CAR_HATCH_WHITE }, { "PICKUP", 3000, K_CAR, 0, CAR_PICKUP_BLUE },
+    { "MUSCLE CAR", 6000, K_CAR, 0, CAR_MUSCLE_ORANGE }, { "SPORTS COUPE", 12000, K_CAR, 0, CAR_COUPE_BLACK },
+    { "SUPERCAR", 25000, K_CAR, 0, CAR_SUPER_RED } };
+static const ShopItem rob_item = { "ROB THE PLACE", 0, K_ROB, 0, 0 };
+static const ShopItem *const shop_items[4] = { gun_items, store_items, pawn_items, car_items };
+static const u8 shop_nitems[4] = { 5, 3, 3, 5 };
+static const s16 resale[6] = { 0, 60, 180, 240, 360, 900 };
+
+static void setup_shops(void)
+{
+    static const u8 tab[][3] = {      /* block x, block y, type */
+        {3,3,SHOP_GUN}, {1,4,SHOP_STORE}, {5,6,SHOP_STORE}, {2,6,SHOP_PAWN}, {7,3,SHOP_CARS},                       /* Docks */
+        {10,2,SHOP_STORE}, {13,6,SHOP_STORE}, {16,3,SHOP_GUN}, {11,8,SHOP_PAWN}, {18,5,SHOP_CARS}, {15,9,SHOP_STORE}, /* Downtown */
+        {12,12,SHOP_GUN}, {17,11,SHOP_STORE}, {10,16,SHOP_PAWN}, {13,17,SHOP_CARS}, {11,13,SHOP_STORE},          /* Industrial */
+        {2,11,SHOP_STORE}, {5,15,SHOP_STORE}, {3,18,SHOP_PAWN}, {6,13,SHOP_GUN}, {1,16,SHOP_STORE},              /* the Heights */
+        {17,17,SHOP_STORE}, {18,18,SHOP_GUN} };                                                                  /* Gull Island */
+    nshops = 0;
+    for (unsigned i = 0; i < sizeof tab / sizeof tab[0] && nshops < MAX_SHOPS; i++) {
+        int bx = tab[i][0], by = tab[i][1];
+        if (BLK_KIND(bx, by) != BK_BUILT) continue;
+        Shop *h = &shops[nshops++];
+        h->bx = (u8)bx; h->by = (u8)by; h->type = tab[i][2]; h->cd = 0;
+        h->x = (s16)(bx * 1024 + M(62.5)); h->y = (s16)(by * 1024 + M(30));
+    }
+}
+
+static int shop_can_rob(void)
+{
+    return shop_cur >= 0 && shops[shop_cur].cd <= 0 && mstate != 1 && pl.weapon >= 1 && pl.ammo[pl.weapon] > 0;
+}
+static int shop_menu(const ShopItem **out)       /* this shop's menu, plus the hold-up when allowed */
+{
+    int t = shops[shop_cur].type, n = shop_nitems[t];
+    for (int i = 0; i < n; i++) out[i] = &shop_items[t][i];
+    if (shop_can_rob()) out[n++] = &rob_item;
+    return n;
+}
+static void shop_say(const char *t) { shop_note = t; shop_note_t = 2 * TICKS; }
+
+static void shop_leave(void)
+{
+    Shop *h = &shops[shop_cur];
+    if (shop_rob) {
+        pl.money += shop_take;
+        h->cd = 240 * TICKS;                    /* four minutes before it has cash again */
+        int w = shop_take < 700 ? 2 : 3;
+        if (w > wanted) { wanted = w; wanted_cool = 0; }
+        static char buf[24]; buf[0] = '+'; buf[1] = '$';
+        { char tmp[12]; int n = 0, v = shop_take; do { tmp[n++] = (char)('0' + v % 10); v /= 10; } while (v); int k = 2; while (n) buf[k++] = tmp[--n]; buf[k] = 0; }
+        big(buf, 1, 3);
+        g_snd.sfx |= SFX_CASH;
+    }
+    pl.x = Q8(h->x + M(1.8)); pl.y = Q8(h->y); pl.head = 0; pl.moving = 0;
+    gstate = GS_PLAY; shop_cur = -1; shop_rob = 0; g_hud.shop = 0;
+}
+
+static void buy_car(int model)
+{
+    Shop *h = &shops[shop_cur];
+    int slot = SLOT_PARKED0;
+    for (int k = SLOT_PARKED0; k < SLOT_PARKED_END; k++) if (!cars[k].active) { slot = k; break; }
+    Car *c = &cars[slot];
+    c->x = Q8(ROAD_C(h->bx + 1) - M(4.9)); c->y = Q8(h->y);
+    c->head = Q8(3072); c->model = (u16)model; c->ai = AI_NONE; c->speed = 0; c->vx = c->vy = 0; c->active = 1; c->police = 0;
+    c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
+}
+
+static void shop_update(u16 keys, u16 pressed, int dt)
+{
+    Shop *h = &shops[shop_cur];
+    if (shop_note_t > 0) shop_note_t -= dt;
+    g_hud.shop = 1 + h->type; g_hud.shop_name = shop_names[h->type];
+    g_hud.shop_note = shop_note_t > 0 ? shop_note : 0;
+    g_snd.engine_vol = 0; g_snd.skid = 0; g_snd.horn = 0; g_snd.siren = 0; g_snd.nitro = 0;
+    if (shop_rob) {                                          /* the hold-up */
+        g_hud.shop_pose = 1; g_hud.menu_n = 0; g_hud.shop_cash = shop_take;
+        if (shop_rob == 1) {
+            if (keys & KEY_A) {
+                shop_loose = 0;
+                shop_take += shop_goal * dt / (6 * TICKS) + 1;
+                if (shop_take >= shop_goal) { shop_take = shop_goal; shop_rob = 2; shop_say("THAT'S ALL OF IT. RUN!"); }
+            } else if ((shop_loose += dt) > TICKS * 3 / 4) {
+                shop_rob = 2;
+                if (h->type == SHOP_GUN) {                   /* gun-shop clerks keep a shotgun under the counter */
+                    pl.hp -= 35; if (pl.hp < 5) pl.hp = 5; g_hud.hurt_t = TICKS / 2;
+                    g_snd.shot = 3; g_snd.shot_vol = 0; shop_say("HE HAD A SHOTGUN. GET OUT!");
+                } else shop_say("HE HIT THE ALARM. RUN!");
+            }
+            g_hud.shop_line = shop_rob == 1 ? "HOLD A: KEEP HIM COVERED" : "B: RUN FOR IT";
+        } else g_hud.shop_line = "B: RUN FOR IT";
+        if (pressed & KEY_B) shop_leave();
+        return;
+    }
+    g_hud.shop_pose = 0; g_hud.shop_line = "A: BUY   B: LEAVE";
+    const ShopItem *items[8];
+    int n = shop_menu(items);
+    if (menu_sel >= n) menu_sel = n - 1;
+    if ((pressed & KEY_UP) && menu_sel > 0) { menu_sel--; g_snd.step = 1; }
+    if ((pressed & KEY_DOWN) && menu_sel < n - 1) { menu_sel++; g_snd.step = 1; }
+    EWRAM_BSS static char lbl[8][28];
+    for (int i = 0; i < n; i++) {
+        const ShopItem *it = items[i];
+        char *q = lbl[i]; const char *a = it->label;
+        while (*a) *q++ = *a++;
+        if (it->price) {
+            int len = (int)(q - lbl[i]);
+            while (len < 19) { *q++ = ' '; len++; }
+            *q++ = '$';
+            char tmp[8]; int m = 0, v = it->price; do { tmp[m++] = (char)('0' + v % 10); v /= 10; } while (v);
+            while (m) *q++ = tmp[--m];
+        }
+        *q = 0;
+        g_hud.menu_item[i] = lbl[i];
+    }
+    g_hud.menu_n = n; g_hud.menu_sel = menu_sel;
+    if (pressed & KEY_B) { shop_leave(); return; }
+    if (!(pressed & KEY_A)) return;
+    const ShopItem *it = items[menu_sel];
+    if (it->kind == K_ROB) {
+        shop_rob = 1; shop_take = 0; shop_loose = 0;
+        static const s16 goal[4] = { 1200, 450, 900, 2000 };
+        shop_goal = goal[h->type] + (int)(rnd() % (u32)(goal[h->type] / 2));
+        shop_say("HANDS UP! EMPTY THE REGISTER!");
+        g_snd.sfx |= SFX_PUMP;
+        return;
+    }
+    if (it->kind == K_SELL) {
+        int v = 0;
+        for (int w = 1; w <= 5; w++) if ((pl.owned >> (w - 1)) & 1) v += resale[w];
+        if (!v) { shop_say("YOU'VE GOT NOTHING TO SELL"); return; }
+        pl.money += v; pl.owned = 0; pl.weapon = 0;
+        for (int w = 1; w <= 5; w++) pl.ammo[w] = 0;
+        g_snd.sfx |= SFX_CASH; shop_say("SOLD. NO QUESTIONS ASKED.");
+        return;
+    }
+    if (pl.money < it->price) { shop_say("NOT ENOUGH CASH"); g_snd.sfx |= SFX_DRY; return; }
+    if (it->kind == K_HEAL && pl.hp >= 100) { shop_say("YOU'RE ALREADY FINE"); return; }
+    pl.money -= it->price;
+    g_snd.sfx |= SFX_CASH;
+    switch (it->kind) {
+    case K_GUN:
+        pl.owned |= (u8)(1 << (it->arg - 1)); pl.ammo[it->arg] += it->amt; pl.weapon = it->arg;
+        g_snd.sfx |= SFX_SWAP; shop_say("THANKS. STAY SAFE OUT THERE.");
+        break;
+    case K_HEAL:
+        pl.hp += it->arg; if (pl.hp > 100) pl.hp = 100;
+        shop_say("ENJOY.");
+        break;
+    case K_CAR:
+        buy_car(it->amt);
+        msg("YOUR NEW CAR IS", "PARKED OUT FRONT", 4);
+        shop_leave();
+        break;
+    }
+}
+
 static void dialog(const Page *pg, int n, int then)
 {
     dlg = pg; dlg_n = n; dlg_i = 0; dlg_then = then; gstate = GS_DIALOG; cut_on = 0;
@@ -2003,6 +2180,7 @@ void game_init(void)
     }
     spawn_lamps(); bucket_lamps();
     spawn_props();
+    setup_shops();
     setup_pickups();
     setup_missions();
     pl.in_car = 0; pl.head = 0; pl.hp = 100; pl.money = 0; pl.weapon = 0; pl.owned = 0;
@@ -2090,11 +2268,11 @@ static void load_game(const SaveData *d)
 
 static void meta_update(u16 keys, u16 pressed, int dt)
 {
-    (void)keys;
     g_snd.engine_vol = 0; g_snd.skid = 0; g_snd.horn = 0; g_snd.siren = 0; g_snd.nitro = 0;
     int up = pressed & KEY_UP, down = pressed & KEY_DOWN, ok = pressed & (KEY_A | KEY_START);
-    g_hud.dlg_l1 = 0; g_hud.menu_n = 0; g_hud.title = 0;
+    g_hud.dlg_l1 = 0; g_hud.menu_n = 0; g_hud.title = 0; g_hud.shop = 0;
     g_hud.cutscene = gstate == GS_DIALOG && cut_on;
+    if (gstate == GS_SHOP) { shop_update(keys, pressed, dt); return; }
     if (gstate == GS_TITLE) {
         title_t += dt;
         g_hud.title = 1;
@@ -2172,8 +2350,20 @@ void game_update(u16 keys, int dt)
     }
     if (gstate != GS_PLAY) { meta_update(keys, pressed, dt); return; }
     if ((pressed & KEY_START) && !(keys & KEY_SELECT)) { gstate = GS_PAUSE; menu_sel = 0; menu_note = 0; return; }
-    g_hud.menu_n = 0; g_hud.dlg_l1 = 0; g_hud.title = 0;
+    g_hud.menu_n = 0; g_hud.dlg_l1 = 0; g_hud.title = 0; g_hud.shop = 0;
     if (pressed & KEY_R) toggle_car();
+    for (int i = 0; i < nshops; i++) if (shops[i].cd > 0) shops[i].cd -= dt;
+    if (pl.in_car < 0 && pl.dead_t <= 0) {                 /* walk into a shop door */
+        int near = -1;
+        for (int i = 0; i < nshops; i++)
+            if (iabs(shops[i].x - plx()) < M(2.5) && iabs(shops[i].y - ply()) < M(2.5)) { near = i; break; }
+        if (near < 0) shop_away = 1;
+        else if (shop_away && dist_approx(shops[near].x - plx(), shops[near].y - ply()) < M(1.3)) {
+            shop_away = 0;
+            if (wanted > 0) msg("THE DOOR IS LOCKED.", "LOSE THE COPS FIRST", 3);
+            else { shop_cur = near; gstate = GS_SHOP; menu_sel = 0; shop_rob = 0; shop_note_t = 0; g_snd.door = 1; return; }
+        }
+    }
     impact = 0;
     int pspeed_before = pl.in_car >= 0 ? cars[pl.in_car].speed : 0;
     int pbx = plx(), pby = ply();
@@ -2385,6 +2575,11 @@ void game_update(u16 keys, int dt)
         int dx = pickups[i].x - g_hud.px, dy = pickups[i].y - g_hud.py;
         if (iabs(dx) > M(72) || iabs(dy) > M(72)) continue;
         g_hud.pk_x[np] = (s16)pickups[i].x; g_hud.pk_y[np] = (s16)pickups[i].y; g_hud.pk_t[np++] = pickups[i].type;
+    }
+    for (int i = 0; i < nshops && np < MAX_PK_BLIPS; i++) {   /* shops: storefront icons */
+        int dx = shops[i].x - g_hud.px, dy = shops[i].y - g_hud.py;
+        if (iabs(dx) > M(72) || iabs(dy) > M(72)) continue;
+        g_hud.pk_x[np] = shops[i].x; g_hud.pk_y[np] = shops[i].y; g_hud.pk_t[np++] = (u8)(10 + shops[i].type);
     }
     g_hud.npk = np;
 }
@@ -2605,6 +2800,10 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         if (flashes[i].t > 0) push_h(flashes[i].x, flashes[i].y, FX_FLASH, flashes[i].h);
     /* mission markers and checkpoints */
     if (mk_col >= 0 && pl.dead_t <= 0 && !cut_on && view_dist(mk_x, mk_y, 0) >= 0) push(mk_x, mk_y, FX_MARKER + mk_col);
+    for (int i = 0; i < nshops && !cut_on; i++) {           /* shop doors */
+        if (iabs(shops[i].x - cm->x) > M(45) || iabs(shops[i].y - cm->y) > M(45)) continue;
+        if (view_dist(shops[i].x, shops[i].y, 0) >= 0) push(shops[i].x, shops[i].y, FX_MARKER + 1);
+    }
     for (int i = 0; i < ncars; i++) {                           /* smoke and fire on damaged cars */
         Car *c = &cars[i];
         if (!c->active || (c->dmg < CAR_SMOKE && !(IS_WRECK(c) && c->burn > 0))) continue;
@@ -2805,6 +3004,12 @@ void game_debug_block(int bx, int by, int dir)   /* drop the player's car on roa
     place_on_lane(c, dir, by, bx, 20);
     c->vx = c->vy = 0; c->speed = 0; cam_ang = c->head; c->ai = AI_NONE;
     if (pl.in_car < 0) { pl.x = c->x; pl.y = c->y; }
+}
+void game_debug_shop(int i)            /* stand 3 m in front of shop i's door, facing it */
+{
+    if (pl.in_car >= 0) { cars[pl.in_car].ai = AI_NONE; pl.in_car = -1; }
+    i %= nshops;
+    pl.x = Q8(shops[i].x + M(3)); pl.y = Q8(shops[i].y); pl.head = Q8(2048); cam_ang = pl.head; wanted = 0; pl.money += 5000;
 }
 void game_debug_set(int w, int give_guns)
 {

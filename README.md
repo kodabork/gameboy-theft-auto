@@ -16,6 +16,24 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.31
+- **Shops you can walk into.** 23 shops across the six districts, each with a green beam over the door
+  and a storefront icon on the radar (red gun shop, green corner store, yellow pawn shop, white
+  car showroom). Walk into the beam on foot to go inside.
+  - **NY Guns:** pistol, SMG, shotgun, rifle and rockets, with ammo.
+  - **Corner Mart:** snacks, hot meals and first aid kits for health.
+  - **Pawn & Loan:** cheap used guns, or sell all your guns for cash.
+  - **Motor Sales:** buy a car from a hatchback ($1,500) to a supercar ($25,000). It's parked out front
+    when you leave.
+- **Each shop is a pre-rendered room** with a clerk behind the counter: brick and pegboard at the gun
+  shop, stocked shelves and fridges at the mart, guitars and TVs at the pawn shop, and a red sports
+  car in the showroom.
+- **Robberies (free roam only, never during a job):** with a loaded gun, choose ROB THE PLACE. The
+  clerk puts his hands up. Hold A to keep him covered while the cash piles up; lower your gun and he
+  hits the alarm. At a gun shop, he grabs the shotgun under the counter instead. Run out with B and
+  you get 2 or 3 stars, depending on the take. A robbed shop has no cash for 4 minutes.
+- You can't go into a shop while you're wanted ("lose the cops first").
+
 ## What's new in v0.30
 - **The map is much bigger.** The city went from 8 x 8 blocks (527 m across) to 20 x 20 blocks
   (1.3 km across), about 6 times the area. The whole island, with its coast road, is about

@@ -16,30 +16,23 @@ This is the plan the owner asked to queue up. Work goes down the **Next up** lis
   Everything per-frame is bucketed by block (buildings, props, lamps, park trees, roof props), so
   the cost depends only on what is near the camera.
 
+- **Shops and robberies (v0.31):** 23 walk-in shops (gun shop, corner store, pawn shop, car showroom) with
+  pre-rendered interiors and clerks (`tools/make_interiors.py`), buy menus, and free-roam hold-ups.
+  Later: clothes shop, respray, food stands, and shop-based story missions.
+
 ## Next up (owner's requests)
-1. **Shops with interiors, and robberies.**
-   - Gun shops, convenience stores, pawn shops, car shops (and later clothes, food, respray).
-   - Walk through a marked door and the game switches to a small interior scene: a shop counter
-     with a clerk, drawn as one pre-rendered room picture plus the clerk sprite, so it costs ROM
-     (about 40 KB per room style) but no frame rate.
-   - Inside: a buy menu (reuses the pause-menu UI).
-   - **Robbery in free roam only (not during a mission):** aim a gun at the clerk to start it. The
-     clerk fills a bag over a few seconds (cash grows while you keep aiming), then you run. Gives a
-     wanted level, scaled by the take. Each shop has a cool-down before it can be robbed again.
-   - Shops are placed per district (pawn shops in the Docks, gun shops in the Industrial port,
-     car shops along the river, and so on) and shown on the radar.
-2. **Minigames: bowling and pool.**
-   - Each is its own small screen, like the shop interiors: a bowling alley (aim, spin, power;
+1. **Minigames: bowling and pool.**
+   - Each is its own small screen, like the shop interiors (reuse `make_interiors.py` for the rooms): a bowling alley (aim, spin, power;
      10-frame scoring) and a pool hall (top-down table, cue aim and power, simple ball physics).
    - Both are 2D, drawn once per shot, so no frame-rate cost in the city. Play for money against
      a ped, and they can host a story mission or two.
    - Place a bowling alley in the Heights and a pool hall in the Docks.
-3. **Build Acts Two to Four on the new districts** (see `STORY.md`).
+2. **Build Acts Two to Four on the new districts** (see `STORY.md`).
    - Districts unlock as the story goes. Today every district is open; story locks (police
      roadblocks on the bridges) get added with Act Two.
    - New objective types: tail a car without being seen, timed delivery, defend a spot,
      photograph/spot, escort, boat chase, boss.
-4. **People and police react to each other.**
+3. **People and police react to each other.**
    - Peds can commit crimes (mugging, carjacking, fights, running red lights). Nearby cops chase and arrest or shoot them, and peds flee, fight back or watch.
    - Performance: evaluate a few peds per frame in round-robin rather than every ped every frame, so the CPU cost stays flat. Same number of peds and cars on screen as today.
 

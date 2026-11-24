@@ -52,8 +52,14 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - Parked cars: a pool of slots that follows the player (`park_spot`, `recycle_parked`, `PARKED_NEAR`).
 - Host debug key `0x10000 + ((dir+1) << 16) + (bx << 8) + by`: drop the car on road `by` at cross street `bx`.
 
+## Shops (v0.31)
+- `setup_shops` in game.c: a table of (block, type); the door is on the block's east sidewalk (`x = bx*1024 + M(62.5)`, `y = by*1024 + M(30)`), skipped if the block is not built. Types: NY Guns, Corner Mart, Pawn & Loan, Motor Sales.
+- Walking into the door beam (`FX_MARKER + 1`) switches to `GS_SHOP`; `shop_update` runs the buy menu and the hold-up. Robbery only when `mstate != 1`, armed, and the shop's cool-down is over.
+- Art: `tools/make_interiors.py` ray-casts each room (boxes with simple textures), adds the clerk (a `Human` with a hands-up variant) and maps everything to the sprite palette into `src/interiors.c` (room, counter layer drawn over the clerk, clerk poses). `build.sh` re-runs it when the script or `src/assets.c` changes. The HUD draws shop text into the frame buffer (`text_f`), not as OBJ glyphs, because the menu needs more than 96 characters.
+- Host debug key `0xF10 + i`: stand in front of shop i (also clears the wanted level and adds $5000).
+
 ## Memory budget
-- **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
+- **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
 - Put big arrays in EWRAM with `EWRAM_BSS`.
 - Thumb code has no fast divide. Avoid `/` in hot paths (reciprocal multiplies are used throughout) and avoid 64-bit division entirely.
 
