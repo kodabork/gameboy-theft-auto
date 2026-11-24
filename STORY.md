@@ -1,8 +1,8 @@
 # GTA (Gameboy Theft Auto): New York — story bible (v0.29)
 
-The plan for a story of about **6 hours**: 4 acts, 40 story missions, plus side content. Each act opens a new district of the bigger map (see `ROADMAP.md`).
+The plan for a story of about **6 hours**: 4 acts, 40 story missions, plus side content. Each act opens a new district of the map built in v0.30 (see `ROADMAP.md`).
 
-**Act One is in the game now**: the 9 existing jobs, rewritten for Nick. Acts Two to Four are the plan: their missions get built once the map grows.
+**Act One is in the game now**: the 9 existing jobs, rewritten for Nick. Acts Two to Four are the plan: their missions get built next on the new districts.
 
 ## Premise
 **Nick Melnyk** (born Mykyta; everyone has called him Nick since basic training) is a sergeant in the Ukrainian army, ten years in, calm under fire and quiet about what he has seen. His uncle **Bohdan**, who raised him for a while as a boy, emigrated to New York twenty years ago and built a car shop on the waterfront, *Bohdan's Auto*. When Bohdan stops answering his phone, Nick takes leave, gets on a plane and comes to find him.
@@ -33,10 +33,10 @@ Theme: **debts, who invents them, and who pays.** New York runs on favours, and 
 ## The four acts
 | Act | Name | District (new on the map) | Missions | Time | The arc |
 |---|---|---|---|---|---|
-| 1 | **Debts** | Docks and Old Town (today's map) | 9 | ~1 h 15 | Nick pays a fake debt; learns Moran sank the *Lucky Marie*; kills Moran. |
-| 2 | **Paper** | Downtown, across the drawbridge | 11 | ~1 h 30 | Moran was a tool. Nick and Dee chase the paper trail to Councilman Pryce while Moran's leftover crew and the Kings fight over the docks. |
-| 3 | **Iron** | Industrial port and the Hills | 11 | ~1 h 45 | Pryce brings in Halvorsen's Blackline. A betrayal costs Nick his safehouse and nearly Bohdan. |
-| 4 | **Tide** | Gull Island (the half-built casino) | 9 | ~1 h 30 | Nick unites everyone Pryce stepped on and takes the island apart. |
+| 1 | **Debts** | Docks and Old Town (north-west) | 9 | ~1 h 15 | Nick pays a fake debt; learns Moran sank the *Lucky Marie*; kills Moran. |
+| 2 | **Paper** | Downtown (north-east), across the river | 11 | ~1 h 30 | Moran was a tool. Nick and Dee chase the paper trail to Councilman Pryce while Moran's leftover crew and the Kings fight over the docks. |
+| 3 | **Iron** | The Industrial port (south-east) and the Heights (south-west) | 11 | ~1 h 45 | Pryce brings in Halvorsen's Blackline. A betrayal costs Nick his safehouse and nearly Bohdan. |
+| 4 | **Tide** | Gull Island (the half-built casino, far south-east) | 9 | ~1 h 30 | Nick unites everyone Pryce stepped on and takes the island apart. |
 
 Side content (see the end) adds about 1-2 hours on top.
 
@@ -56,7 +56,7 @@ Side content (see the end) adds about 1-2 hours on top.
 **Ending of Act One:** Moran's phone keeps ringing with one name, *Pryce*. Rudy explains Councilman Pryce wants the whole waterfront for a casino. Nick: "Then this isn't over."
 
 ## Act Two — Paper (Downtown)
-The drawbridge to Downtown opens. Moran is dead, but the houses are still being taken, now by "legal" eviction notices. Nick teams up with the reporter Dee to prove who is behind it, while Moran's leftover crew (run by his nephew **Danny Moran**) and the Eastside Kings fight over the docks.
+The bridges over the river to Downtown open. Moran is dead, but the houses are still being taken, now by "legal" eviction notices. Nick teams up with the reporter Dee to prove who is behind it, while Moran's leftover crew (run by his nephew **Danny Moran**) and the Eastside Kings fight over the docks.
 
 | # | Title | Giver | What you do |
 |---|---|---|---|
@@ -72,20 +72,20 @@ The drawbridge to Downtown opens. Moran is dead, but the houses are still being 
 | 19 | Moran's Heir | King Kane | Joint attack with the Kings on Danny Moran's warehouse; Danny flees by boat. Chase on the water (first boat mission). |
 | 20 | Retraction | Dee | Dee's story runs, and Pryce sues. The Gazette is firebombed. Get Dee out, survive a 3-star wanted level. Pryce's lawyers make the evidence disappear. Pryce is untouchable on paper, so he will have to be beaten some other way. |
 
-## Act Three — Iron (Industrial port and the Hills)
+## Act Three — Iron (Industrial port and the Heights)
 Pryce stops pretending. Halvorsen Shipping's private security firm, Blackline, moves into the port: armoured SUVs, checkpoints and better guns than the police. Pryce offers Nick a deal: the house deeds back, signed, if he walks away. Someone close to Nick takes a deal too.
 
 | # | Title | Giver | What you do |
 |---|---|---|---|
 | 21 | New Management | Rudy | Blackline checkpoints are going up at the port. Scout them (spot 4) without raising an alarm. |
 | 22 | Container 7 | Marta | Steal a Halvorsen truck carrying a sealed container. Inside: forged deeds for 200 dock homes. |
-| 23 | The Offer | Pryce | Cutscene-heavy: Pryce meets Nick at a Hills mansion and offers the deeds. Nick refuses. Escape the grounds with Blackline after you. |
+| 23 | The Offer | Pryce | Cutscene-heavy: Pryce meets Nick at a Heights mansion and offers the deeds. Nick refuses. Escape the grounds with Blackline after you. |
 | 24 | Night Shift | Bohdan | Bohdan is followed home from the shop. Protect his ride home (escort), then deal with the followers. |
 | 25 | Iron Yard | King Kane | Wreck Blackline's armoured SUVs in the scrapyard before they deploy (destroy 4, rocket launcher pickup). |
 | 26 | Paper Trail | Dee | Dee traces the forged deeds to Halvorsen's office tower. Steal the hard drive from a courier on a bike route (chase). |
-| 27 | Hill Climb | Jinx | Jinx says Halvorsen keeps the originals in a Hills safe. Drive the getaway car for the break-in. It's a trap: Blackline is waiting. |
+| 27 | Hill Climb | Jinx | Jinx says Halvorsen keeps the originals in a Heights safe. Drive the getaway car for the break-in. It's a trap: Blackline is waiting. |
 | 28 | Burned | Marta | Jinx sold Nick out to save himself. The safehouse is raided; get out alive and lose a 4-star wanted level. |
-| 29 | Mercer | Rudy | Cole Mercer has Rudy. Rescue him from a Blackline compound in the hills (assault with armed guards). |
+| 29 | Mercer | Rudy | Cole Mercer has Rudy. Rescue him from a Blackline compound in the Heights (assault with armed guards). |
 | 30 | What Jinx Knew | Jinx | Jinx, beaten and dumped by Blackline, begs to make it right: Halvorsen and Pryce meet on Gull Island when the casino's steel goes up. Choice: spare Jinx (he helps in Act Four) or don't. |
 | 31 | Drawbridge | King Kane | Pryce closes the bridges to the island. Hold the drawbridge control house while Marta's crew crosses (defend, timed). |
 

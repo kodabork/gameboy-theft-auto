@@ -8,6 +8,7 @@
 #include "engine.h"
 #include "assets.h"
 #include "terrain.h"
+#include "world.h"
 
 typedef long long s64;
 
@@ -233,7 +234,11 @@ static void draw_buildings(void)
     const World *w = &g_world;
     int nv = 0;
     int cx = C->x, cy = C->y;
-    for (int i = 0; i < w->nb; i++) {
+    /* only the blocks within FARZ of the camera */
+    int bx0 = (cx - FARZ) >> 10, bx1 = (cx + FARZ) >> 10, by0 = (cy - FARZ) >> 10, by1 = (cy + FARZ) >> 10;
+    if (bx0 < 0) bx0 = 0; if (by0 < 0) by0 = 0; if (bx1 > NB - 1) bx1 = NB - 1; if (by1 > NB - 1) by1 = NB - 1;
+    for (int bj = by0; bj <= by1; bj++)
+    for (int i = blk_start[bj * NB + bx0], ie = blk_start[bj * NB + bx1 + 1]; i < ie; i++) {
         const Building *b = &w->b[i];
         int qx = cx < b->x0 ? b->x0 : (cx > b->x1 ? b->x1 : cx);
         int qy = cy < b->y0 ? b->y0 : (cy > b->y1 ? b->y1 : cy);
@@ -284,7 +289,8 @@ static void draw_buildings(void)
 /* ---------------------------------------------------------------- ground */
 EWRAM_BSS static s32 col_k[SCR_W];                     /* column slope (2x-119)/(2FX), 16.16 */
 EWRAM_BSS static u8 fogpair[128][2][2];                  /* palette fog offsets [z>>5][column parity][row parity] */
-#define GRID_LIM (8 * 1024 + M(15))
+#define GRID_LIM GRID_U
+#define LOTW (NB + 1)
 
 /* palette base (8 + mat*8, no light) per terrain material code */
 static const u8 tm_b8[10] = { 8 + MAT_GRASS * 8, 8 + MAT_WATER * 8, 8 + MAT_SAND * 8, 8 + MAT_GRASS * 8, 8 + MAT_BROWN * 8,
@@ -316,15 +322,15 @@ static const u8 tile_base[11] = {
     8 + MAT_ASPHALT * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_CONCRETE * 8, 0xFE,
     8 + MAT_TRIM * 8 + 1, 8 + MAT_GRASS * 8
 };
-static u8 lot_base[81][2];
+static u8 lot_base[LOTW * LOTW];                /* palette base (no light) of each block's lot */
 EWRAM_BSS static u8 tile_pal[128 * 128];            /* tile_base[ground_tile[i]], resolved once at start-up */
 #define GRID_TX (GRID_LIM >> 3)
 
 /* on-grid ground texel -> palette base (lots resolved per block) */
-static inline __attribute__((always_inline)) int grid_px(int gu, int gv, const u8 *tp, const u8 (*lb)[2])
+static inline __attribute__((always_inline)) int grid_px(int gu, int gv, const u8 *tp, const u8 *lb)
 {
     int b = tp[((gv >> 9) & (127 << 7)) | ((gu >> 16) & 127)];
-    if (b >= 0xFE) b = lb[(gv >> 23) * 9 + (gu >> 23)][b & 1];
+    if (b >= 0xFE) b = lb[(gv >> 23) * LOTW + (gu >> 23)] + (b & 1);
     return b;
 }
 /* any ground texel: street grid, island terrain map or open sea (16.16 texels; texel = 0.5 m) */
@@ -362,7 +368,7 @@ static __attribute__((noinline)) void gen_span2(u32 *dst, int n, int gu, int gv,
    n column pairs of on-grid ground, one texture sample per column. */
 static __attribute__((noinline)) void grid_span(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp)
 {
-    const u8 *tp = tile_pal; const u8 (*lb)[2] = lot_base;
+    const u8 *tp = tile_pal; const u8 *lb = lot_base;
     u32 *end = dst + n;
     do {
         int b0 = grid_px(gu, gv, tp, lb); gu += su; gv += sv;
@@ -373,7 +379,7 @@ static __attribute__((noinline)) void grid_span(u32 *dst, int n, int gu, int gv,
 /* the same into two rows at once (near ground: one sample shared by rows y and y+1) */
 static __attribute__((noinline)) void grid_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1)
 {
-    const u8 *tp = tile_pal; const u8 (*lb)[2] = lot_base;
+    const u8 *tp = tile_pal; const u8 *lb = lot_base;
     u32 *end = dst + n;
     do {
         int b0 = grid_px(gu, gv, tp, lb); gu += su; gv += sv;
@@ -388,7 +394,7 @@ static __attribute__((noinline)) void grid_span2(u32 *dst, int n, int gu, int gv
 static void draw_ground(void)
 {
     const int c = C->c, s = C->s, camh = C->h;
-    for (int i = 0; i < 81; i++) { int m = g_world.lotmat[i]; lot_base[i][0] = (u8)(8 + m * 8); lot_base[i][1] = (u8)(8 + m * 8 + 1); }
+    for (int i = 0; i < LOTW * LOTW; i++) lot_base[i] = (u8)(8 + g_world.lotmat[i] * 8);
     const int gu0 = C->x << 13, gv0 = C->y << 13;            /* texel 16.16 */
     const int du0 = (c << 2) + ((s * col_k[0]) >> 14), dv0 = (s << 2) - ((c * col_k[0]) >> 14);   /* units 16.16 per z */
     const int kst = col_k[1] - col_k[0];
@@ -422,7 +428,7 @@ static void draw_ground(void)
         const int gue = gu + su * (SCR_W - 1), gve = gv + sv * (SCR_W - 1);
         const int ingrid = (unsigned)(gu >> 16) < lim && (unsigned)(gv >> 16) < lim && (unsigned)(gue >> 16) < lim && (unsigned)(gve >> 16) < lim;
         #define PAIR_BASE(b) do { if (ingrid) { int tx_ = gu >> 16, ty_ = gv >> 16; b = tile_pal[((ty_ & 127) << 7) | (tx_ & 127)]; \
-            if (b >= 0xFE) b = lot_base[(ty_ >> 7) * 9 + (tx_ >> 7)][b & 1]; } else b = ground_base(gu, gv, lanes); } while (0)
+            if (b >= 0xFE) b = lot_base[(ty_ >> 7) * LOTW + (tx_ >> 7)] + (b & 1); } else b = ground_base(gu, gv, lanes); } while (0)
         if (z < 256 && y + 1 < SCR_H) {        /* near rows: one sample per column, shared by two rows */
             const int y1 = y + 1;
             const int fe1 = fogpair[z >> 5][0][y1 & 1], fo1 = fogpair[z >> 5][1][y1 & 1];

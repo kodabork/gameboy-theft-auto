@@ -6,7 +6,7 @@ set -e
 cd "$(dirname "$0")"
 mkdir -p build
 python3 tools/gen_tables.py src/tables.c
-[ -f build/terrain.bin ] || python3 tools/gen_terrain.py build/terrain.bin src/terrain.c src/terrain.h
+[ -f build/terrain.bin ] && [ build/terrain.bin -nt tools/gen_terrain.py ] || python3 tools/gen_terrain.py build/terrain.bin src/terrain.c src/terrain.h
 if [ -n "$REGEN_ASSETS" ] || [ ! -f build/assets.bin ]; then
     python3 tools/make_assets.py src/assets.c build/assets.bin
     python3 tools/append_props.py src/assets.c src/assets.h build/assets.bin

@@ -8,7 +8,7 @@
 static u16 fb[SCR_W * SCR_H], pal[256];
 static Sprite objs[MAX_SPRITES];
 unsigned char spr_pixels[1 << 25];
-unsigned char terrain_h[656 * 656], terrain_m[656 * 656], terrain_r[656 * 656], radar_map[328 * 328];
+unsigned char terrain_m[TMAP_W * TMAP_W], terrain_r[TMAP_W * TMAP_W], radar_map[RADAR_MAP_W * RADAR_MAP_W];
 
 static void dump(const char *name)
 {
@@ -27,7 +27,7 @@ void game_debug_set(int w, int guns);
 int main(int argc, char **argv)
 {
     FILE *af = fopen("../build/assets.bin", "rb"); fread(spr_pixels, 1, sizeof spr_pixels, af); fclose(af);
-    FILE *tf = fopen("../build/terrain.bin", "rb"); fread(terrain_h, 1, sizeof terrain_h, tf); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
+    FILE *tf = fopen("../build/terrain.bin", "rb"); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
     palette_build(pal);
     render_init();
     game_init();
@@ -46,6 +46,7 @@ int main(int argc, char **argv)
             if (keys == 0xFFF) { game_debug_knock(9, 1200); keys = 0; }
             if (keys >= 0xB00 && keys < 0xC00) { void game_debug_street(int); game_debug_street(keys - 0xB00); keys = 0; }
             if (keys >= 0xC00 && keys < 0xD00) { void game_debug_coast(int); game_debug_coast(keys - 0xC00); keys = 0; }
+            if (keys >= 0x10000) { void game_debug_block(int, int, int); game_debug_block((keys >> 8) & 255, keys & 255, (keys >> 16) - 1); keys = 0; }
             if (keys == 0xFFE) { game_debug_set(3, 1); keys = 0; }
             if (keys == 0xF00) { void game_debug_burn_self(void); game_debug_burn_self(); keys = 0; }
             if (keys == 0xF01) { void game_debug_near_cat(void); game_debug_near_cat(); keys = 0; }

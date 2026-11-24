@@ -1,13 +1,13 @@
 #include "game.c"
 const unsigned char spr_pixels[1 << 25];
-unsigned char terrain_h[656 * 656], terrain_m[656 * 656], terrain_r[656 * 656], radar_map[328 * 328];
+unsigned char terrain_m[TMAP_W * TMAP_W], terrain_r[TMAP_W * TMAP_W], radar_map[RADAR_MAP_W * RADAR_MAP_W];
 static void tick(int n, u16 keys) { for (int i = 0; i < n; i++) game_update(keys, TICKS / 20); }
 static void go(int x, int y) { if (pl.in_car >= 0) { Car *c = &cars[pl.in_car]; c->x = Q8(x); c->y = Q8(y); c->vx = c->vy = 0; c->speed = 0; } pl.x = Q8(x); pl.y = Q8(y); }
 static void skip_dialog(void) { for (int k = 0; k < 12 && gstate == GS_DIALOG; k++) { tick(1, KEY_A); tick(1, 0); } }
 static void kill_all(int k0, int k1) { for (int k = k0; k < k1; k++) { Ped *p = &peds[PED_MISSION0 + k]; if (p->active) { p->down = 1; p->timer = 30 * 256; } } }
 int main(void)
 {
-    FILE *tf = fopen("../build/terrain.bin", "rb"); fread(terrain_h, 1, sizeof terrain_h, tf); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
+    FILE *tf = fopen("../build/terrain.bin", "rb"); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
     game_init(); new_game_state(); gstate = GS_PLAY;
     int fails = 0;
     for (int m = 0; m < NMISSIONS; m++) {

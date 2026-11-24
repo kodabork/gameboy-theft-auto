@@ -16,6 +16,27 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.30
+- **The map is much bigger.** The city went from 8 x 8 blocks (527 m across) to 20 x 20 blocks
+  (1.3 km across), about 6 times the area. The whole island, with its coast road, is about
+  4.7 times bigger.
+- **Six districts:**
+  - **The Docks and Old Town** (north-west): the original city, where Act One plays.
+  - **The river**: crossed by every east-west street on bridges, with quays along both banks.
+  - **Harbor Park**: a belt of parks south of the Docks.
+  - **The Heights** (south-west): low rowhouses, lots of parks and trees.
+  - **Downtown** (north-east): glass towers, tallest in the middle.
+  - **The Industrial port** (south-east): big warehouses and sheds.
+  - **Gull Island** (far south-east): the half-built casino strip, across its own channel.
+- The river and the island channel run out to the sea under the coast road. The radar shows
+  water and parks.
+- **More pickups:** about 100 new weapon and health pickups across the new districts, with
+  weapons to suit each area (rifles and rockets on Gull Island, SMGs downtown, and so on).
+- **Parked cars now follow you around the city** instead of all sitting in one corner.
+- Mission 6, Special Delivery, now ends at the **west** coast road. The east coast is now much
+  further away.
+- Frame rate holds: 19.2 fps on the benchmark (19.0 before).
+
 ## What's new in v0.29
 - **The hero is now called Nick Melnyk** (born Mykyta). Same Ukrainian army sergeant and the same
   story with Uncle Bohdan; the dialogue and `STORY.md` use the new name.

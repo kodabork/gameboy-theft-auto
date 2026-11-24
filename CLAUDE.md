@@ -41,7 +41,16 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 | `tools/cars3.py` | Car models, rendered by `tools/sprites_sdf.py`. Only headings 0..n/2 are stored; the rest are drawn mirrored. |
 | `tools/make_assets.py`, `append_props.py`, `append_fx.py` | The sprite pipeline. |
 | `tools/sheet.py` | Car contact sheet. |
+| `tools/gen_terrain.py` | The map: districts and block kinds (`city_kind`, `city_district`), coast ring, river mouths, radar map. Writes `build/terrain.bin`, `src/terrain.c/.h/.s`. Re-runs whenever it is newer than `build/terrain.bin`. |
 | `src/host_main.c` | PC build for testing (see Testing). |
+
+## Map (v0.30)
+- 20 x 20 blocks of 64 m (`NB` in `world.h`, from `CITY_NB` in `terrain.h`); roads 0..NB at `ROAD_C(i)`. Coast ring around it, 1424 x 1424 terrain cells of 1 m.
+- Districts: Docks/Old Town (blocks x<8, y<8, Act One), river (x=8), Harbor Park (y=8), the Heights (x<8, y>8), Downtown (x>8, y<10), Industrial (x>8, y>=10), Gull Island (x>=15, y>=15, channel at row/column 14).
+- Block kinds: built, park, water. Water blocks are solid (terrain_m is WATER there; `water_push` pushes to the nearest quay).
+- Everything per-frame is bucketed per block: `blk_start`/`tree_start` (world.c), lamps, props, roof props (game.c). Never loop over every building or prop.
+- Parked cars: a pool of slots that follows the player (`park_spot`, `recycle_parked`, `PARKED_NEAR`).
+- Host debug key `0x10000 + ((dir+1) << 16) + (bx << 8) + by`: drop the car on road `by` at cross street `bx`.
 
 ## Memory budget
 - **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
@@ -57,14 +66,14 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
   Dumped frames go to `build/fNNNN.ppm`.
   - Keys: A=1, B=2, SELECT=4, START=8, RIGHT=0x10, LEFT=0x20, UP=0x40, DOWN=0x80, R=0x100, L=0x200.
   - Debug codes: 0xF00 set your own car on fire, 0xFD0 start play, 0xFE0+k teleport to job k's marker, 0xFFE give guns, 0xFC0+n damage the nearest car, 0xB00+n street, 0xC00+n coast.
-- **Crash test:** build the PC build with `-fsanitize=address,undefined` and fuzz with random key scripts.
+- **Crash test:** build the PC build with `-fsanitize=address,undefined -fno-sanitize=shift-base` (fixed-point code shifts negative values on purpose) and fuzz with random key scripts.
 - **Mission test:** `tools/mission_test.c` plays every job's win condition in order. Build it from `src/` with `gcc -DHOST -O1 -w -I. -o mt ../tools/mission_test.c world.c render.c collide.c tables.c assets.c hud.c terrain.c sound.c logo.c portraits.c`. `tools/crash_test.c` is the high-speed car collision test.
 - **ROM profiler and emulator:** `tools/gbaprof.c`. Build it with `gcc -O2 -o tools/gbaprof tools/gbaprof.c`.
   - Usage: `gbaprof rom seconds "frames:keys,..." [dump_flips] [prefix]`. It prints fps.
   - `PROF=file PROF_FROM=sec` writes per-PC cycles; aggregate them with `tools/profsym.py` and `tools/byline.py`.
   - `SRAM_FILE=path` keeps save memory between runs (used for the save, reboot, CONTINUE test).
   - `FIXDT=819` fixes the game clock and indexes keys by displayed frame, so different builds play the identical game; `HIST=a-b` prints VBlanks per frame and fps over displayed frames a..b.
-  - **Benchmark:** `tools/bench.sh [rom]` (needs `build/bench.txt`, the standard drive script in displayed frames). v0.19: 14.4 fps, v0.20: 18.2 fps, v0.24: 19.0 fps.
+  - **Benchmark:** `tools/bench.sh [rom]` (needs `build/bench.txt`, the standard drive script in displayed frames). v0.19: 14.4 fps, v0.20: 18.2 fps, v0.24: 19.0 fps, v0.30 (big map): 19.2 fps.
 
 ## Sound
 - `src/sound.c`: DirectSound mixer (engine, horn, skid, guns, siren, effect synth) and PSG radio. Five stations (`stations[]`): 64-step patterns for lead, chord stabs, bass and drums.
