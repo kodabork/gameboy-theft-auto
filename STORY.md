@@ -1,42 +1,42 @@
-# GTA (Gameboy Theft Auto): New York — story bible (v0.28)
+# GTA (Gameboy Theft Auto): New York — story bible (v0.29)
 
 The plan for a story of about **6 hours**: 4 acts, 40 story missions, plus side content. Each act opens a new district of the bigger map (see `ROADMAP.md`).
 
-**Act One is in the game now**: the 9 existing jobs, rewritten for Taras. Acts Two to Four are the plan: their missions get built once the map grows.
+**Act One is in the game now**: the 9 existing jobs, rewritten for Nick. Acts Two to Four are the plan: their missions get built once the map grows.
 
 ## Premise
-**Taras Melnyk** is a sergeant in the Ukrainian army, ten years in, calm under fire and quiet about what he has seen. His uncle **Bohdan**, who raised him for a while as a boy, emigrated to New York twenty years ago and built a car shop on the waterfront, *Bohdan's Auto*. When Bohdan stops answering his phone, Taras takes leave, gets on a plane and comes to find him.
+**Nick Melnyk** (born Mykyta; everyone has called him Nick since basic training) is a sergeant in the Ukrainian army, ten years in, calm under fire and quiet about what he has seen. His uncle **Bohdan**, who raised him for a while as a boy, emigrated to New York twenty years ago and built a car shop on the waterfront, *Bohdan's Auto*. When Bohdan stops answering his phone, Nick takes leave, gets on a plane and comes to find him.
 
 He finds the shop on the **New York waterfront**: docks, tugboats, rowhouses and a lot of people who owe the wrong man money. Bohdan is in hospital with both arms broken. Loan shark **Victor Moran** has a page from his ledger saying Bohdan owes him $10,000, with the shop as collateral. Bohdan's foreman **Marta** is keeping the doors open, and the shop has a side business in cars nobody asks about.
 
-Bohdan never borrowed a dime, and his best friend **Sal**, a tug captain, died a few months ago when his boat, the *Lucky Marie*, sank in a storm. The police called it an accident. But Moran owns half the docks and has a detective on his payroll, so Taras starts paying.
+Bohdan never borrowed a dime, and his best friend **Sal**, a tug captain, died a few months ago when his boat, the *Lucky Marie*, sank in a storm. The police called it an accident. But Moran owns half the docks and has a detective on his payroll, so Nick starts paying.
 
-Theme: **debts, who invents them, and who pays.** New York runs on favours, and Taras, a stranger in the city, learns to trade them.
+Theme: **debts, who invents them, and who pays.** New York runs on favours, and Nick, a stranger in the city, learns to trade them.
 
 ## Cast (all original)
 | Character | Who they are | Outfit in game | Acts |
 |---|---|---|---|
-| **Taras Melnyk** | The player. Ukrainian army sergeant, new to New York. Calm, dry, fiercely loyal to Bohdan; handy with a gun, keeps the war to himself, learns the city one job at a time. | Player model | 1-4 |
-| **Bohdan Melnyk** | Taras's uncle. Owns Bohdan's Auto on the waterfront; gruff, generous, too proud to ask for help. Out of hospital by Act Two, with opinions about everything Taras does. | (new: older man) | 1-4 |
+| **Nick Melnyk** | The player. Ukrainian army sergeant, new to New York. Calm, dry, fiercely loyal to Bohdan; handy with a gun, keeps the war to himself, learns the city one job at a time. | Player model | 1-4 |
+| **Bohdan Melnyk** | Nick's uncle. Owns Bohdan's Auto on the waterfront; gruff, generous, too proud to ask for help. Out of hospital by Act Two, with opinions about everything Nick does. | (new: older man) | 1-4 |
 | **Sal** | Bohdan's best friend, a tug captain (dead). Refused to run Moran's cargo on his tug. | — | (memory) |
-| **Marta Kowal** | Foreman at Bohdan's Auto under the elevated rail, and runs its stolen-car side business. Tough, practical. First to give Taras work. | Red | 1-4 |
+| **Marta Kowal** | Foreman at Bohdan's Auto under the elevated rail, and runs its stolen-car side business. Tough, practical. First to give Nick work. | Red | 1-4 |
 | **Jinx** | Courier who moves anything for anyone. Funny, nervous, always three moves ahead or behind. | Green | 1-3 |
 | **Victor Moran** | Loan shark and docks boss. Invents debts to seize waterfront homes. | Suit | 1 |
 | **Det. Ray Shaw** | Crooked detective, Moran's man on the force. | Navy | 1 |
 | **Rudy Brandt** | Sal's deckhand on the *Lucky Marie*; survived the sinking and went into hiding. | White | 1-4 |
 | **Councilman Edgar Pryce** | Charming city councilman. The *Harbor Point* casino and luxury-waterfront project needs every dock home emptied, and Moran's fake debts were how. The real villain. | Suit | 2-4 |
 | **Dee Okafor** | Investigative reporter at the *Harbor Gazette*. Wants Moran's ledger to bring down Pryce. | (new) | 2-4 |
-| **Tomas "King" Kane** | Leader of the Eastside Kings, whose cars Taras burned for Moran. Enemy first, ally later. | Grey | 2-4 |
+| **Tomas "King" Kane** | Leader of the Eastside Kings, whose cars Nick burned for Moran. Enemy first, ally later. | Grey | 2-4 |
 | **Ingrid Halvorsen** | Head of Halvorsen Shipping, Pryce's partner. Runs a private security firm, **Blackline**. | White | 3-4 |
-| **Cole Mercer** | Blackline's field commander, ex-military, Taras's physical match. | Cop (recoloured) | 3-4 |
+| **Cole Mercer** | Blackline's field commander, ex-military, Nick's physical match. | Cop (recoloured) | 3-4 |
 
 ## The four acts
 | Act | Name | District (new on the map) | Missions | Time | The arc |
 |---|---|---|---|---|---|
-| 1 | **Debts** | Docks and Old Town (today's map) | 9 | ~1 h 15 | Taras pays a fake debt; learns Moran sank the *Lucky Marie*; kills Moran. |
-| 2 | **Paper** | Downtown, across the drawbridge | 11 | ~1 h 30 | Moran was a tool. Taras and Dee chase the paper trail to Councilman Pryce while Moran's leftover crew and the Kings fight over the docks. |
-| 3 | **Iron** | Industrial port and the Hills | 11 | ~1 h 45 | Pryce brings in Halvorsen's Blackline. A betrayal costs Taras his safehouse and nearly Bohdan. |
-| 4 | **Tide** | Gull Island (the half-built casino) | 9 | ~1 h 30 | Taras unites everyone Pryce stepped on and takes the island apart. |
+| 1 | **Debts** | Docks and Old Town (today's map) | 9 | ~1 h 15 | Nick pays a fake debt; learns Moran sank the *Lucky Marie*; kills Moran. |
+| 2 | **Paper** | Downtown, across the drawbridge | 11 | ~1 h 30 | Moran was a tool. Nick and Dee chase the paper trail to Councilman Pryce while Moran's leftover crew and the Kings fight over the docks. |
+| 3 | **Iron** | Industrial port and the Hills | 11 | ~1 h 45 | Pryce brings in Halvorsen's Blackline. A betrayal costs Nick his safehouse and nearly Bohdan. |
+| 4 | **Tide** | Gull Island (the half-built casino) | 9 | ~1 h 30 | Nick unites everyone Pryce stepped on and takes the island apart. |
 
 Side content (see the end) adds about 1-2 hours on top.
 
@@ -53,10 +53,10 @@ Side content (see the end) adds about 1-2 hours on top.
 | 8 | Cash Run | Marta | Stay on Shaw's SUV until he bails, then kill him | $3,500 |
 | 9 | Last Call | Rudy | Rudy reveals Moran's men sank the *Lucky Marie* with Sal aboard. Kill Moran at the old pier | $10,000 |
 
-**Ending of Act One:** Moran's phone keeps ringing with one name, *Pryce*. Rudy explains Councilman Pryce wants the whole waterfront for a casino. Taras: "Then this isn't over."
+**Ending of Act One:** Moran's phone keeps ringing with one name, *Pryce*. Rudy explains Councilman Pryce wants the whole waterfront for a casino. Nick: "Then this isn't over."
 
 ## Act Two — Paper (Downtown)
-The drawbridge to Downtown opens. Moran is dead, but the houses are still being taken, now by "legal" eviction notices. Taras teams up with the reporter Dee to prove who is behind it, while Moran's leftover crew (run by his nephew **Danny Moran**) and the Eastside Kings fight over the docks.
+The drawbridge to Downtown opens. Moran is dead, but the houses are still being taken, now by "legal" eviction notices. Nick teams up with the reporter Dee to prove who is behind it, while Moran's leftover crew (run by his nephew **Danny Moran**) and the Eastside Kings fight over the docks.
 
 | # | Title | Giver | What you do |
 |---|---|---|---|
@@ -73,38 +73,38 @@ The drawbridge to Downtown opens. Moran is dead, but the houses are still being 
 | 20 | Retraction | Dee | Dee's story runs, and Pryce sues. The Gazette is firebombed. Get Dee out, survive a 3-star wanted level. Pryce's lawyers make the evidence disappear. Pryce is untouchable on paper, so he will have to be beaten some other way. |
 
 ## Act Three — Iron (Industrial port and the Hills)
-Pryce stops pretending. Halvorsen Shipping's private security firm, Blackline, moves into the port: armoured SUVs, checkpoints and better guns than the police. Pryce offers Taras a deal: the house deeds back, signed, if he walks away. Someone close to Taras takes a deal too.
+Pryce stops pretending. Halvorsen Shipping's private security firm, Blackline, moves into the port: armoured SUVs, checkpoints and better guns than the police. Pryce offers Nick a deal: the house deeds back, signed, if he walks away. Someone close to Nick takes a deal too.
 
 | # | Title | Giver | What you do |
 |---|---|---|---|
 | 21 | New Management | Rudy | Blackline checkpoints are going up at the port. Scout them (spot 4) without raising an alarm. |
 | 22 | Container 7 | Marta | Steal a Halvorsen truck carrying a sealed container. Inside: forged deeds for 200 dock homes. |
-| 23 | The Offer | Pryce | Cutscene-heavy: Pryce meets Taras at a Hills mansion and offers the deeds. Taras refuses. Escape the grounds with Blackline after you. |
+| 23 | The Offer | Pryce | Cutscene-heavy: Pryce meets Nick at a Hills mansion and offers the deeds. Nick refuses. Escape the grounds with Blackline after you. |
 | 24 | Night Shift | Bohdan | Bohdan is followed home from the shop. Protect his ride home (escort), then deal with the followers. |
 | 25 | Iron Yard | King Kane | Wreck Blackline's armoured SUVs in the scrapyard before they deploy (destroy 4, rocket launcher pickup). |
 | 26 | Paper Trail | Dee | Dee traces the forged deeds to Halvorsen's office tower. Steal the hard drive from a courier on a bike route (chase). |
 | 27 | Hill Climb | Jinx | Jinx says Halvorsen keeps the originals in a Hills safe. Drive the getaway car for the break-in. It's a trap: Blackline is waiting. |
-| 28 | Burned | Marta | Jinx sold Taras out to save himself. The safehouse is raided; get out alive and lose a 4-star wanted level. |
+| 28 | Burned | Marta | Jinx sold Nick out to save himself. The safehouse is raided; get out alive and lose a 4-star wanted level. |
 | 29 | Mercer | Rudy | Cole Mercer has Rudy. Rescue him from a Blackline compound in the hills (assault with armed guards). |
 | 30 | What Jinx Knew | Jinx | Jinx, beaten and dumped by Blackline, begs to make it right: Halvorsen and Pryce meet on Gull Island when the casino's steel goes up. Choice: spare Jinx (he helps in Act Four) or don't. |
 | 31 | Drawbridge | King Kane | Pryce closes the bridges to the island. Hold the drawbridge control house while Marta's crew crosses (defend, timed). |
 
 ## Act Four — Tide (Gull Island)
-Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce stepped on comes with Taras: the Kings, Marta's crew, Rudy on a tug, Dee with a camera, and Bohdan, who has had enough of being protected.
+Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce stepped on comes with Nick: the Kings, Marta's crew, Rudy on a tug, Dee with a camera, and Bohdan, who has had enough of being protected.
 
 | # | Title | Giver | What you do |
 |---|---|---|---|
-| 32 | Landing Party | Rudy | Rudy's tug lands Taras on the island at night. Get to the construction site unseen. |
+| 32 | Landing Party | Rudy | Rudy's tug lands Nick on the island at night. Get to the construction site unseen. |
 | 33 | Power Down | Marta | Destroy 3 generators to black out Blackline's cameras. |
-| 34 | Hard Hats | King Kane | The Kings storm the site's front gate while Taras hits the back. Clear the yard. |
+| 34 | Hard Hats | King Kane | The Kings storm the site's front gate while Nick hits the back. Clear the yard. |
 | 35 | Live Feed | Dee | Escort Dee to the crane top; she broadcasts the forged deeds live. |
 | 36 | Mercer, Again | — | Boss fight: Cole Mercer in the half-built casino floors (armoured, rifle). |
 | 37 | Halvorsen Sails | Rudy | Halvorsen flees on her yacht. Chase her across the harbor by boat and stop the yacht. |
 | 38 | Councilman | — | Pryce runs for the island's helipad. Chase on foot up the casino tower, through the guards. |
-| 39 | The Lucky Marie | Bohdan | Final scene on the roof: Taras, Pryce, and the truth about Sal on camera. Pryce is arrested live (or worse, if the player shoots him; both endings play). |
+| 39 | The Lucky Marie | Bohdan | Final scene on the roof: Nick, Pryce, and the truth about Sal on camera. Pryce is arrested live (or worse, if the player shoots him; both endings play). |
 | 40 | Home | Bohdan | Epilogue drive: take Bohdan back to the shop. The deeds are void; the waterfront stays. Credits roll over a free drive along the coast. |
 
-**Endings:** Pryce arrested (the "clean" ending, Dee's story wins) or Pryce dead (Taras's revenge; the city remembers it differently). Jinx alive or not changes a few lines in Act Four.
+**Endings:** Pryce arrested (the "clean" ending, Dee's story wins) or Pryce dead (Nick's revenge; the city remembers it differently). Jinx alive or not changes a few lines in Act Four.
 
 ## Side content (about 1-2 hours)
 - **Vehicle jobs:**
@@ -126,7 +126,7 @@ Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce step
   - **escort** (an NPC in your car or on foot)
   - **boat chase**
   - **boss** (one armoured enemy)
-- **Cutscenes:** in-engine, with letterbox bars and a dialogue box. The mission giver stands in the street facing Taras: an establishing two-shot first, then over-the-shoulder cuts to whoever is speaking. Afterwards the giver walks away. Portraits stay off unless the owner supplies art.
+- **Cutscenes:** in-engine, with letterbox bars and a dialogue box. The mission giver stands in the street facing Nick: an establishing two-shot first, then over-the-shoulder cuts to whoever is speaking. Afterwards the giver walks away. Portraits stay off unless the owner supplies art.
 - **New people needed:**
   - **Female ped models** for Dee (and an older-man model for Bohdan). Marta and Jinx's outfits could also get female versions. Each new set is about 1 MB of ROM with near and far frames.
   - A Blackline guard (a recoloured cop).

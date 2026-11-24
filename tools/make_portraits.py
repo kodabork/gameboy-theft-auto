@@ -175,7 +175,7 @@ def rudy():
     return a, dict(skin=(0.58, 0.40, 0.29), hair=(0.12, 0.10, 0.09), iris=(0.24, 0.16, 0.10), cloth=(0.44, 0.46, 0.50),
                    shirt=(0.95, 0.95, 0.93), cap=(0.93, 0.93, 0.91), bg=(0.16, 0.40, 0.42))
 
-CAST = [('TARAS', eddie), ('MARTA', marta), ('JINX', jinx), ('MORAN', moran), ('SHAW', shaw), ('RUDY', rudy)]
+CAST = [('NICK', eddie), ('MARTA', marta), ('JINX', jinx), ('MORAN', moran), ('SHAW', shaw), ('RUDY', rudy)]
 
 # ------------------------------------------------------------------ colour and shading
 def mul(c, k): return tuple(float(np.clip(v * m, 0, 1)) for v, m in zip(c, k))

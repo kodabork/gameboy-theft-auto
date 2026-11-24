@@ -28,7 +28,7 @@
 #define PED_CIV_END 42      /* 0..41 street population (incl. beat cops) */
 #define PED_CREW0 42        /* 42..44 cops that jump out of police cars */
 #define PED_MISSION0 45     /* 45..54 job targets and gunmen */
-#define PED_ACTOR 55        /* the person Taras talks to in a cutscene */
+#define PED_ACTOR 55        /* the person Nick talks to in a cutscene */
 
 enum { AI_NONE, AI_TRAFFIC, AI_POLICE, AI_RIVAL };
 enum { P_CIV, P_COP, P_TARGET, P_GUARD };
@@ -1391,12 +1391,12 @@ static void update_pickups(int dt)
 }
 
 /* ------------------------------------------------------------ story */
-/* Act One of STORY.md. Taras Melnyk, a Ukrainian army sergeant, flies to New York when his
+/* Act One of STORY.md. Nick (Mykyta) Melnyk, a Ukrainian army sergeant, flies to New York when his
    uncle Bohdan stops answering his phone. Bohdan runs a car shop on the waterfront; Moran's men
    have put him in hospital, and Victor Moran says Bohdan owes him $10,000 or the shop is his.
-   Taras works it off: cars for Marta (Bohdan's shop foreman), product for Jinx, and Moran's dirty
+   Nick works it off: cars for Marta (Bohdan's shop foreman), product for Jinx, and Moran's dirty
    work, some of it ordered by Detective Shaw. Jinx steals Moran's ledger, which proves the debts
-   are invented to seize waterfront property. Taras takes Shaw's cash run apart, and Rudy comes out
+   are invented to seize waterfront property. Nick takes Shaw's cash run apart, and Rudy comes out
    of hiding: Moran sank the Lucky Marie, the tug of Bohdan's old friend Sal, for refusing him.
    It ends at the old pier, and Moran's phone points at Councilman Pryce (Act Two). */
 typedef struct { const char *who, *l1, *l2; } Page;
@@ -1405,63 +1405,63 @@ static const Page *dlg; static int dlg_n, dlg_i, dlg_then;      /* dlg_then: 1 =
 
 static const Page st_intro[] = {
     { "", "NEW YORK. DOWN ON THE WATERFRONT,", "THE DOCKS RUN ON FAVOURS AND CASH." },
-    { "TARAS", "TEN YEARS IN THE UKRAINIAN ARMY.", "NOW MY UNCLE STOPS ANSWERING." },
-    { "MARTA", "YOU'RE BOHDAN'S NEPHEW? TARAS?", "I'M MARTA. I RUN HIS SHOP FLOOR." },
+    { "NICK", "TEN YEARS IN THE UKRAINIAN ARMY.", "NOW MY UNCLE STOPS ANSWERING." },
+    { "MARTA", "YOU'RE BOHDAN'S NEPHEW? NICK?", "I'M MARTA. I RUN HIS SHOP FLOOR." },
     { "MARTA", "HE'S IN THE HOSPITAL. MORAN'S MEN", "BROKE BOTH HIS ARMS." },
     { "MARTA", "MORAN SAYS BOHDAN OWES HIM", "$10,000. OR HE TAKES THE SHOP." },
-    { "TARAS", "MY UNCLE NEVER BORROWED A DIME.", 0 },
+    { "NICK", "MY UNCLE NEVER BORROWED A DIME.", 0 },
     { "MARTA", "TELL MORAN. TILL BOHDAN'S BACK,", "THE SHOP HAS WORK FOR YOU." },
     { "MARTA", "THE KIND WE DON'T ADVERTISE.", "FOLLOW THE YELLOW MARKER." },
 };
 static const Page st_m0[] = {
     { "MARTA", "A RICH KID LEFT A YELLOW SUPERCAR", "ON THE STREET. I HAVE A BUYER." },
-    { "TARAS", "I DROVE TANKS, NOT SUPERCARS.", 0 },
+    { "NICK", "I DROVE TANKS, NOT SUPERCARS.", 0 },
     { "MARTA", "THEN LEARN FAST. BRING IT TO THE", "SHOP. AND DON'T WRECK IT." } };
 static const Page st_m1[] = {
     { "JINX", "YOU'RE BOHDAN'S NEPHEW? I'M JINX.", "I MOVE PRODUCT FOR WHOEVER PAYS." },
     { "JINX", "A PACKAGE IS WAITING AT THE DOCKS.", "PICK IT UP. BRING IT TO THE CLUB." },
-    { "TARAS", "WHAT'S IN IT?", 0 },
+    { "NICK", "WHAT'S IN IT?", 0 },
     { "JINX", "THE KIND OF STUFF THAT GETS YOU", "TEN YEARS. SO DON'T GET CAUGHT." } };
 static const Page st_m2[] = {
-    { "MORAN", "TARAS MELNYK. VICTOR MORAN.", "BOHDAN'S DEBT IS YOURS NOW." },
+    { "MORAN", "NICK MELNYK. VICTOR MORAN.", "BOHDAN'S DEBT IS YOURS NOW." },
     { "MORAN", "MY BOOKKEEPER IS TALKING TO COPS.", "THE MAN IN THE SUIT. SHUT HIM UP." },
-    { "TARAS", "AND THAT COMES OFF THE DEBT?", 0 },
+    { "NICK", "AND THAT COMES OFF THE DEBT?", 0 },
     { "MORAN", "$1,500 OF IT. TELL BOHDAN TO GET", "WELL SOON. HOSPITALS AREN'T SAFE." } };
 static const Page st_m3[] = {
     { "MORAN", "THE EASTSIDE KINGS ARE SELLING", "ON MY CORNER. SEND THEM A MESSAGE." },
     { "MORAN", "THREE CARS, PARKED LIKE THEY OWN", "THE STREET. BURN ALL THREE." },
-    { "TARAS", "THEY'LL SHOOT BACK.", 0 },
+    { "NICK", "THEY'LL SHOOT BACK.", 0 },
     { "MORAN", "THAT'S WHY I'M SENDING YOU.", 0 } };
 static const Page st_m4[] = {
     { "SHAW", "DETECTIVE SHAW. I WORK FOR MORAN", "WHEN THE CITY ISN'T PAYING ME." },
     { "SHAW", "TWO OF MY OFFICERS ARE DIGGING", "INTO HIS BUSINESS. HONEST ONES." },
-    { "TARAS", "YOU WANT ME TO KILL COPS?", "YOUR OWN COPS?" },
+    { "NICK", "YOU WANT ME TO KILL COPS?", "YOUR OWN COPS?" },
     { "SHAW", "YOUR UNCLE'S IN ROOM 12, RIGHT?", "OLD MILL. THEN LOSE THE HEAT." } };
 static const Page st_m5[] = {
     { "MORAN", "A VAN FULL OF MY PRODUCT HAS TO", "REACH THE EAST COAST ROAD." },
     { "MORAN", "90 SECONDS. THE BUYER DOESN'T WAIT,", "AND NEITHER DO I." } };
 static const Page st_m6[] = {
-    { "JINX", "TARAS! MORAN'S MEN ARE COMING.", "THEY KNOW I TOOK HIS LEDGER." },
+    { "JINX", "NICK! MORAN'S MEN ARE COMING.", "THEY KNOW I TOOK HIS LEDGER." },
     { "JINX", "BOHDAN NEVER OWED HIM. NOBODY DID.", "MORAN INVENTS DEBTS TO TAKE LAND." },
-    { "TARAS", "THE SHOP. THE HOMES BY THE WATER.", 0 },
+    { "NICK", "THE SHOP. THE HOMES BY THE WATER.", 0 },
     { "JINX", "DEAL WITH HIS GUYS, THEN MEET ME", "AT THE SAFEHOUSE. LOSE THE COPS." } };
 static const Page st_m7[] = {
     { "MARTA", "THE LEDGER NAMES SHAW. TONIGHT HE", "MOVES MORAN'S CASH IN A BLACK SUV." },
     { "MARTA", "STAY ON HIS BUMPER UNTIL HE BAILS.", "THEN MAKE SURE HE STAYS DOWN." },
-    { "TARAS", "MORAN WILL KNOW IT WAS ME.", 0 },
+    { "NICK", "MORAN WILL KNOW IT WAS ME.", 0 },
     { "MARTA", "GOOD. LET HIM BE SCARED FOR ONCE.", 0 } };
 static const Page st_m8[] = {
     { "RUDY", "I'M RUDY. I CREWED SAL'S TUG,", "THE LUCKY MARIE. BOHDAN'S FRIEND." },
     { "RUDY", "SAL WOULDN'T RUN MORAN'S CARGO.", "SO MORAN'S MEN SANK HER. WITH HIM." },
     { "RUDY", "YOUR UNCLE WOULD HAVE BEEN NEXT.", 0 },
-    { "TARAS", "WHERE IS MORAN?", 0 },
+    { "NICK", "WHERE IS MORAN?", 0 },
     { "RUDY", "THE OLD PIER, NORTHWEST. HE'S GOT", "GUNS WITH HIM. COPS ON THE WAY." },
-    { "TARAS", "THEN HE PAYS. IN FULL.", 0 } };
+    { "NICK", "THEN HE PAYS. IN FULL.", 0 } };
 static const Page st_end[] = {
     { "RUDY", "IT'S OVER. MORAN'S GONE. BOHDAN", "CAN COME HOME. SAL CAN REST." },
-    { "TARAS", "MORAN'S PHONE KEPT RINGING.", "ONE NAME. 'PRYCE'." },
+    { "NICK", "MORAN'S PHONE KEPT RINGING.", "ONE NAME. 'PRYCE'." },
     { "RUDY", "COUNCILMAN PRYCE? HE WANTS THE", "WHOLE WATERFRONT FOR A CASINO." },
-    { "TARAS", "THEN THIS ISN'T OVER.", 0 },
+    { "NICK", "THEN THIS ISN'T OVER.", 0 },
     { "", "END OF ACT ONE.", "THE CITY'S YOURS. FOR NOW." } };
 
 static const Page *const mission_intro[] = { st_m0, st_m1, st_m2, st_m3, st_m4, st_m5, st_m6, st_m7, st_m8 };
@@ -1484,7 +1484,7 @@ static void dialog(const Page *pg, int n, int then)
     dlg = pg; dlg_n = n; dlg_i = 0; dlg_then = then; gstate = GS_DIALOG; cut_on = 0;
 }
 
-/* a cutscene: the speaker stands facing Taras and the camera cuts between them */
+/* a cutscene: the speaker stands facing Nick and the camera cuts between them */
 static void cutscene(const Page *pg, int n, int then, int model)
 {
     Ped *a = &peds[PED_ACTOR];
@@ -1506,7 +1506,7 @@ static void cutscene(const Page *pg, int n, int then, int model)
     dialog(pg, n, then);
     cut_on = 1; cut_t = 0;
 }
-static int is_hero(const char *w) { return w && w[0] == 'T' && w[1] == 'A'; }
+static int is_hero(const char *w) { return w && w[0] == 'N' && w[1] == 'I'; }
 
 /* ------------------------------------------------------------ missions */
 #define NMISSIONS 9
@@ -2424,7 +2424,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         /* cutscene: an establishing two-shot, then over-the-shoulder cuts to whoever is talking */
         const Ped *ap = &peds[PED_ACTOR];
         int ax = ap->x >> 8, ay = ap->y >> 8, ex = plx(), ey = ply();
-        int a2 = iatan2(ay - ey, ax - ex);                       /* Taras -> speaker */
+        int a2 = iatan2(ay - ey, ax - ex);                       /* Nick -> speaker */
         const char *who = dlg[dlg_i].who;
         int shot = (dlg_i == 0 || !who || !who[0]) ? 0 : is_hero(who) ? 2 : 1;
         int cx = 0, cy = 0, ok = 0;
@@ -2436,7 +2436,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
             int side = (dir + 1024) & 4095;
             cx = fx - ((icos(dir) * back) >> 14) + ((icos(side) * M(1.6)) >> 14);
             cy = fy - ((isin(dir) * back) >> 14) + ((isin(side) * M(1.6)) >> 14);
-            if (shot == 1 && pl.in_car >= 0) {                       /* Taras's car would block the view: swing round it */
+            if (shot == 1 && pl.in_car >= 0) {                       /* Nick's car would block the view: swing round it */
                 for (int k = 0; k < 2; k++) {
                     int look = (a2 + (k ? -480 : 480)) & 4095;
                     cx = ax - ((icos(look) * M(5.0)) >> 14); cy = ay - ((isin(look) * M(5.0)) >> 14);

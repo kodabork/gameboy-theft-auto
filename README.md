@@ -16,6 +16,10 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.29
+- **The hero is now called Nick Melnyk** (born Mykyta). Same Ukrainian army sergeant and the same
+  story with Uncle Bohdan; the dialogue and `STORY.md` use the new name.
+
 ## What's new in v0.28
 - **Uncle Bohdan replaces the sister.** Taras flies to New York when his uncle Bohdan stops
   answering. Bohdan runs a car shop on the waterfront, *Bohdan's Auto*; Moran's men have put him
