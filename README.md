@@ -16,6 +16,17 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.34
+- **The streets have crime, and the police deal with it.** About once a minute, somewhere near you, a
+  passer-by mugs someone, starts a fight or carjacks a car. You hear it ("HELP! MY BAG!",
+  "CARJACKING!") and bystanders scatter.
+  - A beat cop on foot chases the criminal down and arrests him, or shoots him if he's armed.
+  - With no cop around, a patrol car comes. It chases carjackers until it boxes them in.
+  - Take a criminal down yourself and it's **VIGILANTE +$100**, not a wanted level.
+  - Nothing happens while you're on a job or wanted, so missions stay predictable.
+- Only one crime runs at a time and only a couple of people are involved, so the frame rate is
+  unchanged (18.9 fps).
+
 ## What's new in v0.33
 - **The whole story is in the game: 40 missions in four acts.** Act One (the Docks) is the original
   nine jobs. The 31 new missions take Nick across the whole new map:
