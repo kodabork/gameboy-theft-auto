@@ -32,11 +32,16 @@ def env(nr, n):
     v = np.clip(v0 + steps if up else v0 - steps, 0, 15)
     return v / 15.0
 def square(f, n, duty):
-    ph = (np.arange(n) * f / SR) % 1.0
-    return np.where(ph < duty, 1.0, -1.0)
+    """band-limited square-ish pulse (a few harmonics), so it doesn't fizz like a raw 22 kHz square"""
+    t = np.arange(n) / SR; out = np.zeros(n)
+    for h in range(1, 12):
+        if h * f > SR / 2.2: break
+        out += np.sin(np.pi * h * duty) / h * np.cos(2 * np.pi * h * f * t - np.pi * h * duty)
+    return out * 1.6
+def declick(x):
+    m = min(len(x), 40); x[:m] *= np.linspace(0, 1, m); return x
 def render(S, secs):
-    spb = 65536 * 59.73 / S['step']                 # VBlanks per step -> seconds
-    step_s = spb / 59.73
+    step_s = 65536.0 / (59.73 * S['step'])         # step is sixteenths per VBlank in 16.16
     total = int(secs * SR); out = np.zeros(total, np.float32)
     lead_ch = np.zeros(total); stab_ch = np.zeros(total); bass_ch = np.zeros(total); drum_ch = np.zeros(total)
     wt = wavetable(S['wave']); rng = np.random.default_rng(1)
@@ -46,16 +51,17 @@ def render(S, secs):
         loop, s = k // 64, k % 64
         ch = (loop & 1) == 1 if PREVIEW_AB else (loop & 3) == 2
         lead = tab[S['lead_b'] if ch else S['lead']]; bass = tab[S['bass_b'] if ch else S['bass']]; chords = tab[S['chords_b'] if ch else S['chords']]
-        a = int(k * step_s * SR); n = min(int(step_s * SR * 4), total - a)
+        a = int(k * step_s * SR); n = min(int(step_s * SR * 8), total - a)
         if n <= 0: break
         if lead[s]:
-            lead_ch[a:a + n] = square(freq(lead[s]), n, duty[S['lead_nr'] & 0xC0]) * env(S['lead_nr'], n)
+            lead_ch[a:a + n] = declick(square(freq(lead[s]), n, duty[S['lead_nr'] & 0xC0]) * env(S['lead_nr'], n))
         if (S['mask'] >> (s & 7)) & 1:
             note = chords[(s >> 4) * 3 + tog] + 12; tog = (tog + 1) % 3
-            stab_ch[a:a + n] = square(freq(note), n, duty[S['stab_nr'] & 0xC0]) * env(S['stab_nr'], n)
+            stab_ch[a:a + n] = declick(square(freq(note), n, duty[S['stab_nr'] & 0xC0]) * env(S['stab_nr'], n))
         if bass[s]:
-            f = freq(bass[s]); idx = (np.arange(n) * f * 32 / SR).astype(int) % 32
-            bass_ch[a:a + n] = wt[idx]
+            f = freq(bass[s]); ph = (np.arange(n) * f * 32 / SR) % 32
+            i0 = ph.astype(int); fr = ph - i0
+            bass_ch[a:a + n] = declick(wt[i0] * (1 - fr) + wt[(i0 + 1) % 32] * fr)
         d = tab[S['drums']][s & 31]
         if d:
             m = int(SR * (0.12 if d in (1, 2) else 0.04 if d == 3 else 0.12)); m = min(m, total - a)
