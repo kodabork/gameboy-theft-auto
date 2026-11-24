@@ -16,6 +16,20 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.33
+- **The whole story is in the game: 40 missions in four acts.** Act One (the Docks) is the original
+  nine jobs. The 31 new missions take Nick across the whole new map:
+  - **Act Two, Paper (Downtown):** the reporter Dee Okafor, Danny Moran's crew, the Eastside Kings,
+    and a paper trail that leads to Councilman Pryce.
+  - **Act Three, Iron (the Industrial port and the Heights):** Halvorsen Shipping's private army,
+    Blackline, a deal Nick refuses, and a betrayal.
+  - **Act Four, Tide (Gull Island):** everyone Pryce stepped on takes the half-built casino apart.
+  - **Two endings,** decided in the last missions, and a choice about Jinx.
+- **New kinds of missions:** tailing a car without being spotted, chases where you ride the bumper
+  until the driver gives up, defending a spot against waves, hunter cars that try to ram you, taking
+  photos, picking up passengers, timed runs, surviving a wanted level, a boss fight, and choices.
+- Every mission is played start to finish by `tools/mission_test.c`, which checks all 40.
+
 ## What's new in v0.32
 - **Bowling at Harbor Lanes** (the Heights; orange icon on the radar). Ten frames against Artie, a
   club bowler who averages about 150. Bet $100 or $500 at the desk; win and you get double.
