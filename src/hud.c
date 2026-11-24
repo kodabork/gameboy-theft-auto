@@ -288,6 +288,7 @@ void hud_draw(u16 *fb)
         }
         if (g_hud.shop_line) text_f(120 - text_width(g_hud.shop_line, 1) / 2, 151, g_hud.shop_line, COL_WHITE, 1);
         if (g_hud.shop_note) { rect(0, 2, 240, 11, COL_BLACK); text_f(120 - text_width(g_hud.shop_note, 1) / 2, 4, g_hud.shop_note, COL_WHITE, 1); }
+        if (g_hud.shop_big) { rect(40, 40, 160, 30, COL_BLACK); text_f(120 - text_width(g_hud.shop_big, 3) / 2, 44, g_hud.shop_big, COL_YELLOW, 3); }
         return;
     }
     if (g_hud.menu_n) {                          /* pause menu */

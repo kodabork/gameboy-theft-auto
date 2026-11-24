@@ -1701,6 +1701,8 @@ typedef struct { s16 x, y; u8 type, bx, by; int cd; } Shop;        /* cd: ticks 
 EWRAM_BSS static Shop shops[MAX_SHOPS];
 static int nshops, shop_cur = -1, shop_away = 1, shop_rob, shop_take, shop_goal, shop_loose;
 static const char *shop_note; static int shop_note_t;
+static const char *shop_big; static int shop_big_t;          /* a big "+$200" after a win */
+static char *num_str(char *q, int v) { char t[10]; int n = 0; do { t[n++] = (char)('0' + v % 10); v /= 10; } while (v); while (n) *q++ = t[--n]; *q = 0; return q; }
 static const char *const shop_names[6] = { "NY GUNS", "CORNER MART", "PAWN & LOAN", "MOTOR SALES", "HARBOR LANES", "EIGHT BALL CLUB" };
 static int mini_bet;
 enum { K_GUN, K_HEAL, K_SELL, K_CAR, K_ROB, K_PLAY };
@@ -1787,6 +1789,8 @@ static void shop_update(u16 keys, u16 pressed, int dt)
 {
     Shop *h = &shops[shop_cur];
     if (shop_note_t > 0) shop_note_t -= dt;
+    if (shop_big_t > 0) shop_big_t -= dt;
+    g_hud.shop_big = shop_big_t > 0 ? shop_big : 0;
     g_hud.shop = 1 + h->type; g_hud.shop_name = shop_names[h->type];
     g_hud.shop_note = shop_note_t > 0 ? shop_note : 0;
     g_snd.engine_vol = 0; g_snd.skid = 0; g_snd.horn = 0; g_snd.siren = 0; g_snd.nitro = 0;
@@ -2774,8 +2778,19 @@ static void meta_update(u16 keys, u16 pressed, int dt)
         int r = mini_update(keys, pressed, dt);
         if (r) {
             gstate = GS_SHOP; g_hud.mini = 0;
-            if (r == 1) { pl.money += mini_bet * 2; g_snd.sfx |= SFX_PASS; shop_say("YOU WON THE BET!"); }
-            else shop_say("BETTER LUCK NEXT TIME");
+            static char note[32], bigt[12];
+            char *q = note; const char *a;
+            if (r == 1) {                                /* the stake back plus the same again */
+                pl.money += mini_bet * 2; g_snd.sfx |= SFX_PASS | SFX_CASH;
+                for (a = "YOU WON! BET $"; *a; ) *q++ = *a++;
+                q = num_str(q, mini_bet); for (a = ", PAID $"; *a; ) *q++ = *a++; q = num_str(q, mini_bet * 2); *q = 0;
+                q = bigt; *q++ = '+'; *q++ = '$'; num_str(q, mini_bet * 2);
+                shop_big = bigt; shop_big_t = 3 * TICKS;
+            } else {
+                for (a = "YOU LOST THE $"; *a; ) *q++ = *a++;
+                q = num_str(q, mini_bet); for (a = " BET"; *a; ) *q++ = *a++; *q = 0;
+            }
+            shop_note = note; shop_note_t = 4 * TICKS;
         }
         return;
     }
