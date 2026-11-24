@@ -3,7 +3,6 @@
 #include "world.h"
 #include "ground.h"
 
-extern u16 blk_start[64], blk_count[64];
 
 /* atan2 without division: normalise to 9 bits, then multiply by a reciprocal table */
 int iatan2(int y, int x)
@@ -45,7 +44,19 @@ static int water_push(int x, int y, int *nx, int *ny)
         int gy = ground_h(x, y + M(2)) - ground_h(x, y - M(2));
         if (x < MAP_LO) gx += 64; else if (x > MAP_HI) gx -= 64;
         if (y < MAP_LO) gy += 64; else if (y > MAP_HI) gy -= 64;
-        if (gx == 0 && gy == 0) { gx = M(260) - x; gy = M(260) - y; }   /* flat: head for the city */
+        if (gx == 0 && gy == 0) {
+            if ((unsigned)x < NB * 1024 && (unsigned)y < NB * 1024) {   /* river / channel block: nearest quay */
+                int lx = x & 1023, ly = y & 1023;
+                int dl = lx - M(15), dr = M(61) - lx, dd = ly - M(15), du = M(61) - ly, m = dl;
+                gx = -1; gy = 0;
+                if (dr < m) { m = dr; gx = 1; gy = 0; }
+                if (dd < m) { m = dd; gx = 0; gy = -1; }
+                if (du < m) { gx = 0; gy = 1; }
+                *nx = gx * 1024; *ny = gy * 1024;
+                return M(0.5);
+            }
+            gx = (GRID_U >> 1) - x; gy = (GRID_U >> 1) - y;     /* flat: head for the city */
+        }
         int l = isqrt((u32)(gx * gx + gy * gy)); if (l == 0) l = 1;
         *nx = gx * 1024 / l; *ny = gy * 1024 / l;
         return M(0.5);
@@ -61,10 +72,10 @@ int world_collide(int *px, int *py, int rad)
     int bx = x >> 10, by = y >> 10;
     for (int j = by - 1; j <= by + 1; j++)
     for (int i = bx - 1; i <= bx + 1; i++) {
-        if ((unsigned)i > 7 || (unsigned)j > 7) continue;
-        int bi = j * 8 + i;
-        for (int k = 0; k < blk_count[bi]; k++) {
-            const Building *b = &g_world.b[blk_start[bi] + k];
+        if ((unsigned)i >= NB || (unsigned)j >= NB) continue;
+        int bi = j * NB + i;
+        for (int k = blk_start[bi], e = blk_start[bi + 1]; k < e; k++) {
+            const Building *b = &g_world.b[k];
             int qx = x < b->x0 ? b->x0 : (x > b->x1 ? b->x1 : x);
             int qy = y < b->y0 ? b->y0 : (y > b->y1 ? b->y1 : y);
             int dx = x - qx, dy = y - qy;
@@ -100,11 +111,12 @@ int world_collide(int *px, int *py, int rad)
 
 int world_point_blocked(int x, int y, int margin)
 {
+    if (ground_mat(x, y) == TM_WATER) return 1;
     int bx = x >> 10, by = y >> 10;
-    if ((unsigned)bx > 7 || (unsigned)by > 7) return 0;
-    int bi = by * 8 + bx;
-    for (int k = 0; k < blk_count[bi]; k++) {
-        const Building *b = &g_world.b[blk_start[bi] + k];
+    if ((unsigned)bx >= NB || (unsigned)by >= NB) return 0;
+    int bi = by * NB + bx;
+    for (int k = blk_start[bi], e = blk_start[bi + 1]; k < e; k++) {
+        const Building *b = &g_world.b[k];
         if (x > b->x0 - margin && x < b->x1 + margin && y > b->y0 - margin && y < b->y1 + margin)
             return 1;
     }
@@ -120,13 +132,12 @@ int world_point_blocked(int x, int y, int margin)
 static int point_in_buildings(int x, int y, int *nx, int *ny)
 {
     int best = 0;
-    if ((unsigned)x >= 8 * 1024 + M(15) || (unsigned)y >= 8 * 1024 + M(15))
-        best = water_push(x, y, nx, ny);
+    best = water_push(x, y, nx, ny);
     int bx = x >> 10, by = y >> 10;
-    if ((unsigned)bx > 7 || (unsigned)by > 7) return best;
-    int bi = by * 8 + bx;
-    for (int k = 0; k < blk_count[bi]; k++) {
-        const Building *b = &g_world.b[blk_start[bi] + k];
+    if ((unsigned)bx >= NB || (unsigned)by >= NB) return best;
+    int bi = by * NB + bx;
+    for (int k = blk_start[bi], e = blk_start[bi + 1]; k < e; k++) {
+        const Building *b = &g_world.b[k];
         if (x <= b->x0 || x >= b->x1 || y <= b->y0 || y >= b->y1) continue;
         int dl = x - b->x0, dr = b->x1 - x, dd = y - b->y0, du = b->y1 - y;
         int m = dl, ax = 0;
@@ -160,10 +171,10 @@ int car_vs_world(int cx, int cy, int c, int s, int hl, int hw,
     int bx = cx >> 10, by = cy >> 10;
     for (int j = by - 1; j <= by + 1; j++)
     for (int i = bx - 1; i <= bx + 1; i++) {
-        if ((unsigned)i > 7 || (unsigned)j > 7) continue;
-        int bi = j * 8 + i;
-        for (int k = 0; k < blk_count[bi]; k++) {
-            const Building *b = &g_world.b[blk_start[bi] + k];
+        if ((unsigned)i >= NB || (unsigned)j >= NB) continue;
+        int bi = j * NB + i;
+        for (int k = blk_start[bi], e = blk_start[bi + 1]; k < e; k++) {
+            const Building *b = &g_world.b[k];
             if (b->x1 < cx - hl - hw || b->x0 > cx + hl + hw || b->y1 < cy - hl - hw || b->y0 > cy + hl + hw) continue;
             for (int q = 0; q < 4; q++) {
                 int wx = (q & 1) ? b->x1 : b->x0, wy = (q & 2) ? b->y1 : b->y0;

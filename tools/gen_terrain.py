@@ -6,8 +6,10 @@ import numpy as np
 
 out_bin, out_c, out_h = sys.argv[1:4]
 MARGIN = 64                     # metres of land/sea modelled around the grid
-GRID = 527.0                    # grid extent in metres (8 blocks of 64 m + edge road)
-MAPW = 656                      # cells (1 m) per side, covering -64 .. 592 m
+NB = 20                         # city blocks per side (64 m each)
+GRID = NB * 64 + 15.0           # grid extent in metres (NB blocks of 64 m + edge road)
+MAPW = int(GRID) + 1 + 2 * MARGIN   # cells (1 m) per side
+MAPW += MAPW & 1
 x = np.arange(MAPW) - MARGIN + 0.5
 X, Y = np.meshgrid(x, x)        # X[row, col] = x in metres, Y = y
 
@@ -23,31 +25,35 @@ def city_height(xm, ym):
 H = city_height(X, Y)
 M = np.full(X.shape, GRIDM, np.uint8)
 
-# flatten each block's building lot into a level pad (blended over 2 m at the edges)
-FIXED_PARKS = {(2, 5), (6, 2)}
-for by in range(8):
-    for bx in range(8):
-        if (bx, by) in FIXED_PARKS: continue
-        x0, y0 = bx * 64 + 15, by * 64 + 15
-        sel = (X >= x0) & (X <= x0 + 46) & (Y >= y0) & (Y <= y0 + 46)
-        pad = H[sel].mean()
-        dx = np.minimum(X - x0, x0 + 46 - X); dy = np.minimum(Y - y0, y0 + 46 - Y)
-        w = np.clip(np.minimum(dx, dy) / 2.0, 0, 1)
-        inside = (X >= x0 - 0.5) & (X <= x0 + 46.5) & (Y >= y0 - 0.5) & (Y <= y0 + 46.5)
-        H = np.where(inside, H * (1 - w) + pad * w, H)
-
-# curved footpaths through the two big parks
-for (bx, by) in FIXED_PARKS:
-    x0, y0 = bx * 64 + 15, by * 64 + 15
-    M[(X >= x0) & (X <= x0 + 46) & (Y >= y0) & (Y <= y0 + 46)] = GRASS
-    for k in range(3):
-        t = np.linspace(0, 1, 400)
-        px = x0 + 46 * t
-        py = y0 + 23 + 14 * np.sin(t * math.pi * (1.3 + 0.4 * k) + k * 1.7) + (k - 1) * 9
-        if k == 2: px, py = y0 * 0 + x0 + 23 + 14 * np.sin(t * math.pi * 1.6) , y0 + 46 * t
-        for qx, qy in zip(px, py):
-            ix, iy = int(qx + MARGIN), int(qy + MARGIN)
-            M[max(iy - 1, 0):iy + 2, max(ix - 1, 0):ix + 2] = PATH
+# ---------------------------------------------------------------- districts
+# block kinds: 0 buildings, 1 park, 2 water. Districts: 0 Docks/Old Town, 1 Downtown, 2 Industrial port,
+# 3 the Heights (residential), 4 Gull Island, 5 the river.
+KIND = np.zeros((NB, NB), np.uint8); DIST = np.zeros((NB, NB), np.uint8)
+lrng = random.Random(21)
+park_odds = {0: 14, 1: 12, 2: 22, 3: 5, 4: 9}
+for by in range(NB):
+    for bx in range(NB):
+        if bx < 8: d = 0 if by < 8 else 3
+        elif bx == 8: d = 5
+        elif bx >= 15 and by >= 15: d = 4
+        else: d = 1 if by < 10 else 2
+        DIST[by, bx] = d
+        if d == 5 or (bx == 14 and by >= 14) or (by == 14 and bx >= 14): KIND[by, bx] = 2
+        elif (bx, by) in ((2, 5), (6, 2)) or (by == 8 and bx < 8): KIND[by, bx] = 1
+        elif lrng.randrange(park_odds[d]) == 0: KIND[by, bx] = 1
+for by in range(NB):
+    for bx in range(NB):
+        x0, y0 = bx * 64 + 15 + MARGIN, by * 64 + 15 + MARGIN
+        if KIND[by, bx] == 2: M[y0:y0 + 47, x0:x0 + 47] = WATER
+        elif KIND[by, bx] == 1:
+            M[y0:y0 + 47, x0:x0 + 47] = GRASS
+            for k in range(3 if (bx + by) % 3 else 2):   # curved footpaths
+                t = np.linspace(0, 1, 300)
+                if k == 2: px, py = 23 + 13 * np.sin(t * math.pi * 1.6 + bx), 46 * t
+                else: px, py = 46 * t, 23 + 13 * np.sin(t * math.pi * (1.3 + 0.4 * k) + k * 1.7 + by) + (k - 0.5) * 12
+                for qx, qy in zip(px, py):
+                    ix, iy = int(qx) + x0, int(qy) + y0
+                    M[max(iy - 1, y0):min(iy + 2, y0 + 47), max(ix - 1, x0):min(ix + 2, x0 + 47)] = PATH
 
 # ---------------------------------------------------------------- coastal road
 # rounded rectangle around the grid, pushed out and wiggled along its length
@@ -133,6 +139,16 @@ rv = np.clip(np.round(side * 8) + 64, 1, 127).astype(np.uint8) | (dash.astype(np
 rv[np.abs(side) > 7.8] = 0
 R[ring] = rv
 
+# the river (block column 8) and Gull Island's channel (row/column 14) run out to the sea; the coast
+# road crosses them on bridges
+def cut_channel(xa, xb, ya, yb):
+    sl = M[ya + MARGIN:yb + MARGIN, xa + MARGIN:xb + MARGIN]
+    keep = np.isin(sl, [ROAD, ROADC, ROADE, GRAVEL])
+    sl[~keep] = WATER
+cut_channel(8 * 64 + 15, 8 * 64 + 62, -MARGIN, 0)
+cut_channel(8 * 64 + 15, 8 * 64 + 62, int(GRID), MAPW - MARGIN)
+cut_channel(14 * 64 + 15, 14 * 64 + 62, int(GRID), MAPW - MARGIN)
+cut_channel(int(GRID), MAPW - MARGIN, 14 * 64 + 15, 14 * 64 + 62)
 # connector roads from the grid edge out to the coastal road (roads 2 and 6 on every side)
 def stamp_road(xa, ya, xb, yb, c0):
     n = int(math.hypot(xb - xa, yb - ya))
@@ -149,7 +165,7 @@ def stamp_road(xa, ya, xb, yb, c0):
                     M[cy_, cx_] = ROADC if (lat == 0 and (j % 9) < 5) else ROADE if abs(lat) == 5 else ROAD
                     lm = (cx_ - MARGIN + 0.5 - c0) if xa == xb else (cy_ - MARGIN + 0.5 - c0)
                     R[cy_, cx_] = int(np.clip(round(lm * 8 * 0.8) + 64, 1, 127)) | (0x80 if (j % 9) < 5 else 0)
-for rr in (2, 6):
+for rr in (2, 6, 10, 14, 18):
     c = rr * 64 + 6
     stamp_road(c, -2, c, -48, c); stamp_road(c, GRID + 2, c, GRID + 48, c)
     stamp_road(-2, c, -48, c, c); stamp_road(GRID + 2, c, GRID + 48, c, c)
@@ -167,7 +183,7 @@ lit |= np.isin(M, [ROAD, ROADC, ROADE, PATH])
 lit[M == GRIDM] = False
 Ms = (M | (lit.astype(np.uint8) << 7)).astype(np.uint8)
 # radar minimap, 2 m per texel (radar palette indices)
-MMW = 328
+MMW = MAPW // 2
 TORG = -MARGIN * 16
 mm = np.zeros((MMW, MMW), np.uint8)
 for j in range(MMW):
@@ -176,23 +192,36 @@ for j in range(MMW):
         wx = TORG + i * 32 + 16
         tx, ty = wx >> 3, wy >> 3
         bx, by, lx, ly = tx >> 7, ty >> 7, tx & 127, ty & 127
-        if wx < 0 or wy < 0 or bx > 8 or by > 8 or (bx == 8 and lx >= 30) or (by == 8 and ly >= 30):
+        if wx < 0 or wy < 0 or bx > NB or by > NB or (bx == NB and lx >= 30) or (by == NB and ly >= 30):
             mi, mj = (wx - TORG) >> 4, (wy - TORG) >> 4
             m = M[mj, mi] if 0 <= mi < MAPW and 0 <= mj < MAPW else WATER
             col = 3 if m == WATER else 2 if m in (ROAD, ROADC, ROADE) else 12 if m == SAND else 11
         elif lx < 24 or ly < 24: col = 2
         elif lx < 30 or ly < 30 or lx >= 122 or ly >= 122: col = 10
-        else: col = 1
+        else: col = 1 if bx >= NB or by >= NB else (1, 11, 3)[KIND[by, bx]]
         mm[j, i] = col
-open(out_bin, 'wb').write(hq.tobytes() + Ms.tobytes() + R.tobytes() + mm.tobytes())
+open(out_bin, 'wb').write(Ms.tobytes() + R.tobytes() + mm.tobytes())
+n2 = MAPW * MAPW
+open(out_c.replace('terrain.c', 'terrain.s'), 'w').write('''    .section .rodata.terrain, "a"
+    .global terrain_m
+    .align 2
+terrain_m:
+    .incbin "build/terrain.bin", 0, %d
+    .global terrain_r
+terrain_r:
+    .incbin "build/terrain.bin", %d, %d
+    .global radar_map
+radar_map:
+    .incbin "build/terrain.bin", %d, %d
+''' % (n2, n2, n2, 2 * n2, MMW * MMW))
 
 # coastal-road waypoints every 8 m (units: 1/16 m), trees on the wooded hills, lamps
 wp = road[::8]
 ring_trees = []
 rnd = random.Random(9)
-for _ in range(2600):
+for _ in range(12000):
     j = rnd.randrange(len(pts))
-    if mr[j] == GRASS and side[j] < -9 and hill[j] > 2.0 and len(ring_trees) < 160:
+    if mr[j] == GRASS and side[j] < -9 and hill[j] > 2.0 and len(ring_trees) < 400:
         ring_trees.append((pts[j, 0], pts[j, 1]))
 lamps = []
 for j in range(0, len(road), 34):
@@ -200,29 +229,25 @@ for j in range(0, len(road), 34):
     ang = math.atan2(nrm[j, 1], nrm[j, 0])                       # arm reaches seaward over the road
     lamps.append((lx, ly, int(round(ang / (2 * math.pi) * 4096)) & 4095))
 def u(v): return int(round(v * 16))
-# coarse max-height map (16 m cells, dilated by 1 m) for skipping hidden ground quickly
-TW = (MAPW + 15) // 16
-hp = np.pad(hq, ((1, 16 * TW - MAPW + 1), (1, 16 * TW - MAPW + 1)), mode='edge')
-tmax = np.zeros((TW, TW), np.uint8)
-for j in range(TW):
-    for i in range(TW):
-        tmax[j, i] = hp[j * 16:j * 16 + 18, i * 16:i * 16 + 18].max()
 C = ['#include "terrain.h"', '',
      'const short coast_wp[%d][2] = {' % len(wp)] + ['  {%d,%d},' % (u(a), u(b)) for a, b in wp] + ['};',
      'const short ring_trees[%d][2] = {' % len(ring_trees)] + ['  {%d,%d},' % (u(a), u(b)) for a, b in ring_trees] + ['};',
      'const short coast_lamps[%d][3] = {' % len(lamps)] + ['  {%d,%d,%d},' % (u(a), u(b), c) for a, b, c in lamps] + ['};',
-     'const unsigned char terrain_max16[%d] = {' % (TW * TW)] + ['  ' + ','.join(str(int(v)) for v in row) + ',' for row in tmax] + ['};']
+     'const unsigned char city_kind[%d] = {' % (NB * NB)] + ['  ' + ','.join(str(int(v)) for v in row) + ',' for row in KIND] + ['};',
+     'const unsigned char city_district[%d] = {' % (NB * NB)] + ['  ' + ','.join(str(int(v)) for v in row) + ',' for row in DIST] + ['};']
 open(out_c, 'w').write('\n'.join(C) + '\n')
-Hh = ['#ifndef TERRAIN_H', '#define TERRAIN_H',
+Hh = ['#ifndef TERRAIN_H', '#define TERRAIN_H', '/* generated by tools/gen_terrain.py */',
       '#define TMAP_W %d' % MAPW, '#define TMAP_ORIGIN %d   /* units: map cell 0 starts at -64 m */' % (-MARGIN * 16),
       'enum { TM_GRID, TM_WATER, TM_SAND, TM_GRASS, TM_DIRT, TM_ROAD, TM_ROADC, TM_ROADE, TM_PATH, TM_GRAVEL };',
-      '#define TMAP_HMAX_U %d   /* highest terrain point, units */' % (int(hq.max()) * 2 - 16),
-      '#ifdef HOST', 'extern unsigned char terrain_h[], terrain_m[], terrain_r[], radar_map[];', '#else',
-      'extern const unsigned char terrain_h[];     /* TMAP_W*TMAP_W, eighth metres, +1 m offset: units = v*2-16 */',
+      '#define CITY_NB %d   /* city blocks per side */' % NB,
+      'enum { BK_BUILT, BK_PARK, BK_WATER };',
+      'enum { DI_DOCKS, DI_DOWNTOWN, DI_INDUSTRIAL, DI_HEIGHTS, DI_ISLAND, DI_RIVER };',
+      'extern const unsigned char city_kind[%d], city_district[%d];' % (NB * NB, NB * NB),
+      '#ifdef HOST', 'extern unsigned char terrain_m[], terrain_r[], radar_map[];', '#else',
       'extern const unsigned char terrain_m[];     /* TMAP_W*TMAP_W, material code | lit<<7 */',
       'extern const unsigned char terrain_r[];     /* road lateral, 1/8 m + 64 (0 none) | dash<<7 */',
-      'extern const unsigned char radar_map[];     /* 328x328, 2 m texels, radar colours */', '#endif', '#define RADAR_MAP_W 328',
-      '#define TMAX_W %d' % TW, 'extern const unsigned char terrain_max16[];   /* max of terrain_h per 16 m cell */',
+      'extern const unsigned char radar_map[];     /* RADAR_MAP_W^2, 2 m texels, radar colours */', '#endif',
+      '#define RADAR_MAP_W %d' % MMW,
       '#define NCOAST_WP %d' % len(wp), 'extern const short coast_wp[%d][2];' % len(wp),
       '#define NRING_TREES %d' % len(ring_trees), 'extern const short ring_trees[%d][2];' % len(ring_trees),
       '#define NCOAST_LAMPS %d' % len(lamps), 'extern const short coast_lamps[%d][3];' % len(lamps),

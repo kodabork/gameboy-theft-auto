@@ -24,7 +24,10 @@ typedef struct {
     int bx[12], by[12], bc[12], nblips;          /* radar blips: 1 job, 2 goal, 3 target, 4 police */
     int timer_s, pressure, car_hp;              /* car_hp: 0..100, -1 on foot */                       /* mission clock (s, -1 none), chase pressure % (-1 none) */
     int title;                                   /* title screen */
-    const char *menu_title, *menu_item[4], *menu_note; int menu_n, menu_sel;
+    const char *menu_title, *menu_item[8], *menu_note; int menu_n, menu_sel;
+    int shop, shop_pose, shop_cash, mini;        /* mini: a minigame is on screen */
+                 /* shop interior: 1 + type (0 = outside), clerk pose, hold-up cash */
+    const char *shop_name, *shop_note, *shop_line;
     const char *dlg_who, *dlg_l1, *dlg_l2;       /* story dialogue page */
     int cutscene;                                /* letterbox the dialogue */
     const char *radio_name; int radio_t;         /* station name, shown briefly after a change */

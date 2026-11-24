@@ -82,7 +82,7 @@ def label(txt, size, color, outline_px=3):
 imgs = [
     ('img_logo', logo('GTA', 70)),
     ('img_sub', label('GAMEBOY THEFT AUTO', 13, (1.0, 1.0, 1.0))),
-    ('img_city', label('STEEL HARBOR', 11, (1.0, 0.80, 0.25))),
+    ('img_city', label('NEW YORK', 11, (1.0, 0.80, 0.25))),
     ('img_new', label('NEW GAME', 15, (0.92, 0.92, 0.95))),
     ('img_new_s', label('NEW GAME', 15, (1.0, 0.82, 0.20))),
     ('img_cont', label('CONTINUE', 15, (0.92, 0.92, 0.95))),

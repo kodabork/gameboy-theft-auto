@@ -1,4 +1,4 @@
-# GTA (Gameboy Theft Auto): Steel Harbor
+# GTA (Gameboy Theft Auto): New York
 
 An original open-city game for Game Boy Advance, with a third-person chase camera,
 written from scratch in C. It's inspired by the GTA IV look but has no Rockstar code or assets.
@@ -15,6 +15,86 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | SELECT | Horn | |
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
+
+## What's new in v0.32
+- **Bowling at Harbor Lanes** (the Heights; orange icon on the radar). Ten frames against Artie, a
+  club bowler who averages about 150. Bet $100 or $500 at the desk; win and you get double.
+  - LEFT/RIGHT to pick your spot, UP/DOWN to set the hook, A to start the aim arrow sweeping, A to
+    lock it, A again to stop the power meter and throw.
+  - Real pin physics: the ball hooks on the dry back end, pins knock each other down and bounce off
+    the side walls. A pin cam cuts in as the ball reaches the pins.
+  - Full scoring with strikes, spares and the tenth frame, and a pin diagram of what's left.
+- **8-ball pool at the Eight Ball Club** (the Docks; blue icon). You against Slim, a hustler, on a
+  top-down table. LEFT/RIGHT to aim (an aim line shows where the cue ball goes, with a ghost ball),
+  hold A to pull back and let go to shoot. Pot your group (solids or stripes), then the 8.
+  Scratching hands Slim the shot, and sinking the 8 early loses the game.
+
+## What's new in v0.31
+- **Shops you can walk into.** 23 shops across the six districts, each with a green beam over the door
+  and a storefront icon on the radar (red gun shop, green corner store, yellow pawn shop, white
+  car showroom). Walk into the beam on foot to go inside.
+  - **NY Guns:** pistol, SMG, shotgun, rifle and rockets, with ammo.
+  - **Corner Mart:** snacks, hot meals and first aid kits for health.
+  - **Pawn & Loan:** cheap used guns, or sell all your guns for cash.
+  - **Motor Sales:** buy a car from a hatchback ($1,500) to a supercar ($25,000). It's parked out front
+    when you leave.
+- **Each shop is a pre-rendered room** with a clerk behind the counter: brick and pegboard at the gun
+  shop, stocked shelves and fridges at the mart, guitars and TVs at the pawn shop, and a red sports
+  car in the showroom.
+- **Robberies (free roam only, never during a job):** with a loaded gun, choose ROB THE PLACE. The
+  clerk puts his hands up. Hold A to keep him covered while the cash piles up; lower your gun and he
+  hits the alarm. At a gun shop, he grabs the shotgun under the counter instead. Run out with B and
+  you get 2 or 3 stars, depending on the take. A robbed shop has no cash for 4 minutes.
+- You can't go into a shop while you're wanted ("lose the cops first").
+
+## What's new in v0.30
+- **The map is much bigger.** The city went from 8 x 8 blocks (527 m across) to 20 x 20 blocks
+  (1.3 km across), about 6 times the area. The whole island, with its coast road, is about
+  4.7 times bigger.
+- **Six districts:**
+  - **The Docks and Old Town** (north-west): the original city, where Act One plays.
+  - **The river**: crossed by every east-west street on bridges, with quays along both banks.
+  - **Harbor Park**: a belt of parks south of the Docks.
+  - **The Heights** (south-west): low rowhouses, lots of parks and trees.
+  - **Downtown** (north-east): glass towers, tallest in the middle.
+  - **The Industrial port** (south-east): big warehouses and sheds.
+  - **Gull Island** (far south-east): the half-built casino strip, across its own channel.
+- The river and the island channel run out to the sea under the coast road. The radar shows
+  water and parks.
+- **More pickups:** about 100 new weapon and health pickups across the new districts, with
+  weapons to suit each area (rifles and rockets on Gull Island, SMGs downtown, and so on).
+- **Parked cars now follow you around the city** instead of all sitting in one corner.
+- Mission 6, Special Delivery, now ends at the **west** coast road. The east coast is now much
+  further away.
+- Frame rate holds: 19.2 fps on the benchmark (19.0 before).
+
+## What's new in v0.29
+- **The hero is now called Nick Melnyk** (born Mykyta). Same Ukrainian army sergeant and the same
+  story with Uncle Bohdan; the dialogue and `STORY.md` use the new name.
+
+## What's new in v0.28
+- **Uncle Bohdan replaces the sister.** Taras flies to New York when his uncle Bohdan stops
+  answering. Bohdan runs a car shop on the waterfront, *Bohdan's Auto*; Moran's men have put him
+  in hospital, and Moran says he owes $10,000 or the shop is his. Marta is now Bohdan's foreman
+  (the repair garage is his shop), and Rudy's reveal ties the sunken *Lucky Marie* to Bohdan's
+  best friend Sal. Act One's dialogue and the 40-mission plan in `STORY.md` are rewritten to match.
+
+## What's new in v0.27
+- **New hero: Taras Melnyk**, a Ukrainian army sergeant. When his sister Ana stops answering her
+  phone, he flies to New York to find her on the city's old waterfront. Sal, the old
+  tug captain Ana lived with, is dead (his boat, the *Lucky Marie*, sank) and left her his house.
+  Loan shark Victor Moran says Sal owed him $10,000 and comes for the house, so Taras pays.
+- The game is now set in **New York** (the Steel Harbor name is gone, title screen included). Act One's dialogue
+  and the story plan in `STORY.md` are rewritten to match.
+
+## What's new in v0.26
+- **New hero and story** (the hero was replaced in v0.27).
+- **Act One rewritten.** The nine jobs play the same, with new dialogue: the ledger proves Moran
+  invents debts to take waterfront homes, Sal's deckhand Rudy reveals Moran's men sank the
+  *Lucky Marie*, and the ending points at the real villain, Councilman Pryce.
+- **The full story is planned** in `STORY.md`: 4 acts and 40 missions (about 6 hours) across
+  Docks, Downtown, the Industrial port and Hills, and Gull Island. Acts Two to Four get built as
+  the map grows.
 
 ## What's new in v0.25
 - **Reworked people.** The player and every pedestrian were rebuilt:

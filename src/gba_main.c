@@ -1,4 +1,4 @@
-/* Steel Harbor - GBA hardware layer: video setup, input, timing, HUD sprites. */
+/* New York - GBA hardware layer: video setup, input, timing, HUD sprites. */
 #include "engine.h"
 #include "game.h"
 #include "sound.h"
@@ -141,7 +141,7 @@ int main(void)
         game_build_scene(&cam, sprs, &nobj);
         while (flip_req) ;
         u16 *back = (REG_DISPCNT & 0x0010) ? PAGE0 : PAGE1;
-        render_frame(back, &cam, sprs, nobj);
+        if (!g_hud.shop && !g_hud.mini) render_frame(back, &cam, sprs, nobj);   /* full-screen 2D screens skip the 3D view */
         hud_draw(back);
         int part = frame_n++ & 3, radar_new = part == 3;
         radar_build(radar_buf, part);
@@ -150,7 +150,7 @@ int main(void)
         /* HUD */
         if (show_fps && !g_hud.title) { set_sprite(0, 4, 4, 11); draw_number(1, 12, 4, fps, 2); }
         else for (int i = 0; i < 3; i++) set_sprite(i, 0, 0, -1);
-        int hide = g_hud.title || g_hud.dlg_l1 || g_hud.menu_n;
+        int hide = g_hud.title || g_hud.dlg_l1 || g_hud.menu_n || g_hud.shop;
         if (g_hud.in_car && !hide) draw_number(4, 212, 148, g_hud.speed_mph, 3);
         else for (int i = 4; i < 7; i++) set_sprite(i, 0, 0, -1);
         set_sprite(7, 116, 120, g_hud.near_car && !hide ? 10 : -1);

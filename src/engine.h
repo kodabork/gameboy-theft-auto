@@ -1,8 +1,9 @@
-/* Steel Harbor - original 3D open-city engine for Game Boy Advance.
+/* New York - original 3D open-city engine for Game Boy Advance.
    World units: 1 unit = 1/16 metre. Angles: 4096 per full turn. */
 #ifndef ENGINE_H
 #define ENGINE_H
 #include "tables.h"
+#include "terrain.h"
 
 #ifdef HOST
 #define EWRAM_BSS
@@ -44,12 +45,12 @@ typedef struct { int x, y, h, c, s, gh; } Camera;   /* h: eye height (absolute),
 typedef struct { int x, y; u16 frame; s16 h; } Sprite;   /* h: absolute height of the sprite's base (units) */
 #define SPR_DECAL (-32768)   /* game side: push_h(..., SPR_DECAL) = flat on the ground */
 
-#define MAX_BUILDINGS 256
+#define MAX_BUILDINGS 1600
 #define MAX_SPRITES 160
 
 typedef struct {
     Building b[MAX_BUILDINGS]; int nb;
-    u8 lotmat[9*9];
+    u8 lotmat[(CITY_NB + 1) * (CITY_NB + 1)];
 } World;
 
 extern World g_world;

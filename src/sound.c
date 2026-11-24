@@ -1,4 +1,4 @@
-/* Steel Harbor sound.
+/* New York sound.
    DirectSound A (8-bit PCM, 10512 Hz, DMA double-buffered per frame): engine,
    horn, tyre squeal, crashes, doors, footsteps - all synthesised.
    PSG channels 1-4: an original 4-bar radio loop (lead, chords, bass, drums). */

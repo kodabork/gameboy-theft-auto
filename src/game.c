@@ -1,4 +1,4 @@
-/* Steel Harbor game layer: player on foot / in cars, traffic, pedestrians, cops and
+/* New York game layer: player on foot / in cars, traffic, pedestrians, cops and
    wanted levels, weapons, pickups, missions and the chase camera. */
 #include "engine.h"
 #include "world.h"
@@ -6,14 +6,16 @@
 #include "game.h"
 #include "assets.h"
 #include "sound.h"
+#include "minigames.h"
 
 #define TICKS 16384                 /* dt units per second */
-#define Q8(x) ((x) << 8)
+#define Q8(x) ((x) * 256)
 #define MAX_CARS 60
 #define MAX_PEDS 56
 #define MAX_DROPS 32
 #define MAX_FLASH 8
-#define MAX_PICKUPS 52
+#define MAX_PICKUPS 180
+#define NFIXED_PICKUPS 52
 
 /* fixed car slots */
 #define SLOT_TRAFFIC0 1
@@ -28,7 +30,7 @@
 #define PED_CIV_END 42      /* 0..41 street population (incl. beat cops) */
 #define PED_CREW0 42        /* 42..44 cops that jump out of police cars */
 #define PED_MISSION0 45     /* 45..54 job targets and gunmen */
-#define PED_ACTOR 55        /* the person Eddie talks to in a cutscene */
+#define PED_ACTOR 55        /* the person Nick talks to in a cutscene */
 
 enum { AI_NONE, AI_TRAFFIC, AI_POLICE, AI_RIVAL };
 enum { P_CIV, P_COP, P_TARGET, P_GUARD };
@@ -120,11 +122,11 @@ static void ai_choose(Car *c)
 {
     int d = c->dir, X = c->cross, R = c->road;
     int opts[4], n = 0;
-    if (X + dsign(d) >= 0 && X + dsign(d) <= 8) { opts[n++] = d; opts[n++] = d; }
+    if (X + dsign(d) >= 0 && X + dsign(d) <= NB) { opts[n++] = d; opts[n++] = d; }
     for (int k = 1; k <= 3; k += 2) {
         int nd = (d + k) & 3;
         int nc = R + dsign(nd);
-        if (nc >= 0 && nc <= 8) opts[n++] = nd;
+        if (nc >= 0 && nc <= NB) opts[n++] = nd;
     }
     if (n == 0) return;
     int nd = opts[rnd() % n];
@@ -143,7 +145,7 @@ static void place_on_lane(Car *c, int dir, int road, int at, int past_m)
     c->x = Q8(x); c->y = Q8(y);
     c->head = Q8(dang[dir]);
     c->cross = at + dsign(dir);
-    if (c->cross < 0 || c->cross > 8) { c->dir = (dir + 2) & 3; c->head = Q8(dang[c->dir]); c->cross = at + dsign(c->dir); }
+    if (c->cross < 0 || c->cross > NB) { c->dir = (dir + 2) & 3; c->head = Q8(dang[c->dir]); c->cross = at + dsign(c->dir); }
     lane_point(c->dir, c->road, c->cross, &c->tx, &c->ty);
 }
 
@@ -182,15 +184,15 @@ static void spawn_traffic_near(Car *c)
 {
     int pbx = plx() >> 10, pby = ply() >> 10;
     /* near the edge of the grid or out of town: some of the traffic uses the coastal road */
-    int out = plx() < M(90) || ply() < M(90) || plx() > M(437) || ply() > M(437);
+    int out = plx() < M(90) || ply() < M(90) || plx() > GRID_U - M(90) || ply() > GRID_U - M(90);
     if (out && (rnd() & 1) && spawn_coast_near(c)) {
         c->speed = Q8(M(9)); c->ai = AI_TRAFFIC; c->active = 1; c->police = 0; c->wait = 1; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
         return;
     }
     for (int tries = 0; tries < 12; tries++) {
         int dir = rnd() & 3;
-        int road = clampi(((dir & 1) ? pbx : pby) + rndr(-1, 2), 0, 8);
-        int at = clampi(((dir & 1) ? pby : pbx) + rndr(-2, 3), 1, 7);
+        int road = clampi(((dir & 1) ? pbx : pby) + rndr(-1, 2), 0, NB);
+        int at = clampi(((dir & 1) ? pby : pbx) + rndr(-2, 3), 1, NB - 1);
         place_on_lane(c, dir, road, at, 20);
         int d = dist_approx((c->x >> 8) - plx(), (c->y >> 8) - ply());
         if (d > M(60) && d < M(130)) break;
@@ -739,7 +741,7 @@ static void place_ped_near(Ped *p, int min_d)
 {
     int pbx = plx() >> 10, pby = ply() >> 10;
     for (int tries = 0; tries < 10; tries++) {
-        p->bx = (u8)clampi(pbx + rndr(-2, 2), 0, 7); p->by = (u8)clampi(pby + rndr(-2, 2), 0, 7);
+        p->bx = (u8)clampi(pbx + rndr(-2, 2), 0, NB - 1); p->by = (u8)clampi(pby + rndr(-2, 2), 0, NB - 1);
         p->corner = rnd() & 3; p->cw = rnd() & 1;
         int x0, y0, x1, y1;
         ped_corner(p, p->corner, &x0, &y0);
@@ -924,7 +926,7 @@ static void update_peds(int dt0)
             if (p->timer <= 0) {
                 p->state = (p->type == P_TARGET) ? S_IDLE : S_WALK;
                 /* re-route on the nearest block */
-                p->bx = (u8)clampi((x - M(13)) >> 10, 0, 7); p->by = (u8)clampi((y - M(13)) >> 10, 0, 7);
+                p->bx = (u8)clampi((x - M(13)) >> 10, 0, NB - 1); p->by = (u8)clampi((y - M(13)) >> 10, 0, NB - 1);
             }
             break; }
         case S_CHASE: {
@@ -1290,7 +1292,7 @@ static void cat_spawn(StreetCat *c)
 {
     int pbx = plx() >> 10, pby = ply() >> 10;
     for (int tries = 0; tries < 8; tries++) {
-        c->bx = (u8)clampi(pbx + (int)(rnd() % 3) - 1, 0, 7); c->by = (u8)clampi(pby + (int)(rnd() % 3) - 1, 0, 7);
+        c->bx = (u8)clampi(pbx + (int)(rnd() % 3) - 1, 0, NB - 1); c->by = (u8)clampi(pby + (int)(rnd() % 3) - 1, 0, NB - 1);
         c->s = (int)(rnd() % (4 * CAT_SIDE)) << 8;
         c->dir = (rnd() & 1) ? 1 : -1; c->state = CAT_SIT; c->timer = (s16)(rnd() % 6 + 2) * 64;
         c->head = (int)(rnd() & 4095);
@@ -1302,7 +1304,7 @@ static void cat_spawn(StreetCat *c)
 
 static void update_cats(int dt)
 {
-    const int in_town = plx() > 0 && ply() > 0 && plx() < 8 * 1024 && ply() < 8 * 1024;
+    const int in_town = plx() > 0 && ply() > 0 && plx() < NB * 1024 && ply() < NB * 1024;
     for (int i = 0; i < MAX_CATS; i++) {
         StreetCat *c = &street_cats[i];
         if (!c->active || dist_approx(c->x - plx(), c->y - ply()) > M(90)) {
@@ -1356,20 +1358,43 @@ static void update_cats(int dt)
 static void setup_pickups(void)
 {
     /* block x, block y, type (0 pistol 1 SMG 2 health 3 shotgun 4 rifle); 9,y = out of town */
-    static const s16 pos[MAX_PICKUPS][3] = {
+    static const s16 pos[NFIXED_PICKUPS][3] = {
         {3,3,0}, {5,4,2}, {2,5,1}, {4,6,0}, {6,3,1}, {1,2,2}, {6,6,2}, {2,2,0}, {5,1,1}, {3,6,2},
         {0,0,3}, {7,7,3}, {4,1,3}, {1,6,4}, {6,0,4}, {7,4,0}, {0,4,1}, {3,7,1}, {7,1,2}, {4,4,4},
         {0,7,0}, {5,6,3}, {2,0,2}, {6,5,0},
         /* v0.20: a second set, mostly guns; these sit on the far side of their block */
         {1,5,5}, {6,2,5}, {3,0,5}, {5,7,5},      /* rocket launchers; the first is a block from the Kings' corner */
         {6,4,0}, {3,1,1}, {0,1,3}, {4,5,4}, {5,7,0}, {2,1,1}, {3,2,3}, {1,3,4}, {0,6,1}, {1,0,4}, {4,2,0}, {6,7,3}, {5,5,1}, {7,6,4}, {1,4,3}, {1,5,0}, {4,0,1}, {3,4,4}, {4,3,2}, {7,3,2}, {2,7,0}, {3,5,3}, {2,4,1}, {4,7,2} };
-    for (int i = 0; i < MAX_PICKUPS; i++) {
+    for (int i = 0; i < NFIXED_PICKUPS; i++) {
         int x = pos[i][0] * 1024 + M(13.5), y = pos[i][1] * 1024 + M(30 + (i * 7) % 25);
         if (i >= 24) { x = pos[i][0] * 1024 + M(28 + (i * 11) % 24); y = pos[i][1] * 1024 + M(13.5); }   /* the cross street's sidewalk */
         for (int k = 0; k < 8 && world_point_blocked(x, y, M(0.6)); k++) { x += M(2); y += M(2); }   /* never inside a wall */
         pickups[i].x = x; pickups[i].y = y;
         pickups[i].type = (u8)pos[i][2]; pickups[i].avail = 1; pickups[i].timer = 0;
     }
+    /* the rest of the city: about one block in three outside the Docks, weapons to suit the district */
+    static const u8 dist_types[5][8] = {
+        { 0, 1, 2, 0, 3, 2, 4, 1 },     /* docks (unused) */
+        { 1, 2, 1, 0, 2, 4, 1, 3 },     /* downtown: SMGs and health */
+        { 3, 4, 3, 2, 4, 1, 5, 3 },     /* industrial: shotguns and rifles */
+        { 0, 2, 0, 2, 1, 0, 3, 2 },     /* the Heights: pistols and health */
+        { 4, 5, 4, 2, 3, 4, 5, 2 },     /* Gull Island: rifles and rockets */
+    };
+    u32 h = 0x9E3779B9u;
+    int n = NFIXED_PICKUPS;
+    for (int by = 0; by < NB && n < MAX_PICKUPS; by++)
+    for (int bx = 0; bx < NB && n < MAX_PICKUPS; bx++) {
+        int d = city_district[by * NB + bx];
+        h = h * 1664525u + 1013904223u;
+        if ((bx < 8 && by < 8) || d == DI_RIVER || BLK_KIND(bx, by) == BK_WATER || (h >> 28) % 3) continue;
+        int x = bx * 1024 + M(13.5), y = by * 1024 + M(20 + (h >> 8) % 36);
+        if ((h >> 20) & 1) { x = bx * 1024 + M(20 + (h >> 12) % 36); y = by * 1024 + M(13.5); }   /* the cross street */
+        for (int k = 0; k < 8 && world_point_blocked(x, y, M(0.6)); k++) { x += M(2); y += M(2); }
+        pickups[n].x = x; pickups[n].y = y;
+        pickups[n].type = dist_types[d < 5 ? d : 0][(h >> 4) & 7]; pickups[n].avail = 1; pickups[n].timer = 0;
+        n++;
+    }
+    for (; n < MAX_PICKUPS; n++) pickups[n].avail = 0, pickups[n].timer = 0x7fff, pickups[n].x = pickups[n].y = -M(500);
 }
 
 static void update_pickups(int dt)
@@ -1391,73 +1416,82 @@ static void update_pickups(int dt)
 }
 
 /* ------------------------------------------------------------ story */
-/* Eddie Vance comes to Steel Harbor to work for his cousin Rudy and finds Rudy gone, with a
-   $10,000 "debt" to the loan shark Victor Moran pinned on him. He works it off: stealing cars for
-   Marta, running product for Jinx, and doing Moran's dirty work, some of it ordered by
-   Detective Shaw, Moran's man on the force. Jinx steals Moran's ledger, which proves the debts
-   are invented. Eddie takes Shaw's cash run apart, Rudy comes out of hiding, and it ends at the
-   old pier. */
+/* Act One of STORY.md. Nick (Mykyta) Melnyk, a Ukrainian army sergeant, flies to New York when his
+   uncle Bohdan stops answering his phone. Bohdan runs a car shop on the waterfront; Moran's men
+   have put him in hospital, and Victor Moran says Bohdan owes him $10,000 or the shop is his.
+   Nick works it off: cars for Marta (Bohdan's shop foreman), product for Jinx, and Moran's dirty
+   work, some of it ordered by Detective Shaw. Jinx steals Moran's ledger, which proves the debts
+   are invented to seize waterfront property. Nick takes Shaw's cash run apart, and Rudy comes out
+   of hiding: Moran sank the Lucky Marie, the tug of Bohdan's old friend Sal, for refusing him.
+   It ends at the old pier, and Moran's phone points at Councilman Pryce (Act Two). */
 typedef struct { const char *who, *l1, *l2; } Page;
 static const Page *dlg; static int dlg_n, dlg_i, dlg_then;      /* dlg_then: 1 = start mission */
+#define NPAGES(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 static const Page st_intro[] = {
-    { "", "STEEL HARBOR. A CITY THAT RUNS", "ON FAVOURS AND DIRTY MONEY." },
-    { "EDDIE", "RUDY SAID HE HAD WORK FOR ME.", "NOW HIS PHONE'S DEAD." },
-    { "MARTA", "YOU'RE RUDY'S COUSIN? HE'S GONE.", "SKIPPED TOWN OWING VICTOR MORAN." },
-    { "MARTA", "MORAN SAYS FAMILY PAYS FAMILY DEBTS.", "THAT MEANS YOU. $10,000." },
-    { "EDDIE", "I DON'T HAVE TEN GRAND.", "I DON'T HAVE TEN BUCKS." },
-    { "MARTA", "THEN YOU WORK. I RUN A GARAGE.", "FOLLOW THE YELLOW MARKER." },
+    { "", "NEW YORK. DOWN ON THE WATERFRONT,", "THE DOCKS RUN ON FAVOURS AND CASH." },
+    { "NICK", "TEN YEARS IN THE UKRAINIAN ARMY.", "NOW MY UNCLE STOPS ANSWERING." },
+    { "MARTA", "YOU'RE BOHDAN'S NEPHEW? NICK?", "I'M MARTA. I RUN HIS SHOP FLOOR." },
+    { "MARTA", "HE'S IN THE HOSPITAL. MORAN'S MEN", "BROKE BOTH HIS ARMS." },
+    { "MARTA", "MORAN SAYS BOHDAN OWES HIM", "$10,000. OR HE TAKES THE SHOP." },
+    { "NICK", "MY UNCLE NEVER BORROWED A DIME.", 0 },
+    { "MARTA", "TELL MORAN. TILL BOHDAN'S BACK,", "THE SHOP HAS WORK FOR YOU." },
+    { "MARTA", "THE KIND WE DON'T ADVERTISE.", "FOLLOW THE YELLOW MARKER." },
 };
 static const Page st_m0[] = {
     { "MARTA", "A RICH KID LEFT A YELLOW SUPERCAR", "ON THE STREET. I HAVE A BUYER." },
-    { "EDDIE", "AND IF THE KID COMES BACK?", 0 },
-    { "MARTA", "THEN DRIVE FASTER. BRING IT TO MY", "GARAGE. AND DON'T WRECK IT." } };
+    { "NICK", "I DROVE TANKS, NOT SUPERCARS.", 0 },
+    { "MARTA", "THEN LEARN FAST. BRING IT TO THE", "SHOP. AND DON'T WRECK IT." } };
 static const Page st_m1[] = {
-    { "JINX", "YOU'RE THE NEW GUY? I'M JINX.", "I MOVE PRODUCT FOR WHOEVER PAYS." },
+    { "JINX", "YOU'RE BOHDAN'S NEPHEW? I'M JINX.", "I MOVE PRODUCT FOR WHOEVER PAYS." },
     { "JINX", "A PACKAGE IS WAITING AT THE DOCKS.", "PICK IT UP. BRING IT TO THE CLUB." },
-    { "EDDIE", "WHAT'S IN IT?", 0 },
+    { "NICK", "WHAT'S IN IT?", 0 },
     { "JINX", "THE KIND OF STUFF THAT GETS YOU", "TEN YEARS. SO DON'T GET CAUGHT." } };
 static const Page st_m2[] = {
-    { "MORAN", "SO YOU'RE THE COUSIN. VICTOR MORAN.", "RUDY'S DEBT IS YOURS NOW." },
+    { "MORAN", "NICK MELNYK. VICTOR MORAN.", "BOHDAN'S DEBT IS YOURS NOW." },
     { "MORAN", "MY BOOKKEEPER IS TALKING TO COPS.", "THE MAN IN THE SUIT. SHUT HIM UP." },
-    { "EDDIE", "AND THAT COMES OFF THE DEBT?", 0 },
-    { "MORAN", "$1,500 OF IT.", "DON'T MAKE ME ASK TWICE." } };
+    { "NICK", "AND THAT COMES OFF THE DEBT?", 0 },
+    { "MORAN", "$1,500 OF IT. TELL BOHDAN TO GET", "WELL SOON. HOSPITALS AREN'T SAFE." } };
 static const Page st_m3[] = {
     { "MORAN", "THE EASTSIDE KINGS ARE SELLING", "ON MY CORNER. SEND THEM A MESSAGE." },
     { "MORAN", "THREE CARS, PARKED LIKE THEY OWN", "THE STREET. BURN ALL THREE." },
-    { "EDDIE", "THEY'LL SHOOT BACK.", 0 },
+    { "NICK", "THEY'LL SHOOT BACK.", 0 },
     { "MORAN", "THAT'S WHY I'M SENDING YOU.", 0 } };
 static const Page st_m4[] = {
     { "SHAW", "DETECTIVE SHAW. I WORK FOR MORAN", "WHEN THE CITY ISN'T PAYING ME." },
     { "SHAW", "TWO OF MY OFFICERS ARE DIGGING", "INTO HIS BUSINESS. HONEST ONES." },
-    { "EDDIE", "YOU WANT ME TO KILL COPS?", "YOUR OWN COPS?" },
-    { "SHAW", "THEY'RE PARKED BY THE OLD MILL.", "THEN LOSE THE HEAT. IT'LL BE BAD." } };
+    { "NICK", "YOU WANT ME TO KILL COPS?", "YOUR OWN COPS?" },
+    { "SHAW", "YOUR UNCLE'S IN ROOM 12, RIGHT?", "OLD MILL. THEN LOSE THE HEAT." } };
 static const Page st_m5[] = {
-    { "MORAN", "A VAN FULL OF MY PRODUCT HAS TO", "REACH THE EAST COAST ROAD." },
+    { "MORAN", "A VAN FULL OF MY PRODUCT HAS TO", "REACH THE WEST COAST ROAD." },
     { "MORAN", "90 SECONDS. THE BUYER DOESN'T WAIT,", "AND NEITHER DO I." } };
 static const Page st_m6[] = {
-    { "JINX", "EDDIE! MORAN'S MEN ARE COMING.", "THEY KNOW I TOOK HIS LEDGER." },
-    { "JINX", "IT PROVES RUDY NEVER OWED A DIME.", "MORAN MAKES UP DEBTS TO OWN PEOPLE." },
-    { "EDDIE", "SO I'VE BEEN WORKING FOR NOTHING.", 0 },
+    { "JINX", "NICK! MORAN'S MEN ARE COMING.", "THEY KNOW I TOOK HIS LEDGER." },
+    { "JINX", "BOHDAN NEVER OWED HIM. NOBODY DID.", "MORAN INVENTS DEBTS TO TAKE LAND." },
+    { "NICK", "THE SHOP. THE HOMES BY THE WATER.", 0 },
     { "JINX", "DEAL WITH HIS GUYS, THEN MEET ME", "AT THE SAFEHOUSE. LOSE THE COPS." } };
 static const Page st_m7[] = {
     { "MARTA", "THE LEDGER NAMES SHAW. TONIGHT HE", "MOVES MORAN'S CASH IN A BLACK SUV." },
     { "MARTA", "STAY ON HIS BUMPER UNTIL HE BAILS.", "THEN MAKE SURE HE STAYS DOWN." },
-    { "EDDIE", "MORAN WILL KNOW IT WAS ME.", 0 },
+    { "NICK", "MORAN WILL KNOW IT WAS ME.", 0 },
     { "MARTA", "GOOD. LET HIM BE SCARED FOR ONCE.", 0 } };
 static const Page st_m8[] = {
-    { "RUDY", "EDDIE. I'M SORRY. I NEVER OWED HIM.", "HE MADE IT UP TO OWN US BOTH." },
-    { "EDDIE", "I KNOW. JINX SHOWED ME THE LEDGER.", "WHERE IS HE?" },
+    { "RUDY", "I'M RUDY. I CREWED SAL'S TUG,", "THE LUCKY MARIE. BOHDAN'S FRIEND." },
+    { "RUDY", "SAL WOULDN'T RUN MORAN'S CARGO.", "SO MORAN'S MEN SANK HER. WITH HIM." },
+    { "RUDY", "YOUR UNCLE WOULD HAVE BEEN NEXT.", 0 },
+    { "NICK", "WHERE IS MORAN?", 0 },
     { "RUDY", "THE OLD PIER, NORTHWEST. HE'S GOT", "GUNS WITH HIM. COPS ON THE WAY." },
-    { "EDDIE", "THEN I'M PAYING HIM BACK.", "IN FULL." } };
+    { "NICK", "THEN HE PAYS. IN FULL.", 0 } };
 static const Page st_end[] = {
-    { "RUDY", "IT'S OVER. MORAN'S GONE.", "NOBODY OWES ANYBODY ANYTHING." },
-    { "EDDIE", "THIS CITY STILL RUNS ON FAVOURS.", "NOW THEY'RE OURS." },
-    { "RUDY", "DRINKS ARE ON ME, COUSIN.", "FOR THE NEXT TEN YEARS." },
-    { "", "THE END.", "THANKS FOR PLAYING! THE CITY'S YOURS." } };
+    { "RUDY", "IT'S OVER. MORAN'S GONE. BOHDAN", "CAN COME HOME. SAL CAN REST." },
+    { "NICK", "MORAN'S PHONE KEPT RINGING.", "ONE NAME. 'PRYCE'." },
+    { "RUDY", "COUNCILMAN PRYCE? HE WANTS THE", "WHOLE WATERFRONT FOR A CASINO." },
+    { "NICK", "THEN THIS ISN'T OVER.", 0 },
+    { "", "END OF ACT ONE.", "THE CITY'S YOURS. FOR NOW." } };
 
 static const Page *const mission_intro[] = { st_m0, st_m1, st_m2, st_m3, st_m4, st_m5, st_m6, st_m7, st_m8 };
-static const u8 mission_intro_n[] = { 3, 4, 4, 4, 4, 2, 4, 4, 4 };
+static const u8 mission_intro_n[] = { NPAGES(st_m0), NPAGES(st_m1), NPAGES(st_m2), NPAGES(st_m3), NPAGES(st_m4),
+                                      NPAGES(st_m5), NPAGES(st_m6), NPAGES(st_m7), NPAGES(st_m8) };
 static const char *const mission_title[] = { "HOT WHEELS", "CANDY RUN", "THE BOOKKEEPER", "WRONG CORNER", "DIRTY BLUE",
                                              "SPECIAL DELIVERY", "THE LEDGER", "CASH RUN", "LAST CALL" };
 /* who gives each job, and what they wear */
@@ -1469,13 +1503,200 @@ typedef struct { u32 magic; u16 ver, mission; s32 money; s16 hp; u8 owned, weapo
 static int save_read(SaveData *d);
 static void save_write(void);
 static int menu_sel, menu_note, title_t, has_save;
-enum { GS_TITLE, GS_PLAY, GS_PAUSE, GS_DIALOG };
+enum { GS_TITLE, GS_PLAY, GS_PAUSE, GS_DIALOG, GS_SHOP, GS_MINI };
+
+/* ------------------------------------------------------------ shops */
+/* Walk-in shops: a door marker on the east sidewalk of a block. Inside is a 2D room (interiors.c)
+   with a buy menu. Any shop can be held up at gunpoint in free roam (never during a job). */
+enum { SHOP_GUN, SHOP_STORE, SHOP_PAWN, SHOP_CARS, SHOP_BOWL, SHOP_POOL };
+typedef struct { s16 x, y; u8 type, bx, by; int cd; } Shop;        /* cd: ticks until it can be robbed again */
+#define MAX_SHOPS 28
+EWRAM_BSS static Shop shops[MAX_SHOPS];
+static int nshops, shop_cur = -1, shop_away = 1, shop_rob, shop_take, shop_goal, shop_loose;
+static const char *shop_note; static int shop_note_t;
+static const char *const shop_names[6] = { "NY GUNS", "CORNER MART", "PAWN & LOAN", "MOTOR SALES", "HARBOR LANES", "EIGHT BALL CLUB" };
+static int mini_bet;
+enum { K_GUN, K_HEAL, K_SELL, K_CAR, K_ROB, K_PLAY };
+typedef struct { const char *label; s16 price; u8 kind, arg; u16 amt; } ShopItem;
+static const ShopItem gun_items[] = {
+    { "PISTOL + 36", 200, K_GUN, 1, 36 }, { "SMG + 120", 600, K_GUN, 2, 120 }, { "SHOTGUN + 16", 800, K_GUN, 3, 16 },
+    { "RIFLE + 30", 1200, K_GUN, 4, 30 }, { "ROCKETS X5", 3000, K_GUN, 5, 5 } };
+static const ShopItem store_items[] = {
+    { "SNACK  +20 HP", 15, K_HEAL, 20, 0 }, { "HOT MEAL  +50 HP", 40, K_HEAL, 50, 0 }, { "FIRST AID KIT", 90, K_HEAL, 100, 0 } };
+static const ShopItem pawn_items[] = {
+    { "USED PISTOL + 24", 120, K_GUN, 1, 24 }, { "USED SHOTGUN + 8", 450, K_GUN, 3, 8 }, { "SELL YOUR GUNS", 0, K_SELL, 0, 0 } };
+static const ShopItem car_items[] = {
+    { "HATCHBACK", 1500, K_CAR, 0, CAR_HATCH_WHITE }, { "PICKUP", 3000, K_CAR, 0, CAR_PICKUP_BLUE },
+    { "MUSCLE CAR", 6000, K_CAR, 0, CAR_MUSCLE_ORANGE }, { "SPORTS COUPE", 12000, K_CAR, 0, CAR_COUPE_BLACK },
+    { "SUPERCAR", 25000, K_CAR, 0, CAR_SUPER_RED } };
+static const ShopItem bowl_items[] = { { "BOWL A GAME", 100, K_PLAY, MINI_BOWL, 0 }, { "HIGH STAKES GAME", 500, K_PLAY, MINI_BOWL, 0 } };
+static const ShopItem pool_items[] = { { "PLAY 8-BALL", 100, K_PLAY, MINI_POOL, 0 }, { "HIGH STAKES 8-BALL", 500, K_PLAY, MINI_POOL, 0 } };
+static const ShopItem rob_item = { "ROB THE PLACE", 0, K_ROB, 0, 0 };
+static const ShopItem *const shop_items[6] = { gun_items, store_items, pawn_items, car_items, bowl_items, pool_items };
+static const u8 shop_nitems[6] = { 5, 3, 3, 5, 2, 2 };
+static const s16 resale[6] = { 0, 60, 180, 240, 360, 900 };
+
+static void setup_shops(void)
+{
+    static const u8 tab[][3] = {      /* block x, block y, type */
+        {6,4,SHOP_POOL}, {4,10,SHOP_BOWL},                                                                       /* games */
+        {3,3,SHOP_GUN}, {1,4,SHOP_STORE}, {5,6,SHOP_STORE}, {2,6,SHOP_PAWN}, {7,3,SHOP_CARS},                       /* Docks */
+        {10,2,SHOP_STORE}, {13,6,SHOP_STORE}, {16,3,SHOP_GUN}, {11,8,SHOP_PAWN}, {18,5,SHOP_CARS}, {15,9,SHOP_STORE}, /* Downtown */
+        {12,12,SHOP_GUN}, {17,11,SHOP_STORE}, {10,16,SHOP_PAWN}, {13,17,SHOP_CARS}, {11,13,SHOP_STORE},          /* Industrial */
+        {2,11,SHOP_STORE}, {5,15,SHOP_STORE}, {3,18,SHOP_PAWN}, {6,13,SHOP_GUN}, {1,16,SHOP_STORE},              /* the Heights */
+        {17,17,SHOP_STORE}, {18,18,SHOP_GUN} };                                                                  /* Gull Island */
+    nshops = 0;
+    for (unsigned i = 0; i < sizeof tab / sizeof tab[0] && nshops < MAX_SHOPS; i++) {
+        int bx = tab[i][0], by = tab[i][1];
+        if (BLK_KIND(bx, by) != BK_BUILT) continue;
+        Shop *h = &shops[nshops++];
+        h->bx = (u8)bx; h->by = (u8)by; h->type = tab[i][2]; h->cd = 0;
+        h->x = (s16)(bx * 1024 + M(62.5)); h->y = (s16)(by * 1024 + M(30));
+    }
+}
+
+static int shop_can_rob(void)
+{
+    return shop_cur >= 0 && shops[shop_cur].cd <= 0 && mstate != 1 && pl.weapon >= 1 && pl.ammo[pl.weapon] > 0;
+}
+static int shop_menu(const ShopItem **out)       /* this shop's menu, plus the hold-up when allowed */
+{
+    int t = shops[shop_cur].type, n = shop_nitems[t];
+    for (int i = 0; i < n; i++) out[i] = &shop_items[t][i];
+    if (shop_can_rob()) out[n++] = &rob_item;
+    return n;
+}
+static void shop_say(const char *t) { shop_note = t; shop_note_t = 2 * TICKS; }
+
+static void shop_leave(void)
+{
+    Shop *h = &shops[shop_cur];
+    if (shop_rob) {
+        pl.money += shop_take;
+        h->cd = 240 * TICKS;                    /* four minutes before it has cash again */
+        int w = shop_take < 700 ? 2 : 3;
+        if (w > wanted) { wanted = w; wanted_cool = 0; }
+        static char buf[24]; buf[0] = '+'; buf[1] = '$';
+        { char tmp[12]; int n = 0, v = shop_take; do { tmp[n++] = (char)('0' + v % 10); v /= 10; } while (v); int k = 2; while (n) buf[k++] = tmp[--n]; buf[k] = 0; }
+        big(buf, 1, 3);
+        g_snd.sfx |= SFX_CASH;
+    }
+    pl.x = Q8(h->x + M(1.8)); pl.y = Q8(h->y); pl.head = 0; pl.moving = 0;
+    gstate = GS_PLAY; shop_cur = -1; shop_rob = 0; g_hud.shop = 0;
+}
+
+static void buy_car(int model)
+{
+    Shop *h = &shops[shop_cur];
+    int slot = SLOT_PARKED0;
+    for (int k = SLOT_PARKED0; k < SLOT_PARKED_END; k++) if (!cars[k].active) { slot = k; break; }
+    Car *c = &cars[slot];
+    c->x = Q8(ROAD_C(h->bx + 1) - M(4.9)); c->y = Q8(h->y);
+    c->head = Q8(3072); c->model = (u16)model; c->ai = AI_NONE; c->speed = 0; c->vx = c->vy = 0; c->active = 1; c->police = 0;
+    c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
+}
+
+static void shop_update(u16 keys, u16 pressed, int dt)
+{
+    Shop *h = &shops[shop_cur];
+    if (shop_note_t > 0) shop_note_t -= dt;
+    g_hud.shop = 1 + h->type; g_hud.shop_name = shop_names[h->type];
+    g_hud.shop_note = shop_note_t > 0 ? shop_note : 0;
+    g_snd.engine_vol = 0; g_snd.skid = 0; g_snd.horn = 0; g_snd.siren = 0; g_snd.nitro = 0;
+    if (shop_rob) {                                          /* the hold-up */
+        g_hud.shop_pose = 1; g_hud.menu_n = 0; g_hud.shop_cash = shop_take;
+        if (shop_rob == 1) {
+            if (keys & KEY_A) {
+                shop_loose = 0;
+                shop_take += shop_goal * dt / (6 * TICKS) + 1;
+                if (shop_take >= shop_goal) { shop_take = shop_goal; shop_rob = 2; shop_say("THAT'S ALL OF IT. RUN!"); }
+            } else if ((shop_loose += dt) > TICKS * 3 / 4) {
+                shop_rob = 2;
+                if (h->type == SHOP_GUN) {                   /* gun-shop clerks keep a shotgun under the counter */
+                    pl.hp -= 35; if (pl.hp < 5) pl.hp = 5; g_hud.hurt_t = TICKS / 2;
+                    g_snd.shot = 3; g_snd.shot_vol = 0; shop_say("HE HAD A SHOTGUN. GET OUT!");
+                } else shop_say("HE HIT THE ALARM. RUN!");
+            }
+            g_hud.shop_line = shop_rob == 1 ? "HOLD A: KEEP HIM COVERED" : "B: RUN FOR IT";
+        } else g_hud.shop_line = "B: RUN FOR IT";
+        if (pressed & KEY_B) shop_leave();
+        return;
+    }
+    g_hud.shop_pose = 0; g_hud.shop_line = "A: BUY   B: LEAVE";
+    const ShopItem *items[8];
+    int n = shop_menu(items);
+    if (menu_sel >= n) menu_sel = n - 1;
+    if ((pressed & KEY_UP) && menu_sel > 0) { menu_sel--; g_snd.step = 1; }
+    if ((pressed & KEY_DOWN) && menu_sel < n - 1) { menu_sel++; g_snd.step = 1; }
+    EWRAM_BSS static char lbl[8][28];
+    for (int i = 0; i < n; i++) {
+        const ShopItem *it = items[i];
+        char *q = lbl[i]; const char *a = it->label;
+        while (*a) *q++ = *a++;
+        if (it->price) {
+            int len = (int)(q - lbl[i]);
+            while (len < 19) { *q++ = ' '; len++; }
+            *q++ = '$';
+            char tmp[8]; int m = 0, v = it->price; do { tmp[m++] = (char)('0' + v % 10); v /= 10; } while (v);
+            while (m) *q++ = tmp[--m];
+        }
+        *q = 0;
+        g_hud.menu_item[i] = lbl[i];
+    }
+    g_hud.menu_n = n; g_hud.menu_sel = menu_sel;
+    if (pressed & KEY_B) { shop_leave(); return; }
+    if (!(pressed & KEY_A)) return;
+    const ShopItem *it = items[menu_sel];
+    if (it->kind == K_ROB) {
+        shop_rob = 1; shop_take = 0; shop_loose = 0;
+        static const s16 goal[6] = { 1200, 450, 900, 2000, 700, 600 };
+        shop_goal = goal[h->type] + (int)(rnd() % (u32)(goal[h->type] / 2));
+        shop_say("HANDS UP! EMPTY THE REGISTER!");
+        g_snd.sfx |= SFX_PUMP;
+        return;
+    }
+    if (it->kind == K_PLAY) {
+        if (pl.money < it->price) { shop_say("YOU CAN'T COVER THE BET"); g_snd.sfx |= SFX_DRY; return; }
+        pl.money -= it->price; mini_bet = it->price;
+        gstate = GS_MINI; mini_start(it->arg); g_snd.sfx |= SFX_CASH;
+        return;
+    }
+    if (it->kind == K_SELL) {
+        int v = 0;
+        for (int w = 1; w <= 5; w++) if ((pl.owned >> (w - 1)) & 1) v += resale[w];
+        if (!v) { shop_say("YOU'VE GOT NOTHING TO SELL"); return; }
+        pl.money += v; pl.owned = 0; pl.weapon = 0;
+        for (int w = 1; w <= 5; w++) pl.ammo[w] = 0;
+        g_snd.sfx |= SFX_CASH; shop_say("SOLD. NO QUESTIONS ASKED.");
+        return;
+    }
+    if (pl.money < it->price) { shop_say("NOT ENOUGH CASH"); g_snd.sfx |= SFX_DRY; return; }
+    if (it->kind == K_HEAL && pl.hp >= 100) { shop_say("YOU'RE ALREADY FINE"); return; }
+    pl.money -= it->price;
+    g_snd.sfx |= SFX_CASH;
+    switch (it->kind) {
+    case K_GUN:
+        pl.owned |= (u8)(1 << (it->arg - 1)); pl.ammo[it->arg] += it->amt; pl.weapon = it->arg;
+        g_snd.sfx |= SFX_SWAP; shop_say("THANKS. STAY SAFE OUT THERE.");
+        break;
+    case K_HEAL:
+        pl.hp += it->arg; if (pl.hp > 100) pl.hp = 100;
+        shop_say("ENJOY.");
+        break;
+    case K_CAR:
+        buy_car(it->amt);
+        msg("YOUR NEW CAR IS", "PARKED OUT FRONT", 4);
+        shop_leave();
+        break;
+    }
+}
+
 static void dialog(const Page *pg, int n, int then)
 {
     dlg = pg; dlg_n = n; dlg_i = 0; dlg_then = then; gstate = GS_DIALOG; cut_on = 0;
 }
 
-/* a cutscene: the speaker stands facing Eddie and the camera cuts between them */
+/* a cutscene: the speaker stands facing Nick and the camera cuts between them */
 static void cutscene(const Page *pg, int n, int then, int model)
 {
     Ped *a = &peds[PED_ACTOR];
@@ -1491,13 +1712,13 @@ static void cutscene(const Page *pg, int n, int then, int model)
     int face = iatan2(ey - ay, ex - ax);
     a->active = 1; a->down = 0; a->hp = 100; a->cd = 0; a->type = P_CIV; a->model = (u16)model; a->state = S_IDLE;
     a->x = Q8(ax); a->y = Q8(ay); a->head = Q8(face); a->speed = Q8(M(1.4)); a->run = 0; a->aim = 0; a->phase = 0;
-    a->bx = (u8)(ax >> 10 < 0 ? 0 : ax >> 10 > 7 ? 7 : ax >> 10); a->by = (u8)(ay >> 10 < 0 ? 0 : ay >> 10 > 7 ? 7 : ay >> 10);
+    a->bx = (u8)clampi(ax >> 10, 0, NB - 1); a->by = (u8)clampi(ay >> 10, 0, NB - 1);
     a->corner = (u8)(rnd() & 3); a->cw = (u8)(rnd() & 1);
     if (pl.in_car < 0) { pl.head = Q8((face + 2048) & 4095); pl.moving = 0; }
     dialog(pg, n, then);
     cut_on = 1; cut_t = 0;
 }
-static int is_eddie(const char *w) { return w && w[0] == 'E' && w[1] == 'D'; }
+static int is_hero(const char *w) { return w && w[0] == 'N' && w[1] == 'I'; }
 
 /* ------------------------------------------------------------ missions */
 #define NMISSIONS 9
@@ -1523,7 +1744,7 @@ static void setup_missions(void)
     for (int i = 0; i < NMISSIONS; i++) { mission_start_x[i] = M(1) * st[i][0]; mission_start_y[i] = M(1) * st[i][1]; }
     mission_start_y[3] = 6 * 1024 + M(62.5);
     garage_x = ROAD_C(1) + M(4.5); garage_y = 6 * 1024 + M(40);
-    drop_x = 8 * 1024 + M(48); drop_y = ROAD_C(2);                  /* east connector, by the coast */
+    drop_x = -M(44); drop_y = ROAD_C(2);                            /* west connector, by the coast */
     safe_x = 6 * 1024 + M(40); safe_y = 1 * 1024 + M(13.5);
     dock_x = 7 * 1024 + M(40); dock_y = 6 * 1024 + M(13.5);         /* the docks, south-east */
     club_x = 1 * 1024 + M(40); club_y = 2 * 1024 + M(13.5);         /* the club, north-west */
@@ -1547,7 +1768,7 @@ static void reward(int money, const char *text)
     if (done == NMISSIONS - 1) {                  /* the ending */
         wanted = 0; wanted_cool = 0;
         for (int i = 0; i < NPOLICE; i++) cars[SLOT_POLICE0 + i].active = 0;
-        cutscene(st_end, 4, 0, PED_WHITE);
+        cutscene(st_end, NPAGES(st_end), 0, PED_WHITE);
     }
     save_write(); has_save = 1;                   /* autosave after every job */
 }
@@ -1567,7 +1788,7 @@ static void mission_ped(int k, int type, int model, int x, int y, int hp)
     p->active = 1; p->down = 0; p->hp = hp; p->cd = 160; p->rag = 0;
     p->type = type; p->model = model; p->state = S_IDLE;
     p->x = Q8(x); p->y = Q8(y); p->head = Q8(rnd() & 4095); p->speed = Q8(M(1.4));
-    p->bx = x >> 10; p->by = y >> 10; if (p->bx < 0) p->bx = 0; if (p->by < 0) p->by = 0; if (p->bx > 7) p->bx = 7; if (p->by > 7) p->by = 7;
+    p->bx = (u8)clampi(x >> 10, 0, NB - 1); p->by = (u8)clampi(y >> 10, 0, NB - 1);
 }
 static int mission_peds_down(int k0, int k1)          /* are mission peds k0..k1-1 all down? */
 {
@@ -1622,7 +1843,7 @@ static void start_mission(void)
     case 5:
         park_car(SLOT_MISSION, CAR_VAN_WHITE, ROAD_C(3) + M(4.9), 1 * 1024 + M(30), 1024, 0);
         time_left = 90 * TICKS;
-        msg("GET IN THE VAN AND TAKE IT", "TO THE EAST COAST ROAD", 5);
+        msg("GET IN THE VAN AND TAKE IT", "TO THE WEST COAST ROAD", 5);
         break;
     case 6: {                                 /* the ledger: Moran's men hit Jinx */
         pl.owned |= 1; if (pl.ammo[1] < 60) pl.ammo[1] = 60;
@@ -1785,41 +2006,71 @@ static void respawn_player(void)
 }
 
 /* ------------------------------------------------------------ init */
+/* Parked cars: a fixed pool of slots that follows the player. A parked car that is left far
+   behind (and nobody is using) is moved to a free kerb 80-140 m ahead of you, out of sight. */
+static const u16 park_models[20] = { CAR_SEDAN_SILVER, CAR_COUPE_BLACK, CAR_SUV_BLACK, CAR_MUSCLE_ORANGE, CAR_HATCH_WHITE,
+                                     CAR_SEDAN_BLUE, CAR_MUSCLE_SILVER, CAR_HATCH_LIME, CAR_SUPER_RED, CAR_HATCH5_RED,
+                                     CAR_PICKUP_WHITE, CAR_PICKUP_BLUE, CAR_VAN_WHITE, CAR_HATCH5_GREEN,
+                                     CAR_WAGON_BROWN, CAR_TUNER_GREEN, CAR_LUXURY_BLACK, CAR_MINIVAN_SILVER, CAR_YACHT_MAROON, CAR_BOXTRUCK_WHITE };
+static int park_spot(Car *c, int dmin, int dmax)
+{
+    int pbx = plx() >> 10, pby = ply() >> 10;
+    for (int tries = 0; tries < 10; tries++) {
+        int axis = rnd() & 1;
+        int road = clampi((axis ? pbx : pby) + rndr(-2, 3), 0, NB);
+        int seg = clampi((axis ? pby : pbx) + rndr(-2, 2), 0, NB - 1);
+        int side = (rnd() & 1) ? 1 : -1;
+        if ((road == 0 && side < 0) || (road == NB && side > 0)) side = -side;
+        int along = seg * 1024 + M(rndr(22, 52)), off = ROAD_C(road) + side * M(4.9);
+        int x = axis ? off : along, y = axis ? along : off;
+        int d = dist_approx(x - plx(), y - ply());
+        if (d < dmin || d > dmax) continue;
+        int busy = 0;
+        for (int k = 0; k < MAX_CARS && !busy; k++)
+            if (cars[k].active && &cars[k] != c && dist_approx((cars[k].x >> 8) - x, (cars[k].y >> 8) - y) < M(7)) busy = 1;
+        if (busy) continue;
+        c->x = Q8(x); c->y = Q8(y);
+        if (axis == 0) c->head = Q8(side < 0 ? 0 : 2048); else c->head = Q8(side > 0 ? 1024 : 3072);
+        c->model = park_models[rnd() % 20]; c->ai = AI_NONE; c->speed = 0; c->vx = c->vy = 0; c->active = 1; c->police = 0;
+        c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
+        return 1;
+    }
+    return 0;
+}
+#define PARKED_NEAR 12
 static void spawn_parked(void)
 {
-    static const u16 models[20] = { CAR_SEDAN_SILVER, CAR_COUPE_BLACK, CAR_SUV_BLACK, CAR_MUSCLE_ORANGE, CAR_HATCH_WHITE,
-                                    CAR_SEDAN_BLUE, CAR_MUSCLE_SILVER, CAR_HATCH_LIME, CAR_SUPER_RED, CAR_HATCH5_RED,
-                                    CAR_PICKUP_WHITE, CAR_PICKUP_BLUE, CAR_VAN_WHITE, CAR_HATCH5_GREEN,
-                                    CAR_WAGON_BROWN, CAR_TUNER_GREEN, CAR_LUXURY_BLACK, CAR_MINIVAN_SILVER, CAR_YACHT_MAROON, CAR_BOXTRUCK_WHITE };
-    int n = SLOT_PARKED0;
-    for (int road = 0; road <= 8 && n < SLOT_PARKED_END; road++)
-    for (int seg = 0; seg < 8 && n < SLOT_PARKED_END; seg++)
-    for (int axis = 0; axis < 2 && n < SLOT_PARKED_END; axis++) {
-        if (rnd() % 4) continue;
-        int side = (rnd() & 1) ? 1 : -1;
-        if ((road == 0 && side < 0) || (road == 8 && side > 0)) side = -side;
-        int along = seg * 1024 + M(rndr(22, 52));
-        Car *c = &cars[n++];
-        int off = ROAD_C(road) + side * M(4.9);
-        if (axis == 0) { c->x = Q8(along); c->y = Q8(off); c->head = Q8(side < 0 ? 0 : 2048); }
-        else           { c->x = Q8(off); c->y = Q8(along); c->head = Q8(side > 0 ? 1024 : 3072); }
-        c->model = models[rnd() % 20]; c->ai = AI_NONE; c->speed = 0; c->active = 1; c->police = 0; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
-    }
+    for (int n = SLOT_PARKED0; n < SLOT_PARKED_END; n++)
+        if (n >= SLOT_PARKED0 + PARKED_NEAR || !park_spot(&cars[n], M(12), M(150))) cars[n].active = 0;
+}
+static void recycle_parked(void)
+{
+    static int rr;
+    int i = SLOT_PARKED0 + rr;
+    rr = (rr + 1) % (SLOT_PARKED_END - SLOT_PARKED0);
+    Car *c = &cars[i];
+    if (pl.in_car == i) return;
+    if (c->active && (c->ai != AI_NONE || c->burn > 0 || dist_approx((c->x >> 8) - plx(), (c->y >> 8) - ply()) < M(160))) return;
+    /* keep about as many parked cars around you as the old small map had (it spread 29 over the whole city) */
+    int n = 0;
+    for (int k = SLOT_PARKED0; k < SLOT_PARKED_END; k++) n += cars[k].active && cars[k].ai == AI_NONE;
+    if (c->active) { c->active = 0; n--; }
+    if (n < PARKED_NEAR) park_spot(c, M(80), M(140));
 }
 
 typedef struct { s16 x, y; s16 head; } Lamp;
-#define MAX_LAMPS 300
+#define MAX_LAMPS ((NB + 1) * NB * 4)
 EWRAM_BSS static Lamp lamps[MAX_LAMPS];
 static int nlamps;
 
 static void spawn_lamps(void)
 {
     nlamps = 0;
-    for (int road = 0; road <= 8; road++)
-    for (int seg = 0; seg < 8; seg++)
+    for (int road = 0; road <= NB; road++)
+    for (int seg = 0; seg < NB; seg++)
     for (int axis = 0; axis < 2; axis++)
     for (int side = -1; side <= 1; side += 2) {
-        if ((road == 0 && side < 0) || (road == 8 && side > 0)) continue;
+        if ((road == 0 && side < 0) || (road == NB && side > 0)) continue;
         if (nlamps >= MAX_LAMPS) return;
         Lamp *l = &lamps[nlamps++];
         int along = seg * 1024 + M(side > 0 ? 30 : 46);
@@ -1829,27 +2080,29 @@ static void spawn_lamps(void)
     }
 }
 /* lamps sorted into city blocks, so a frame only looks at the blocks around the camera */
-EWRAM_BSS static u16 lamp_start[64], lamp_count[64];
-static int lamp_block(const Lamp *l) { return clampi(l->y >> 10, 0, 7) * 8 + clampi(l->x >> 10, 0, 7); }
+EWRAM_BSS static u16 lamp_start[NBLK], lamp_count[NBLK];
+static int lamp_block(const Lamp *l) { return clampi(l->y >> 10, 0, NB - 1) * NB + clampi(l->x >> 10, 0, NB - 1); }
 static void bucket_lamps(void)
 {
     EWRAM_BSS static Lamp tmp[MAX_LAMPS];
-    for (int b = 0; b < 64; b++) lamp_count[b] = 0;
+    EWRAM_BSS static u16 fill[NBLK];
+    for (int b = 0; b < NBLK; b++) lamp_count[b] = 0;
     for (int i = 0; i < nlamps; i++) lamp_count[lamp_block(&lamps[i])]++;
     int at = 0;
-    for (int b = 0; b < 64; b++) { lamp_start[b] = (u16)at; at += lamp_count[b]; }
-    u16 fill[64]; for (int b = 0; b < 64; b++) fill[b] = lamp_start[b];
+    for (int b = 0; b < NBLK; b++) { lamp_start[b] = (u16)at; at += lamp_count[b]; }
+    for (int b = 0; b < NBLK; b++) fill[b] = lamp_start[b];
     for (int i = 0; i < nlamps; i++) tmp[fill[lamp_block(&lamps[i])]++] = lamps[i];
     for (int i = 0; i < nlamps; i++) lamps[i] = tmp[i];
 }
 
 /* ------------------------------------------------------------ street props */
 typedef struct { s16 x, y; u16 frame; s16 head; s16 h; } Prop;     /* head < 0: no view angles */
-#define MAX_PROPS 900
+#define MAX_PROPS (NBLK * 12)
 EWRAM_BSS static Prop props[MAX_PROPS];
 static int nprops;
-EWRAM_BSS static u16 prop_start[64], prop_count[64];
-#define MAX_ROOF 80
+EWRAM_BSS static u16 prop_start[NBLK], prop_count[NBLK];
+#define MAX_ROOF 1100
+EWRAM_BSS static u16 roof_start[NBLK + 1];
 EWRAM_BSS static Prop roofs[MAX_ROOF];
 static int nroofs;
 
@@ -1863,22 +2116,22 @@ static void add_prop(int x, int y, int frame, int head, int h)
 static void spawn_props(void)
 {
     nprops = 0;
-    for (int by = 0; by < 8; by++)
-    for (int bx = 0; bx < 8; bx++) {
-        int bi = by * 8 + bx;
+    for (int by = 0; by < NB; by++)
+    for (int bx = 0; bx < NB; bx++) {
+        int bi = by * NB + bx;
         prop_start[bi] = (u16)nprops;
         int ox = bx * 1024, oy = by * 1024;
-        int park = g_world.lotmat[by * 9 + bx] == MAT_GRASS;
+        int park = BLK_KIND(bx, by) == BK_PARK, water = BLK_KIND(bx, by) == BK_WATER;
         /* traffic lights on two diagonal corners of each intersection */
         add_prop(ox + M(12.5), oy + M(12.5), PROP_TLIGHT, 2048, 0);
         add_prop(ox + M(61.8), oy + M(61.8), PROP_TLIGHT, 0, 0);
         /* corner furniture */
         add_prop(ox + M(13.5), oy + M(17), PROP_HYDRANT, -1, 0);
         add_prop(ox + M(13.6), oy + M(13.6), PROP_TRASH, -1, 0);
-        if (!park) add_prop(ox + M(62.6), oy + M(40), PROP_TRASH, -1, 0);
+        if (!park && !water) add_prop(ox + M(62.6), oy + M(40), PROP_TRASH, -1, 0);
         add_prop(ox + M(40), oy + M(13.5), PROP_BENCH, 1024, 0);       /* faces the road */
         /* street trees in the tree pits on alternating blocks */
-        if (((bx + by) & 1) == 0 || park)
+        if ((((bx + by) & 1) == 0 || park) && !water)
             for (int k = 0; k < 3; k++) {
                 int a = M(20 + k * 16);
                 add_prop(ox + M(13), oy + a, PROP_STREETTREE, -1, 0);
@@ -1888,7 +2141,9 @@ static void spawn_props(void)
     }
     /* wooden water towers on older, shorter buildings */
     nroofs = 0;
-    for (int i = 0; i < g_world.nb && nroofs < MAX_ROOF; i++) {
+    for (int bk = 0; bk < NBLK; bk++) {
+    roof_start[bk] = (u16)nroofs;
+    for (int i = blk_start[bk]; i < blk_start[bk + 1] && nroofs < MAX_ROOF; i++) {
         const Building *b = &g_world.b[i];
         if (b->mat == MAT_GLASS || b->h > M(36) || (i * 2654435761u >> 30) == 0) continue;
         if (b->x1 - b->x0 < M(9) || b->y1 - b->y0 < M(9)) continue;
@@ -1897,6 +2152,8 @@ static void spawn_props(void)
         p->y = (s16)(b->y0 + (b->y1 - b->y0) * (6 - (i & 1)) / 10);
         p->frame = PROP_WATERTOWER; p->head = -1; p->h = (s16)(b->h + b->base - ground_h(p->x, p->y));
     }
+    }
+    roof_start[NBLK] = (u16)nroofs;
 }
 
 void game_init(void)
@@ -1934,6 +2191,7 @@ void game_init(void)
     }
     spawn_lamps(); bucket_lamps();
     spawn_props();
+    setup_shops();
     setup_pickups();
     setup_missions();
     pl.in_car = 0; pl.head = 0; pl.hp = 100; pl.money = 0; pl.weapon = 0; pl.owned = 0;
@@ -2021,11 +2279,22 @@ static void load_game(const SaveData *d)
 
 static void meta_update(u16 keys, u16 pressed, int dt)
 {
-    (void)keys;
     g_snd.engine_vol = 0; g_snd.skid = 0; g_snd.horn = 0; g_snd.siren = 0; g_snd.nitro = 0;
     int up = pressed & KEY_UP, down = pressed & KEY_DOWN, ok = pressed & (KEY_A | KEY_START);
-    g_hud.dlg_l1 = 0; g_hud.menu_n = 0; g_hud.title = 0;
+    g_hud.dlg_l1 = 0; g_hud.menu_n = 0; g_hud.title = 0; g_hud.shop = 0;
     g_hud.cutscene = gstate == GS_DIALOG && cut_on;
+    g_hud.mini = 0;
+    if (gstate == GS_SHOP) { shop_update(keys, pressed, dt); return; }
+    if (gstate == GS_MINI) {                            /* bowling or pool; back to the counter when it ends */
+        g_hud.mini = 1;
+        int r = mini_update(keys, pressed, dt);
+        if (r) {
+            gstate = GS_SHOP; g_hud.mini = 0;
+            if (r == 1) { pl.money += mini_bet * 2; g_snd.sfx |= SFX_PASS; shop_say("YOU WON THE BET!"); }
+            else shop_say("BETTER LUCK NEXT TIME");
+        }
+        return;
+    }
     if (gstate == GS_TITLE) {
         title_t += dt;
         g_hud.title = 1;
@@ -2041,7 +2310,7 @@ static void meta_update(u16 keys, u16 pressed, int dt)
             if (menu_sel == 1) {
                 SaveData d;
                 if (save_read(&d)) { load_game(&d); gstate = GS_PLAY; msg("GAME LOADED", mission < NMISSIONS ? mission_title[mission] : "FREE ROAM", 3); }
-            } else { new_game_state(); cutscene(st_intro, 6, 0, PED_RED); }
+            } else { new_game_state(); cutscene(st_intro, NPAGES(st_intro), 0, PED_RED); }
         }
         return;
     }
@@ -2103,8 +2372,20 @@ void game_update(u16 keys, int dt)
     }
     if (gstate != GS_PLAY) { meta_update(keys, pressed, dt); return; }
     if ((pressed & KEY_START) && !(keys & KEY_SELECT)) { gstate = GS_PAUSE; menu_sel = 0; menu_note = 0; return; }
-    g_hud.menu_n = 0; g_hud.dlg_l1 = 0; g_hud.title = 0;
+    g_hud.menu_n = 0; g_hud.dlg_l1 = 0; g_hud.title = 0; g_hud.shop = 0; g_hud.mini = 0;
     if (pressed & KEY_R) toggle_car();
+    for (int i = 0; i < nshops; i++) if (shops[i].cd > 0) shops[i].cd -= dt;
+    if (pl.in_car < 0 && pl.dead_t <= 0) {                 /* walk into a shop door */
+        int near = -1;
+        for (int i = 0; i < nshops; i++)
+            if (iabs(shops[i].x - plx()) < M(2.5) && iabs(shops[i].y - ply()) < M(2.5)) { near = i; break; }
+        if (near < 0) shop_away = 1;
+        else if (shop_away && dist_approx(shops[near].x - plx(), shops[near].y - ply()) < M(1.3)) {
+            shop_away = 0;
+            if (wanted > 0) msg("THE DOOR IS LOCKED.", "LOSE THE COPS FIRST", 3);
+            else { shop_cur = near; gstate = GS_SHOP; menu_sel = 0; shop_rob = 0; shop_note_t = 0; g_snd.door = 1; return; }
+        }
+    }
     impact = 0;
     int pspeed_before = pl.in_car >= 0 ? cars[pl.in_car].speed : 0;
     int pbx = plx(), pby = ply();
@@ -2184,7 +2465,8 @@ void game_update(u16 keys, int dt)
     update_pickups(dt);
     update_rockets(dt);
     update_cats(dt);
-    {   /* Marta's garage fixes your ride: stop in front of it */
+    recycle_parked();
+    {   /* Bohdan's shop (Marta runs it) fixes your ride: stop in front of it */
         static int in_garage;
         int near = pl.in_car >= 0 && dist_approx(garage_x - plx(), garage_y - ply()) < M(7) && !(mission == 0 && mstate == 1);
         if (near && !in_garage && iabs(cars[pl.in_car].speed) < Q8(M(3))) {
@@ -2316,6 +2598,11 @@ void game_update(u16 keys, int dt)
         if (iabs(dx) > M(72) || iabs(dy) > M(72)) continue;
         g_hud.pk_x[np] = (s16)pickups[i].x; g_hud.pk_y[np] = (s16)pickups[i].y; g_hud.pk_t[np++] = pickups[i].type;
     }
+    for (int i = 0; i < nshops && np < MAX_PK_BLIPS; i++) {   /* shops: storefront icons */
+        int dx = shops[i].x - g_hud.px, dy = shops[i].y - g_hud.py;
+        if (iabs(dx) > M(72) || iabs(dy) > M(72)) continue;
+        g_hud.pk_x[np] = shops[i].x; g_hud.pk_y[np] = shops[i].y; g_hud.pk_t[np++] = (u8)(10 + shops[i].type);
+    }
     g_hud.npk = np;
 }
 
@@ -2415,9 +2702,9 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         /* cutscene: an establishing two-shot, then over-the-shoulder cuts to whoever is talking */
         const Ped *ap = &peds[PED_ACTOR];
         int ax = ap->x >> 8, ay = ap->y >> 8, ex = plx(), ey = ply();
-        int a2 = iatan2(ay - ey, ax - ex);                       /* Eddie -> speaker */
+        int a2 = iatan2(ay - ey, ax - ex);                       /* Nick -> speaker */
         const char *who = dlg[dlg_i].who;
-        int shot = (dlg_i == 0 || !who || !who[0]) ? 0 : is_eddie(who) ? 2 : 1;
+        int shot = (dlg_i == 0 || !who || !who[0]) ? 0 : is_hero(who) ? 2 : 1;
         int cx = 0, cy = 0, ok = 0;
         if (shot) {
             int fx = shot == 1 ? ex : ax, fy = shot == 1 ? ey : ay;     /* listener: the camera stands behind them */
@@ -2427,7 +2714,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
             int side = (dir + 1024) & 4095;
             cx = fx - ((icos(dir) * back) >> 14) + ((icos(side) * M(1.6)) >> 14);
             cy = fy - ((isin(dir) * back) >> 14) + ((isin(side) * M(1.6)) >> 14);
-            if (shot == 1 && pl.in_car >= 0) {                       /* Eddie's car would block the view: swing round it */
+            if (shot == 1 && pl.in_car >= 0) {                       /* Nick's car would block the view: swing round it */
                 for (int k = 0; k < 2; k++) {
                     int look = (a2 + (k ? -480 : 480)) & 4095;
                     cx = ax - ((icos(look) * M(5.0)) >> 14); cy = ay - ((isin(look) * M(5.0)) >> 14);
@@ -2535,6 +2822,10 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         if (flashes[i].t > 0) push_h(flashes[i].x, flashes[i].y, FX_FLASH, flashes[i].h);
     /* mission markers and checkpoints */
     if (mk_col >= 0 && pl.dead_t <= 0 && !cut_on && view_dist(mk_x, mk_y, 0) >= 0) push(mk_x, mk_y, FX_MARKER + mk_col);
+    for (int i = 0; i < nshops && !cut_on; i++) {           /* shop doors */
+        if (iabs(shops[i].x - cm->x) > M(45) || iabs(shops[i].y - cm->y) > M(45)) continue;
+        if (view_dist(shops[i].x, shops[i].y, 0) >= 0) push(shops[i].x, shops[i].y, FX_MARKER + 1);
+    }
     for (int i = 0; i < ncars; i++) {                           /* smoke and fire on damaged cars */
         Car *c = &cars[i];
         if (!c->active || (c->dmg < CAR_SMOKE && !(IS_WRECK(c) && c->burn > 0))) continue;
@@ -2571,8 +2862,8 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         view_lim = M(55);
         for (int j = cby - 1; j <= cby + 1; j++)
         for (int i = cbx - 1; i <= cbx + 1; i++) {
-            if ((unsigned)i > 7 || (unsigned)j > 7) continue;
-            int bi = j * 8 + i;
+            if ((unsigned)i >= NB || (unsigned)j >= NB) continue;
+            int bi = j * NB + i;
             for (int k = 0; k < prop_count[bi]; k++) {
                 const Prop *p = &props[prop_start[bi] + k];
                 int dd = view_dist(p->x, p->y, p->head >= 0 ? &view : 0);
@@ -2586,7 +2877,9 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
             }
         }
         view_lim = M(170);
-        for (int i = 0; i < nroofs; i++) {
+        int rb0 = clampi(cbx - 3, 0, NB - 1), rb1 = clampi(cbx + 3, 0, NB - 1);
+        for (int j = clampi(cby - 3, 0, NB - 1); j <= clampi(cby + 3, 0, NB - 1); j++)
+        for (int i = roof_start[j * NB + rb0], ie = roof_start[j * NB + rb1 + 1]; i < ie; i++) {
             int dx = roofs[i].x - cm->x, dy = roofs[i].y - cm->y;
             if (iabs(dx) > M(170) || iabs(dy) > M(170)) continue;
             if (view_dist(roofs[i].x, roofs[i].y, 0) < 0) continue;
@@ -2594,18 +2887,23 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         }
     }
     view_lim = M(100);
-    for (int i = 0; i < g_ntrees; i++) {
-        int dd = view_dist(g_trees[i].x, g_trees[i].y, 0);
-        if (dd < 0 || dd > M(120)) continue;
-        push(g_trees[i].x, g_trees[i].y, TREE);
+    {   /* park trees: the blocks within 120 m */
+        int cbx = cm->x >> 10, cby = cm->y >> 10;
+        int tb0 = clampi(cbx - 2, 0, NB - 1), tb1 = clampi(cbx + 2, 0, NB - 1);
+        for (int j = clampi(cby - 2, 0, NB - 1); j <= clampi(cby + 2, 0, NB - 1); j++)
+        for (int i = tree_start[j * NB + tb0], ie = tree_start[j * NB + tb1 + 1]; i < ie; i++) {
+            int dd = view_dist(g_trees[i].x, g_trees[i].y, 0);
+            if (dd < 0 || dd > M(120)) continue;
+            push(g_trees[i].x, g_trees[i].y, TREE);
+        }
     }
     view_lim = M(70);
     {   /* lamps within 70 m: only the 3x3 blocks around the camera (a block is 64 m) */
         int cbx = cm->x >> 10, cby = cm->y >> 10;
         for (int bj = cby - 1; bj <= cby + 1; bj++)
         for (int bi = cbx - 1; bi <= cbx + 1; bi++) {
-            if ((unsigned)bi > 7 || (unsigned)bj > 7) continue;
-            int b = bj * 8 + bi;
+            if ((unsigned)bi >= NB || (unsigned)bj >= NB) continue;
+            int b = bj * NB + bi;
             for (int i = lamp_start[b], e = lamp_start[b] + lamp_count[b]; i < e; i++) {
                 int ldx = lamps[i].x - cm->x, ldy = lamps[i].y - cm->y;
                 if (iabs(ldx) > M(70) || iabs(ldy) > M(70)) continue;
@@ -2617,7 +2915,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         }
     }
     /* out of town: coastal street lights and the wooded hills */
-    if (cm->x < M(150) || cm->y < M(150) || cm->x > M(380) || cm->y > M(380)) {
+    if (cm->x < M(150) || cm->y < M(150) || cm->x > GRID_U - M(150) || cm->y > GRID_U - M(150)) {
         for (int i = 0; i < NCOAST_LAMPS; i++) {
             int lx = coast_lamps[i][0], ly = coast_lamps[i][1];
             if (iabs(lx - cm->x) > M(70) || iabs(ly - cm->y) > M(70)) continue;
@@ -2718,8 +3016,22 @@ void game_debug_street(int n)          /* n = road*4 + dir: start of a long stre
     int i = pl.in_car >= 0 ? pl.in_car : 0;
     Car *c = &cars[i];
     int road = n >> 2, dir = n & 3;
-    place_on_lane(c, dir, road, dir == 0 || dir == 1 ? 0 : 8, 8);
+    place_on_lane(c, dir, road, dir == 0 || dir == 1 ? 0 : NB, 8);
     c->vx = c->vy = 0; c->speed = 0; cam_ang = c->head; c->ai = AI_NONE;
+}
+void game_debug_block(int bx, int by, int dir)   /* drop the player's car on road by at cross street bx */
+{
+    int i = pl.in_car >= 0 ? pl.in_car : 0;
+    Car *c = &cars[i];
+    place_on_lane(c, dir, by, bx, 20);
+    c->vx = c->vy = 0; c->speed = 0; cam_ang = c->head; c->ai = AI_NONE;
+    if (pl.in_car < 0) { pl.x = c->x; pl.y = c->y; }
+}
+void game_debug_shop(int i)            /* stand 3 m in front of shop i's door, facing it */
+{
+    if (pl.in_car >= 0) { cars[pl.in_car].ai = AI_NONE; pl.in_car = -1; }
+    i %= nshops;
+    pl.x = Q8(shops[i].x + M(3)); pl.y = Q8(shops[i].y); pl.head = Q8(2048); cam_ang = pl.head; wanted = 0; pl.money += 5000;
 }
 void game_debug_set(int w, int give_guns)
 {

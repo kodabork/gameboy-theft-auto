@@ -4,7 +4,7 @@
 #include "ground.h"
 
 EWRAM_BSS World g_world;  /* EWRAM: frees 3.6 KB of IWRAM for stack; costs well under 1% of frame time */
-u16 blk_start[64], blk_count[64];
+EWRAM_BSS u16 blk_start[NBLK + 1], tree_start[NBLK + 1];
 EWRAM_BSS Tree g_trees[MAX_TREES]; int g_ntrees;
 
 static u32 rng_state = 0x1234567;
@@ -27,20 +27,34 @@ static void add_building(int x0, int y0, int x1, int y1, int h, int mat, int wma
     b->base = (s16)(g - 4);
 }
 
+/* building height in metres by district (see city_district in terrain.c) */
 static int pick_height(int bx, int by)
 {
-    /* taller towards the middle of the island ("downtown" around block 4,4) */
-    int dx = bx * 2 - 7, dy = by * 2 - 7;
-    int d = dx * dx + dy * dy;                 /* 2..98 */
-    int maxh = d < 10 ? 58 : d < 30 ? 42 : 28;
-    int h = rndr(12, maxh);
-    if (rnd() % 6 == 0) h = rndr(12, 18);
+    int d = city_district[by * NB + bx], h;
+    switch (d) {
+    case DI_DOWNTOWN: {                      /* towers, tallest around blocks 14,4 */
+        int dx = bx - 14, dy = by - 4, r = dx * dx + dy * dy;
+        h = rndr(22, r < 6 ? 64 : r < 20 ? 52 : 40);
+        break; }
+    case DI_INDUSTRIAL: h = rndr(8, 16); if (rnd() % 7 == 0) h = rndr(18, 26); break;   /* warehouses, the odd silo block */
+    case DI_HEIGHTS:    h = rndr(9, 15); if (rnd() % 8 == 0) h = rndr(18, 24); break;   /* rowhouses and walk-ups */
+    case DI_ISLAND:     h = rndr(14, 30); if (rnd() % 3 == 0) h = rndr(44, 62); break;  /* the half-built casino strip */
+    default: {                               /* the Docks and Old Town: brick, taller toward block 4,4 */
+        int dx = bx * 2 - 7, dy = by * 2 - 7, r = dx * dx + dy * dy;
+        h = rndr(12, r < 10 ? 46 : r < 30 ? 36 : 28);
+        if (rnd() % 6 == 0) h = rndr(12, 18);
+        break; }
+    }
     return M(h);
 }
 
-static void pick_mats(int h, u8 *mat, u8 *wmat)
+static void pick_mats(int h, int d, u8 *mat, u8 *wmat)
 {
     static const u8 low[] = { MAT_BRICK, MAT_BROWN, MAT_BRICK, MAT_SAND, MAT_CONCRETE, MAT_BROWN };
+    static const u8 ind[] = { MAT_CONCRETE, MAT_BRICK, MAT_CONCRETE, MAT_BROWN, MAT_TRIM, MAT_CONCRETE };
+    static const u8 res[] = { MAT_BRICK, MAT_BROWN, MAT_SAND, MAT_BROWN, MAT_BRICK, MAT_SIDEWALK };
+    if (d == DI_INDUSTRIAL) { *mat = ind[rnd() % 6]; *wmat = (rnd() & 1) ? MAT_TRIM : MAT_GLASS; return; }
+    if (d == DI_HEIGHTS) { *mat = res[rnd() % 6]; *wmat = MAT_GLASS; return; }
     if (h > M(40) && rnd() % 2) { *mat = MAT_GLASS; *wmat = MAT_SILVER; return; }
     if (h > M(30) && rnd() % 2) { *mat = MAT_CONCRETE; *wmat = MAT_GLASS; return; }
     *mat = low[rnd() % 6]; *wmat = MAT_GLASS;
@@ -50,24 +64,26 @@ void world_generate(void)
 {
     World *w = &g_world;
     w->nb = 0; g_ntrees = 0;
-    for (int i = 0; i < 81; i++) w->lotmat[i] = MAT_WATER;
-    for (int by = 0; by < 8; by++)
-    for (int bx = 0; bx < 8; bx++) {
-        int bi = by * 8 + bx;
-        blk_start[bi] = (u16)w->nb;
+    for (int i = 0; i < (NB + 1) * (NB + 1); i++) w->lotmat[i] = MAT_WATER;
+    for (int by = 0; by < NB; by++)
+    for (int bx = 0; bx < NB; bx++) {
+        int bi = by * NB + bx, kind = BLK_KIND(bx, by), d = city_district[bi];
+        blk_start[bi] = (u16)w->nb; tree_start[bi] = (u16)g_ntrees;
         int ox = bx * 1024, oy = by * 1024;
         int lx0 = ox + M(15), ly0 = oy + M(15), lx1 = ox + M(61), ly1 = oy + M(61);
-        int park = (bx == 2 && by == 5) || (bx == 6 && by == 2) || (rnd() % 14 == 0);
-        if (park) {
-            w->lotmat[by * 9 + bx] = MAT_GRASS;
+        if (kind == BK_WATER) continue;
+        if (kind == BK_PARK) {
+            w->lotmat[by * (NB + 1) + bx] = MAT_GRASS;
             for (int t = 0; t < 6 && g_ntrees < MAX_TREES; t++) {
-                g_trees[g_ntrees].x = rndr(lx0 + M(4), lx1 - M(4));
-                g_trees[g_ntrees].y = rndr(ly0 + M(4), ly1 - M(4));
+                g_trees[g_ntrees].x = (s16)rndr(lx0 + M(4), lx1 - M(4));
+                g_trees[g_ntrees].y = (s16)rndr(ly0 + M(4), ly1 - M(4));
                 g_ntrees++;
             }
         } else {
-            w->lotmat[by * 9 + bx] = MAT_CONCRETE;
+            w->lotmat[by * (NB + 1) + bx] = MAT_CONCRETE;
             int split = rnd() % 10;
+            if (d == DI_INDUSTRIAL) split = split < 5 ? 0 : 3;     /* big sheds */
+            else if (d == DI_HEIGHTS) split = 9;                  /* four buildings per block */
             int mx = (lx0 + lx1) / 2 + rndr(-M(6), M(6));
             int my = (ly0 + ly1) / 2 + rndr(-M(6), M(6));
             int g = M(1);          /* half-alley between buildings */
@@ -92,16 +108,16 @@ void world_generate(void)
             }
             for (int k = 0; k < n; k++) {
                 int h = pick_height(bx, by);
-                u8 mat, wmat; pick_mats(h, &mat, &wmat);
+                u8 mat, wmat; pick_mats(h, d, &mat, &wmat);
                 /* small random setbacks so blocks are not perfectly flat */
-                int sx0 = (x0s[k] == lx0) ? 0 : 0, sy0 = 0, sx1 = 0, sy1 = 0;
+                int sx0 = 0, sy1 = 0;
                 if (rnd() % 3 == 0) sx0 = M(rndr(0, 3));
                 if (rnd() % 3 == 0) sy1 = M(rndr(0, 3));
-                add_building(x0s[k] + sx0, y0s[k] + sy0, x1s[k] - sx1, y1s[k] - sy1, h, mat, wmat);
+                add_building(x0s[k] + sx0, y0s[k], x1s[k], y1s[k] - sy1, h, mat, wmat);
             }
         }
-        blk_count[bi] = (u16)(w->nb - blk_start[bi]);
     }
+    blk_start[NBLK] = (u16)w->nb; tree_start[NBLK] = (u16)g_ntrees;
 }
 
 /* ------------------------------------------------------------ palette */
