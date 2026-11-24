@@ -16,11 +16,16 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.27
+- **New hero: Taras Melnyk**, a Ukrainian army sergeant. When his sister Ana stops answering her
+  phone, he flies to New York to find her in Steel Harbor, the city's old waterfront. Sal, the old
+  tug captain Ana lived with, is dead (his boat, the *Lucky Marie*, sank) and left her his house.
+  Loan shark Victor Moran says Sal owed him $10,000 and comes for the house, so Taras pays.
+- The game is now set in **New York**; Steel Harbor is its waterfront district. Act One's dialogue
+  and the story plan in `STORY.md` are rewritten to match.
+
 ## What's new in v0.26
-- **New hero: Niko B.** After eight years in the army, Niko comes home to Steel Harbor to
-  bury his father Sal, a tugboat captain whose boat, the *Lucky Marie*, sank with him aboard.
-  Loan shark Victor Moran says Sal owed him $10,000 and comes after the family house, where Niko's
-  sister Ana still lives.
+- **New hero and story** (the hero was replaced in v0.27).
 - **Act One rewritten.** The nine jobs play the same, with new dialogue: the ledger proves Moran
   invents debts to take waterfront homes, Sal's deckhand Rudy reveals Moran's men sank the
   *Lucky Marie*, and the ending points at the real villain, Councilman Pryce.
