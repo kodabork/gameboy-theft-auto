@@ -17,7 +17,7 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | SELECT + START | Toggle FPS counter | |
 
 ## What's new in v0.26
-- **New hero: Niko B.** After eight years working cargo ships, Niko comes home to Steel Harbor to
+- **New hero: Niko B.** After eight years in the army, Niko comes home to Steel Harbor to
   bury his father Sal, a tugboat captain whose boat, the *Lucky Marie*, sank with him aboard.
   Loan shark Victor Moran says Sal owed him $10,000 and comes after the family house, where Niko's
   sister Ana still lives.

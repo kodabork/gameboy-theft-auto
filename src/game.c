@@ -1391,7 +1391,7 @@ static void update_pickups(int dt)
 }
 
 /* ------------------------------------------------------------ story */
-/* Act One of STORY.md. Niko B comes home to Steel Harbor after eight years on cargo ships to
+/* Act One of STORY.md. Niko B comes home to Steel Harbor after eight years in the army to
    bury his father Sal, a tugboat captain whose boat, the Lucky Marie, sank with him aboard. Victor
    Moran says Sal owed him $10,000, and that the debt and the family house (where Niko's sister
    Ana still lives) now belong to Moran. Niko works it off: cars for Marta, product for Jinx, and
@@ -1405,7 +1405,7 @@ static const Page *dlg; static int dlg_n, dlg_i, dlg_then;      /* dlg_then: 1 =
 
 static const Page st_intro[] = {
     { "", "STEEL HARBOR. A CITY THAT RUNS", "ON FAVOURS AND DIRTY MONEY." },
-    { "NIKO", "EIGHT YEARS ON CARGO SHIPS.", "AND I COME HOME FOR A FUNERAL." },
+    { "NIKO", "EIGHT YEARS IN THE ARMY. I SURVIVED", "ALL OF IT. THEN DAD DIES AT HOME." },
     { "MARTA", "NIKO B. SAL'S BOY. I'M SORRY.", "YOUR DAD WAS A GOOD MAN." },
     { "MARTA", "BAD NEWS. MORAN SAYS SAL OWED HIM", "$10,000. NOW IT'S YOURS." },
     { "NIKO", "DAD NEVER BORROWED A DIME", "IN HIS LIFE." },
