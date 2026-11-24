@@ -56,7 +56,14 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - `setup_shops` in game.c: a table of (block, type); the door is on the block's east sidewalk (`x = bx*1024 + M(62.5)`, `y = by*1024 + M(30)`), skipped if the block is not built. Types: NY Guns, Corner Mart, Pawn & Loan, Motor Sales.
 - Walking into the door beam (`FX_MARKER + 1`) switches to `GS_SHOP`; `shop_update` runs the buy menu and the hold-up. Robbery only when `mstate != 1`, armed, and the shop's cool-down is over.
 - Art: `tools/make_interiors.py` ray-casts each room (boxes with simple textures), adds the clerk (a `Human` with a hands-up variant) and maps everything to the sprite palette into `src/interiors.c` (room, counter layer drawn over the clerk, clerk poses). `build.sh` re-runs it when the script or `src/assets.c` changes. The HUD draws shop text into the frame buffer (`text_f`), not as OBJ glyphs, because the menu needs more than 96 characters.
-- Host debug key `0xF10 + i`: stand in front of shop i (also clears the wanted level and adds $5000).
+- Host debug key `0xF10 + i`: stand in front of shop i (also clears the wanted level and adds $5000). Shop 0 is the pool hall, shop 1 the bowling alley.
+
+## Minigames (v0.32)
+- `src/minigames.c`: `mini_start(MINI_BOWL / MINI_POOL)`, `mini_update` (returns 1 won, 2 lost), `mini_draw` (called from `hud_draw` through the `hud_*` helpers). `GS_MINI` in game.c runs it; bets come from the venue's shop menu (`K_PLAY`).
+- Bowling: lane coordinates in mm, two projections (down the lane, and the pin cam) whose constants come from `make_interiors.py` (`minigame_art.h`). Artie bowls whole frames by weighted random rolls.
+- Pool: positions in 1/256 px on the 240x160 table; the CPU picks the best ghost-ball pot (cut angle, distance, blockers) with a small aim error.
+- `tools/mini_test.c` plays 20 full games of each and checks they all end; `mini_test table` prints pins knocked per start spot and hook.
+- When the full-screen 2D screens (shops, minigames) are up, `gba_main` skips the 3D render.
 
 ## Memory budget
 - **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
@@ -79,7 +86,7 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
   - `PROF=file PROF_FROM=sec` writes per-PC cycles; aggregate them with `tools/profsym.py` and `tools/byline.py`.
   - `SRAM_FILE=path` keeps save memory between runs (used for the save, reboot, CONTINUE test).
   - `FIXDT=819` fixes the game clock and indexes keys by displayed frame, so different builds play the identical game; `HIST=a-b` prints VBlanks per frame and fps over displayed frames a..b.
-  - **Benchmark:** `tools/bench.sh [rom]` (needs `build/bench.txt`, the standard drive script in displayed frames). v0.19: 14.4 fps, v0.20: 18.2 fps, v0.24: 19.0 fps, v0.30 (big map): 19.2 fps.
+  - **Benchmark:** `tools/bench.sh [rom]` (needs `build/bench.txt`, the standard drive script in displayed frames). v0.19: 14.4 fps, v0.20: 18.2 fps, v0.24: 19.0 fps, v0.30 (big map): 19.2 fps, v0.31: 18.9 fps. The drive can take a different path after about frame 300 if traffic changes, so compare builds with `HIST=60-300` when the scenery differs.
 
 ## Sound
 - `src/sound.c`: DirectSound mixer (engine, horn, skid, guns, siren, effect synth) and PSG radio. Five stations (`stations[]`): 64-step patterns for lead, chord stabs, bass and drums.

@@ -6,6 +6,7 @@
 #include "game.h"
 #include "assets.h"
 #include "sound.h"
+#include "minigames.h"
 
 #define TICKS 16384                 /* dt units per second */
 #define Q8(x) ((x) * 256)
@@ -1502,19 +1503,20 @@ typedef struct { u32 magic; u16 ver, mission; s32 money; s16 hp; u8 owned, weapo
 static int save_read(SaveData *d);
 static void save_write(void);
 static int menu_sel, menu_note, title_t, has_save;
-enum { GS_TITLE, GS_PLAY, GS_PAUSE, GS_DIALOG, GS_SHOP };
+enum { GS_TITLE, GS_PLAY, GS_PAUSE, GS_DIALOG, GS_SHOP, GS_MINI };
 
 /* ------------------------------------------------------------ shops */
 /* Walk-in shops: a door marker on the east sidewalk of a block. Inside is a 2D room (interiors.c)
    with a buy menu. Any shop can be held up at gunpoint in free roam (never during a job). */
-enum { SHOP_GUN, SHOP_STORE, SHOP_PAWN, SHOP_CARS };
+enum { SHOP_GUN, SHOP_STORE, SHOP_PAWN, SHOP_CARS, SHOP_BOWL, SHOP_POOL };
 typedef struct { s16 x, y; u8 type, bx, by; int cd; } Shop;        /* cd: ticks until it can be robbed again */
 #define MAX_SHOPS 28
 EWRAM_BSS static Shop shops[MAX_SHOPS];
 static int nshops, shop_cur = -1, shop_away = 1, shop_rob, shop_take, shop_goal, shop_loose;
 static const char *shop_note; static int shop_note_t;
-static const char *const shop_names[4] = { "NY GUNS", "CORNER MART", "PAWN & LOAN", "MOTOR SALES" };
-enum { K_GUN, K_HEAL, K_SELL, K_CAR, K_ROB };
+static const char *const shop_names[6] = { "NY GUNS", "CORNER MART", "PAWN & LOAN", "MOTOR SALES", "HARBOR LANES", "EIGHT BALL CLUB" };
+static int mini_bet;
+enum { K_GUN, K_HEAL, K_SELL, K_CAR, K_ROB, K_PLAY };
 typedef struct { const char *label; s16 price; u8 kind, arg; u16 amt; } ShopItem;
 static const ShopItem gun_items[] = {
     { "PISTOL + 36", 200, K_GUN, 1, 36 }, { "SMG + 120", 600, K_GUN, 2, 120 }, { "SHOTGUN + 16", 800, K_GUN, 3, 16 },
@@ -1527,14 +1529,17 @@ static const ShopItem car_items[] = {
     { "HATCHBACK", 1500, K_CAR, 0, CAR_HATCH_WHITE }, { "PICKUP", 3000, K_CAR, 0, CAR_PICKUP_BLUE },
     { "MUSCLE CAR", 6000, K_CAR, 0, CAR_MUSCLE_ORANGE }, { "SPORTS COUPE", 12000, K_CAR, 0, CAR_COUPE_BLACK },
     { "SUPERCAR", 25000, K_CAR, 0, CAR_SUPER_RED } };
+static const ShopItem bowl_items[] = { { "BOWL A GAME", 100, K_PLAY, MINI_BOWL, 0 }, { "HIGH STAKES GAME", 500, K_PLAY, MINI_BOWL, 0 } };
+static const ShopItem pool_items[] = { { "PLAY 8-BALL", 100, K_PLAY, MINI_POOL, 0 }, { "HIGH STAKES 8-BALL", 500, K_PLAY, MINI_POOL, 0 } };
 static const ShopItem rob_item = { "ROB THE PLACE", 0, K_ROB, 0, 0 };
-static const ShopItem *const shop_items[4] = { gun_items, store_items, pawn_items, car_items };
-static const u8 shop_nitems[4] = { 5, 3, 3, 5 };
+static const ShopItem *const shop_items[6] = { gun_items, store_items, pawn_items, car_items, bowl_items, pool_items };
+static const u8 shop_nitems[6] = { 5, 3, 3, 5, 2, 2 };
 static const s16 resale[6] = { 0, 60, 180, 240, 360, 900 };
 
 static void setup_shops(void)
 {
     static const u8 tab[][3] = {      /* block x, block y, type */
+        {6,4,SHOP_POOL}, {4,10,SHOP_BOWL},                                                                       /* games */
         {3,3,SHOP_GUN}, {1,4,SHOP_STORE}, {5,6,SHOP_STORE}, {2,6,SHOP_PAWN}, {7,3,SHOP_CARS},                       /* Docks */
         {10,2,SHOP_STORE}, {13,6,SHOP_STORE}, {16,3,SHOP_GUN}, {11,8,SHOP_PAWN}, {18,5,SHOP_CARS}, {15,9,SHOP_STORE}, /* Downtown */
         {12,12,SHOP_GUN}, {17,11,SHOP_STORE}, {10,16,SHOP_PAWN}, {13,17,SHOP_CARS}, {11,13,SHOP_STORE},          /* Industrial */
@@ -1644,10 +1649,16 @@ static void shop_update(u16 keys, u16 pressed, int dt)
     const ShopItem *it = items[menu_sel];
     if (it->kind == K_ROB) {
         shop_rob = 1; shop_take = 0; shop_loose = 0;
-        static const s16 goal[4] = { 1200, 450, 900, 2000 };
+        static const s16 goal[6] = { 1200, 450, 900, 2000, 700, 600 };
         shop_goal = goal[h->type] + (int)(rnd() % (u32)(goal[h->type] / 2));
         shop_say("HANDS UP! EMPTY THE REGISTER!");
         g_snd.sfx |= SFX_PUMP;
+        return;
+    }
+    if (it->kind == K_PLAY) {
+        if (pl.money < it->price) { shop_say("YOU CAN'T COVER THE BET"); g_snd.sfx |= SFX_DRY; return; }
+        pl.money -= it->price; mini_bet = it->price;
+        gstate = GS_MINI; mini_start(it->arg); g_snd.sfx |= SFX_CASH;
         return;
     }
     if (it->kind == K_SELL) {
@@ -2272,7 +2283,18 @@ static void meta_update(u16 keys, u16 pressed, int dt)
     int up = pressed & KEY_UP, down = pressed & KEY_DOWN, ok = pressed & (KEY_A | KEY_START);
     g_hud.dlg_l1 = 0; g_hud.menu_n = 0; g_hud.title = 0; g_hud.shop = 0;
     g_hud.cutscene = gstate == GS_DIALOG && cut_on;
+    g_hud.mini = 0;
     if (gstate == GS_SHOP) { shop_update(keys, pressed, dt); return; }
+    if (gstate == GS_MINI) {                            /* bowling or pool; back to the counter when it ends */
+        g_hud.mini = 1;
+        int r = mini_update(keys, pressed, dt);
+        if (r) {
+            gstate = GS_SHOP; g_hud.mini = 0;
+            if (r == 1) { pl.money += mini_bet * 2; g_snd.sfx |= SFX_PASS; shop_say("YOU WON THE BET!"); }
+            else shop_say("BETTER LUCK NEXT TIME");
+        }
+        return;
+    }
     if (gstate == GS_TITLE) {
         title_t += dt;
         g_hud.title = 1;
@@ -2350,7 +2372,7 @@ void game_update(u16 keys, int dt)
     }
     if (gstate != GS_PLAY) { meta_update(keys, pressed, dt); return; }
     if ((pressed & KEY_START) && !(keys & KEY_SELECT)) { gstate = GS_PAUSE; menu_sel = 0; menu_note = 0; return; }
-    g_hud.menu_n = 0; g_hud.dlg_l1 = 0; g_hud.title = 0; g_hud.shop = 0;
+    g_hud.menu_n = 0; g_hud.dlg_l1 = 0; g_hud.title = 0; g_hud.shop = 0; g_hud.mini = 0;
     if (pressed & KEY_R) toggle_car();
     for (int i = 0; i < nshops; i++) if (shops[i].cd > 0) shops[i].cd -= dt;
     if (pl.in_car < 0 && pl.dead_t <= 0) {                 /* walk into a shop door */

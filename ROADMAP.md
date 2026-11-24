@@ -20,19 +20,16 @@ This is the plan the owner asked to queue up. Work goes down the **Next up** lis
   pre-rendered interiors and clerks (`tools/make_interiors.py`), buy menus, and free-roam hold-ups.
   Later: clothes shop, respray, food stands, and shop-based story missions.
 
+- **Bowling and pool (v0.32):** `src/minigames.c` (bowling with pin physics and a pin cam, 8-ball with a
+  CPU hustler), art from `tools/make_interiors.py` into `src/minigame_art.c`. Venues use the shop doors.
+
 ## Next up (owner's requests)
-1. **Minigames: bowling and pool.**
-   - Each is its own small screen, like the shop interiors (reuse `make_interiors.py` for the rooms): a bowling alley (aim, spin, power;
-     10-frame scoring) and a pool hall (top-down table, cue aim and power, simple ball physics).
-   - Both are 2D, drawn once per shot, so no frame-rate cost in the city. Play for money against
-     a ped, and they can host a story mission or two.
-   - Place a bowling alley in the Heights and a pool hall in the Docks.
-2. **Build Acts Two to Four on the new districts** (see `STORY.md`).
+1. **Build Acts Two to Four on the new districts** (see `STORY.md`).
    - Districts unlock as the story goes. Today every district is open; story locks (police
      roadblocks on the bridges) get added with Act Two.
    - New objective types: tail a car without being seen, timed delivery, defend a spot,
      photograph/spot, escort, boat chase, boss.
-3. **People and police react to each other.**
+2. **People and police react to each other.**
    - Peds can commit crimes (mugging, carjacking, fights, running red lights). Nearby cops chase and arrest or shoot them, and peds flee, fight back or watch.
    - Performance: evaluate a few peds per frame in round-robin rather than every ped every frame, so the CPU cost stays flat. Same number of peds and cars on screen as today.
 

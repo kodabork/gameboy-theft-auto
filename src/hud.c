@@ -5,6 +5,7 @@
 #include "logo.h"
 #include "portraits.h"
 #include "interiors.h"
+#include "minigames.h"
 #define SHOW_PORTRAITS 0
 #include "ground.h"
 
@@ -216,6 +217,12 @@ static int wrap_lines(const char *l1, const char *l2, int width, char out[3][40]
     return nl;
 }
 
+/* drawing helpers for the minigames */
+void hud_blit(const Img *im, int x, int y) { blit_img(im, x, y); }
+void hud_rect(int x, int y, int w, int h, int c) { rect(x, y, w, h, c); }
+void hud_text(int x, int y, const char *s, int col, int scale) { text_f(x, y, s, col, scale); }
+void hud_px(int x, int y, int c) { put_px(x, y, c); }
+
 void hud_draw(u16 *fb)
 {
     FBH = fb;
@@ -259,6 +266,7 @@ void hud_draw(u16 *fb)
         text(228, 150, ">", COL_YELLOW, 1);
         return;
     }
+    if (g_hud.mini) { mini_draw(); return; }      /* bowling / pool */
     if (g_hud.shop) {                            /* shop interior: room, clerk, counter, then the menu */
         int t = g_hud.shop - 1, pose = g_hud.shop_pose;
         blit_img(room_img[t], 0, 0);
@@ -369,12 +377,12 @@ static void radar_icons(u32 *t, int c, int s, int px0, int py0)
             int health = g_hud.pk_t[i] == 2, shop = g_hud.pk_t[i] >= 10;
             /* shops: a storefront with an awning, coloured by type (gun red, store green, pawn yellow, cars white) */
             static const char store[5][8] = { "ooooooo", "o#o#o#o", "ooooooo", "o#ooo#o", "o#ooo#o" };
-            static const u8 shop_col[4] = { 14, 7, 6, 4 };
+            static const u8 shop_col[8] = { 14, 7, 6, 4, 8, 9, 4, 4 };
             const char (*ic)[8] = shop ? store : health ? aid : gun;
             for (int j = 0; j < 5; j++) for (int k = 0; k < 7; k++) {
                 char ch = ic[j][k];
                 if (ch == ' ') continue;
-                int col = shop ? (ch == '#' ? 1 : shop_col[(g_hud.pk_t[i] - 10) & 3])
+                int col = shop ? (ch == '#' ? 1 : shop_col[(g_hud.pk_t[i] - 10) & 7])
                         : ch == '#' ? (health ? 14 : g_hud.pk_t[i] == 5 ? 8 : 13) : (health ? 4 : 15);   /* rockets: orange */
                 rpx(t, 32 + x - 3 + k, 32 + y - 2 + j, col);
             }

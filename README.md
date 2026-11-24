@@ -16,6 +16,19 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.32
+- **Bowling at Harbor Lanes** (the Heights; orange icon on the radar). Ten frames against Artie, a
+  club bowler who averages about 150. Bet $100 or $500 at the desk; win and you get double.
+  - LEFT/RIGHT to pick your spot, UP/DOWN to set the hook, A to start the aim arrow sweeping, A to
+    lock it, A again to stop the power meter and throw.
+  - Real pin physics: the ball hooks on the dry back end, pins knock each other down and bounce off
+    the side walls. A pin cam cuts in as the ball reaches the pins.
+  - Full scoring with strikes, spares and the tenth frame, and a pin diagram of what's left.
+- **8-ball pool at the Eight Ball Club** (the Docks; blue icon). You against Slim, a hustler, on a
+  top-down table. LEFT/RIGHT to aim (an aim line shows where the cue ball goes, with a ghost ball),
+  hold A to pull back and let go to shoot. Pot your group (solids or stripes), then the 8.
+  Scratching hands Slim the shot, and sinking the 8 early loses the game.
+
 ## What's new in v0.31
 - **Shops you can walk into.** 23 shops across the six districts, each with a green beam over the door
   and a storefront icon on the radar (red gun shop, green corner store, yellow pawn shop, white

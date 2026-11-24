@@ -25,7 +25,8 @@ typedef struct {
     int timer_s, pressure, car_hp;              /* car_hp: 0..100, -1 on foot */                       /* mission clock (s, -1 none), chase pressure % (-1 none) */
     int title;                                   /* title screen */
     const char *menu_title, *menu_item[8], *menu_note; int menu_n, menu_sel;
-    int shop, shop_pose, shop_cash;              /* shop interior: 1 + type (0 = outside), clerk pose, hold-up cash */
+    int shop, shop_pose, shop_cash, mini;        /* mini: a minigame is on screen */
+                 /* shop interior: 1 + type (0 = outside), clerk pose, hold-up cash */
     const char *shop_name, *shop_note, *shop_line;
     const char *dlg_who, *dlg_l1, *dlg_l2;       /* story dialogue page */
     int cutscene;                                /* letterbox the dialogue */
