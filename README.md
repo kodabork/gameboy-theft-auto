@@ -22,6 +22,12 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.37
+- **Winning at pool or bowling now shows your payout clearly:** a big "+$200" (or "+$1000" for a
+  high-stakes game) with the cash sound, and a line saying what you bet and what you were paid. A
+  win pays your stake back plus the same again; the stake comes off when the game starts. Losing
+  tells you what you lost.
+
 ## What's new in v0.36
 - The radar and the FPS counter are hidden while you play pool or bowl, so they don't cover the table
   or the scoreboard.
