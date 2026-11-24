@@ -8,6 +8,14 @@ int main(int argc, char **argv)
 {
     FILE *tf = fopen("../build/terrain.bin", "rb"); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
     game_init();
+    if (argc > 1 && argv[1][0] == 'g') {   /* gutter check: how often throws find the gutter */
+        int tot = 0, gut = 0;
+        for (int sx = -480; sx <= 480; sx += 80) for (int aimv = -60; aimv <= 60; aimv += 15) for (int sp = -2; sp <= 2; sp++) {
+            int n = throw_once(sx, sp, 70, aimv); tot++; if (bgutter) gut++; (void)n; }
+        printf("gutter balls: %d of %d throws across every stand spot, aim and hook\n", gut, tot);
+        printf("straight from the middle, no hook: %d pins; from the edge aiming out: %d pins (gutter %d)\n", throw_once(0, 0, 70, 0), throw_once(480, 0, 70, 60), bgutter);
+        return 0;
+    }
     if (argc > 1) {      /* throw table: start x vs hook */
         for (int pw = 40; pw <= 100; pw += 30) {
             printf("power %d\n      ", pw); for (int sp = -2; sp <= 2; sp++) printf(" hook%+d", sp); printf("\n");
@@ -45,7 +53,7 @@ int main(int argc, char **argv)
 int throw_once(int sx, int spin, int pw, int aimv)
 {
     pins_reset(); bx = sx; by = START_Y; bgutter = 0; bspin = spin;
-    int sp = 5800 + pw * 38, a = aimv * 14 / 60;
+    int sp = 5800 + pw * 38, a = aimv * 26 / 60;
     bvx = sp * isin(a) >> 14; bvy = sp * icos(a) >> 14;
     for (int t = 0; t < 2000 && !(by > PIT_Y && !pins_moving()); t++) bowl_physics(4);
     int n = 0; for (int i = 0; i < 10; i++) n += pins[i].down || pins[i].gone;

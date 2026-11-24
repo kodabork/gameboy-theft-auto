@@ -204,8 +204,8 @@ static int bowl_update(u16 keys, u16 pressed, int dt)
     case B_POS:
         if (keys & KEY_LEFT) bstart_x -= 300 * dt / TICKS;
         if (keys & KEY_RIGHT) bstart_x += 300 * dt / TICKS;
-        if (bstart_x < -380) bstart_x = -380;
-        if (bstart_x > 380) bstart_x = 380;
+        if (bstart_x < -480) bstart_x = -480;           /* right out to the edge: a gutter ball is your own fault */
+        if (bstart_x > 480) bstart_x = 480;
         if ((pressed & KEY_UP) && bspin < 2) { bspin++; g_snd.step = 1; }
         if ((pressed & KEY_DOWN) && bspin > -2) { bspin--; g_snd.step = 1; }
         bx = bstart_x;
@@ -223,7 +223,7 @@ static int bowl_update(u16 keys, u16 pressed, int dt)
         if (pressed & KEY_A) {
             int sp = 5800 + power * 38;                   /* 5.8 .. 9.6 m/s */
             /* aim: -60..60 -> about +-3 degrees; isin/icos use 4096 per turn */
-            int a = aim * 14 / 60;
+            int a = aim * 26 / 60;                       /* about +-2.3 degrees: a late lock can find the gutter */
             bvx = sp * isin(a) >> 14; bvy = sp * icos(a) >> 14;
             standing_before = pins_standing(); bst = B_ROLL; roll_t = 0; g_snd.sfx |= SFX_PICKUP;
         }
@@ -310,7 +310,7 @@ static void bowl_draw(void)
     if (!ball_drawn && by < PIT_Y + 300 && bst != B_RESULT && (!pc || by > PCAM_Y_MM + 1200)) draw_ball(cam, bx, by);
     /* aim arrow */
     if (bst == B_AIM || bst == B_POWER || bst == B_POS) {
-        int a = aim * 14 / 60;
+        int a = aim * 26 / 60;
         for (int k = 1; k <= 10; k++) {
             int y = START_Y + k * 900, x = bx + ((k * 900) * isin(a) >> 14);
             int sx, sy, ppk;
@@ -409,17 +409,18 @@ static void pool_shoot(int ang, int pw)              /* pw 0..100 */
     pst = P_ROLL; first_hit = 0; npotted = 0;
     g_snd.sfx |= SFX_PICKUP;
 }
-static void pool_step(int ms)
+static u8 moving[16];                           /* balls in motion this step (resting pairs are skipped) */
+static void pool_step(void)                     /* one 1/256 s step */
 {
     for (int i = 0; i < 16; i++) {
         PBall *b = &pb[i];
-        if (!b->on) continue;
-        b->x += b->vx * ms / 1000; b->y += b->vy * ms / 1000;
+        moving[i] = 0;
+        if (!b->on || (!b->vx && !b->vy)) continue;
+        moving[i] = 1;
+        b->x += b->vx >> 8; b->y += b->vy >> 8;
         int sp = iabs_(b->vx) + iabs_(b->vy);              /* rolling resistance */
-        if (sp) {
-            int dec = (28 * PQ + sp / 3) * ms / 1000;
-            if (sp <= dec) b->vx = b->vy = 0; else { b->vx -= b->vx * dec / sp; b->vy -= b->vy * dec / sp; }
-        }
+        int dec = (28 * PQ + sp / 4) >> 8;
+        if (sp <= dec) b->vx = b->vy = 0; else { b->vx -= b->vx * dec / sp; b->vy -= b->vy * dec / sp; }
         int near_pocket = 0;
         for (int p = 0; p < 6; p++) {
             int dx = b->x - pocket[p][0] * PQ, dy = b->y - pocket[p][1] * PQ;
@@ -441,7 +442,7 @@ static void pool_step(int ms)
     for (int i = 0; i < 16; i++) {
         if (!pb[i].on) continue;
         for (int j = i + 1; j < 16; j++) {
-            if (!pb[j].on) continue;
+            if (!pb[j].on || !(moving[i] | moving[j])) continue;
             int dx = pb[j].x - pb[i].x, dy = pb[j].y - pb[i].y;
             if (iabs_(dx) >= 2 * PR || iabs_(dy) >= 2 * PR) continue;
             int d2 = (dx >> 4) * (dx >> 4) + (dy >> 4) * (dy >> 4), rr = (2 * PR) >> 4;
@@ -563,8 +564,9 @@ static int pool_update(u16 keys, u16 pressed, int dt)
         } else if (pcharging) { pool_shoot(paim, ppow); pcharging = 0; }
         break;
     case P_ROLL: {
-        int steps = dt * 1000 / TICKS / 3 + 1;
-        for (int k = 0; k < steps; k++) pool_step(3);
+        static int acc;
+        acc += dt;
+        while (acc >= TICKS / 256) { acc -= TICKS / 256; pool_step(); }
         if (!pool_moving()) pool_end_shot();
         break; }
     case P_CPU_THINK:

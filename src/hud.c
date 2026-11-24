@@ -95,7 +95,8 @@ static void text(int x, int y, const char *s, int col, int scale)
     int bank = col == COL_WHITE ? 2 : col == COL_YELLOW ? 3 : col == COL_RED ? 4 : 5;
     for (; *s; s++, x += 6 * scale) {
         int g = glyph_index(*s);
-        if (g == 0 || g_ntxt >= MAX_TXT) continue;
+        if (g == 0) continue;
+        if (g_ntxt >= MAX_TXT) { text_fb(x, y, s, col, scale); return; }   /* out of hardware glyphs: draw the rest */
         TxtObj *o = &g_txt[g_ntxt++];
         o->x = (s16)x; o->y = (s16)y; o->g = (u8)g; o->bank = (u8)bank; o->scale = (u8)scale;
     }
@@ -131,11 +132,7 @@ static void text(int x, int y, const char *s, int col, int scale)
 #endif
 static void text_center(int y, const char *s, int col, int scale) { text(120 - text_width(s, scale) / 2, y, s, col, scale); }
 /* text drawn into the frame buffer even on hardware (static screens with lots of text, like shops) */
-#ifdef HOST
-#define text_f text
-#else
-#define text_f text_fb
-#endif
+#define text_f text                       /* hardware glyphs while they last, then the frame buffer */
 
 static char *fmt_int(char *p, int v)
 {
@@ -149,6 +146,15 @@ static char *fmt_int(char *p, int v)
 
 static void blit_img(const Img *im, int x0, int y0)     /* palette-index image, 0 = transparent */
 {
+    if (x0 == 0 && y0 == 0 && im->w == 240 && im->h == 160 && !((u32)im->px & 3)) {   /* a whole opaque screen: one block copy */
+#ifdef HOST
+        for (int i = 0; i < 120 * 160; i++) FBH[i] = (u16)(im->px[2 * i] | (im->px[2 * i + 1] << 8));
+#else
+        *(volatile u32 *)0x040000D4 = (u32)im->px; *(volatile u32 *)0x040000D8 = (u32)FBH;
+        *(volatile u32 *)0x040000DC = (240 * 160 / 4) | 0x84000000u;      /* DMA3, 32-bit words, start now */
+#endif
+        return;
+    }
     int xs = x0 < 0 ? 0 : x0, xe = x0 + im->w > 240 ? 240 : x0 + im->w;
     if (xs >= xe) return;
     for (int y = 0; y < im->h; y++) {

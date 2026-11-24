@@ -12,7 +12,7 @@ if [ -n "$REGEN_ASSETS" ] || [ ! -f build/assets.bin ]; then
     python3 tools/append_props.py src/assets.c src/assets.h build/assets.bin
     python3 tools/append_fx.py src/assets.c src/assets.h build/assets.bin
 fi
-CF="-g --target=arm-none-eabi -mcpu=arm7tdmi -mfloat-abi=soft -O2 -ffreestanding -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -Wall -Wno-unused-function"
+CF="$EXTRA_CF -g --target=arm-none-eabi -mcpu=arm7tdmi -mfloat-abi=soft -O2 -ffreestanding -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -Wall -Wno-unused-function"
 python3 tools/make_logo.py src/assets.c src/logo.c build/logo_preview.png > /dev/null
 python3 tools/make_portraits.py src/assets.c src/portraits.c > /dev/null
 [ src/interiors.c -nt tools/make_interiors.py ] && [ src/interiors.c -nt src/assets.c ] || python3 tools/make_interiors.py src/assets.c src/interiors.c build/interiors_preview.png > /dev/null

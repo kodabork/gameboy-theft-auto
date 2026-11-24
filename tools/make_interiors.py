@@ -550,7 +550,7 @@ if __name__ == '__main__':
         ys, xs = np.nonzero(a)
         if name.startswith('front'):                   # crop the counter layer to its pixels
             y0c = ys.min(); a = a[y0c:]; pos[name] = y0c; h = a.shape[0]
-        L.append('static const u8 %s_px[%d] = {' % (name, w * h))
+        L.append('static const u8 %s_px[%d] __attribute__((aligned(4))) = {' % (name, w * h))
         flat = a.reshape(-1)
         for k in range(0, len(flat), 40): L.append('  ' + ','.join(str(int(v)) for v in flat[k:k + 40]) + ',')
         L.append('};')
@@ -589,7 +589,7 @@ if __name__ == '__main__':
     Hh = ['#ifndef MINIGAME_ART_H', '#define MINIGAME_ART_H', '#include "logo.h"']
     for nm, a in mg:
         h, w = a.shape
-        L.append('static const u8 %s_px[%d] = {' % (nm, w * h))
+        L.append('static const u8 %s_px[%d] __attribute__((aligned(4))) = {' % (nm, w * h))
         flat = a.reshape(-1)
         for k in range(0, len(flat), 40): L.append('  ' + ','.join(str(int(v)) for v in flat[k:k + 40]) + ',')
         L.append('};'); L.append('const Img %s = { %d, %d, %s_px };' % (nm, w, h, nm))
