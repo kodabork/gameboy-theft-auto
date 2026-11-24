@@ -1,27 +1,25 @@
-# GTA (Gameboy Theft Auto): New York — story bible (v0.27)
+# GTA (Gameboy Theft Auto): New York — story bible (v0.28)
 
 The plan for a story of about **6 hours**: 4 acts, 40 story missions, plus side content. Each act opens a new district of the bigger map (see `ROADMAP.md`).
 
 **Act One is in the game now**: the 9 existing jobs, rewritten for Taras. Acts Two to Four are the plan: their missions get built once the map grows.
 
 ## Premise
-**Taras Melnyk** is a sergeant in the Ukrainian army, ten years in, calm under fire and quiet about what he has seen. His younger sister **Ana** emigrated to New York five years ago and works nights as a nurse. When her calls stop, Taras takes leave, gets on a plane and comes to find her.
+**Taras Melnyk** is a sergeant in the Ukrainian army, ten years in, calm under fire and quiet about what he has seen. His uncle **Bohdan**, who raised him for a while as a boy, emigrated to New York twenty years ago and built a car shop on the waterfront, *Bohdan's Auto*. When Bohdan stops answering his phone, Taras takes leave, gets on a plane and comes to find him.
 
-He finds her on the **New York waterfront**: docks, tugboats, rowhouses and a lot of people who owe the wrong man money. Ana has been living with **Sal**, an old tugboat captain who rented her a room and came to treat her like a daughter. Sal is dead, lost when his tug, the *Lucky Marie*, sank in a storm. The police called it an accident. Sal left Ana his house.
+He finds the shop on the **New York waterfront**: docks, tugboats, rowhouses and a lot of people who owe the wrong man money. Bohdan is in hospital with both arms broken. Loan shark **Victor Moran** has a page from his ledger saying Bohdan owes him $10,000, with the shop as collateral. Bohdan's foreman **Marta** is keeping the doors open, and the shop has a side business in cars nobody asks about.
 
-Then loan shark **Victor Moran** turns up holding a page from his ledger. It says Sal owed him $10,000, with the house as collateral, and that the debt now falls on whoever lives there. Ana can't pay, so Taras will.
-
-Sal never borrowed a dime, and Taras doesn't believe in accidents. But Moran owns half the docks and has a detective on his payroll, so Taras starts paying.
+Bohdan never borrowed a dime, and his best friend **Sal**, a tug captain, died a few months ago when his boat, the *Lucky Marie*, sank in a storm. The police called it an accident. But Moran owns half the docks and has a detective on his payroll, so Taras starts paying.
 
 Theme: **debts, who invents them, and who pays.** New York runs on favours, and Taras, a stranger in the city, learns to trade them.
 
 ## Cast (all original)
 | Character | Who they are | Outfit in game | Acts |
 |---|---|---|---|
-| **Taras Melnyk** | The player. Ukrainian army sergeant, new to New York. Calm, dry, protective of Ana; handy with a gun, keeps the war to himself, learns the city one job at a time. | Player model | 1-4 |
-| **Ana** | Taras's younger sister, emigrated five years ago, nurse at Harbor General. Stubborn, proud of the life she built alone; the one person Taras can't lie to. | (new: female) | 1-4 |
-| **Sal** | Old tug captain who took Ana in (dead). Refused to run Moran's cargo on his tug. Left Ana his house. | — | (memory) |
-| **Marta Kowal** | Runs a garage under the elevated rail. Sal's old friend; tough, practical. First to give Taras work. | Red | 1-4 |
+| **Taras Melnyk** | The player. Ukrainian army sergeant, new to New York. Calm, dry, fiercely loyal to Bohdan; handy with a gun, keeps the war to himself, learns the city one job at a time. | Player model | 1-4 |
+| **Bohdan Melnyk** | Taras's uncle. Owns Bohdan's Auto on the waterfront; gruff, generous, too proud to ask for help. Out of hospital by Act Two, with opinions about everything Taras does. | (new: older man) | 1-4 |
+| **Sal** | Bohdan's best friend, a tug captain (dead). Refused to run Moran's cargo on his tug. | — | (memory) |
+| **Marta Kowal** | Foreman at Bohdan's Auto under the elevated rail, and runs its stolen-car side business. Tough, practical. First to give Taras work. | Red | 1-4 |
 | **Jinx** | Courier who moves anything for anyone. Funny, nervous, always three moves ahead or behind. | Green | 1-3 |
 | **Victor Moran** | Loan shark and docks boss. Invents debts to seize waterfront homes. | Suit | 1 |
 | **Det. Ray Shaw** | Crooked detective, Moran's man on the force. | Navy | 1 |
@@ -37,7 +35,7 @@ Theme: **debts, who invents them, and who pays.** New York runs on favours, and 
 |---|---|---|---|---|---|
 | 1 | **Debts** | Docks and Old Town (today's map) | 9 | ~1 h 15 | Taras pays a fake debt; learns Moran sank the *Lucky Marie*; kills Moran. |
 | 2 | **Paper** | Downtown, across the drawbridge | 11 | ~1 h 30 | Moran was a tool. Taras and Dee chase the paper trail to Councilman Pryce while Moran's leftover crew and the Kings fight over the docks. |
-| 3 | **Iron** | Industrial port and the Hills | 11 | ~1 h 45 | Pryce brings in Halvorsen's Blackline. A betrayal costs Taras his safehouse and nearly Ana. |
+| 3 | **Iron** | Industrial port and the Hills | 11 | ~1 h 45 | Pryce brings in Halvorsen's Blackline. A betrayal costs Taras his safehouse and nearly Bohdan. |
 | 4 | **Tide** | Gull Island (the half-built casino) | 9 | ~1 h 30 | Taras unites everyone Pryce stepped on and takes the island apart. |
 
 Side content (see the end) adds about 1-2 hours on top.
@@ -49,7 +47,7 @@ Side content (see the end) adds about 1-2 hours on top.
 | 2 | Candy Run | Jinx | Collect a package at the docks (1 star), deliver to the club within 100 s | $800 |
 | 3 | The Bookkeeper | Moran | Kill Moran's bookkeeper, who is talking to the police; 3 bodyguards | $1,500 |
 | 4 | Wrong Corner | Moran | Burn the Eastside Kings' 3 parked cars; 3 armed gang members | $1,800 |
-| 5 | Dirty Blue | Shaw | Shaw threatens Ana. Kill 2 honest officers at the old mill, then lose a 3-star wanted level | $2,200 |
+| 5 | Dirty Blue | Shaw | Shaw threatens Bohdan in his hospital bed. Kill 2 honest officers at the old mill, then lose a 3-star wanted level | $2,200 |
 | 6 | Special Delivery | Moran | Drive a van to the east coast road in 90 s (fails if wrecked) | $2,500 |
 | 7 | The Ledger | Jinx | Jinx stole Moran's ledger: the debts are invented to take waterfront homes. Kill 3 gunmen, lose the heat, reach the safehouse | $3,000 |
 | 8 | Cash Run | Marta | Stay on Shaw's SUV until he bails, then kill him | $3,500 |
@@ -63,11 +61,11 @@ The drawbridge to Downtown opens. Moran is dead, but the houses are still being 
 | # | Title | Giver | What you do |
 |---|---|---|---|
 | 10 | Front Page | Dee | Meet Dee; she's being followed. Lose the tail (car chase), get her to the Gazette. |
-| 11 | Eviction Notice | Ana | Bailiffs and hired muscle are emptying a neighbour's house. Drive them off before the truck leaves. |
+| 11 | Eviction Notice | Bohdan | Bailiffs and hired muscle are emptying a neighbour's house. Drive them off before the truck leaves. |
 | 12 | Crown Debt | King Kane | The Kings want payback for their burned cars. Pay it in work: steal 3 cars from Danny Moran's lot. |
 | 13 | City Hall Ink | Dee | Tail Pryce's aide without being spotted (new "tail" objective) to a meeting at the marina. |
 | 14 | Photo Op | Dee | Photograph the meeting from 3 rooftops/spots (new "spot" objective), then escape. |
-| 15 | Danny Boy | Marta | Danny Moran is torching garages that won't pay. Defend Marta's garage from 3 waves (new "defend" objective). |
+| 15 | Danny Boy | Marta | Danny Moran is torching garages that won't pay. Defend Bohdan's Auto from 3 waves (new "defend" objective). |
 | 16 | Kings' Ransom | King Kane | Danny took a Kings driver hostage. Chase the van, free him, escort him home. |
 | 17 | Shredder | Jinx | Pryce's office is shredding files tonight. Steal the shredding truck before it reaches the incinerator. |
 | 18 | Motorcade | Dee | Pryce's motorcade crosses Downtown. Get the briefcase from the second car without killing the councilman (a scandal must be alive to be printed). |
@@ -82,7 +80,7 @@ Pryce stops pretending. Halvorsen Shipping's private security firm, Blackline, m
 | 21 | New Management | Rudy | Blackline checkpoints are going up at the port. Scout them (spot 4) without raising an alarm. |
 | 22 | Container 7 | Marta | Steal a Halvorsen truck carrying a sealed container. Inside: forged deeds for 200 dock homes. |
 | 23 | The Offer | Pryce | Cutscene-heavy: Pryce meets Taras at a Hills mansion and offers the deeds. Taras refuses. Escape the grounds with Blackline after you. |
-| 24 | Night Shift | Ana | Ana is followed home from Harbor General. Protect her ride home (escort), then deal with the followers. |
+| 24 | Night Shift | Bohdan | Bohdan is followed home from the shop. Protect his ride home (escort), then deal with the followers. |
 | 25 | Iron Yard | King Kane | Wreck Blackline's armoured SUVs in the scrapyard before they deploy (destroy 4, rocket launcher pickup). |
 | 26 | Paper Trail | Dee | Dee traces the forged deeds to Halvorsen's office tower. Steal the hard drive from a courier on a bike route (chase). |
 | 27 | Hill Climb | Jinx | Jinx says Halvorsen keeps the originals in a Hills safe. Drive the getaway car for the break-in. It's a trap: Blackline is waiting. |
@@ -92,7 +90,7 @@ Pryce stops pretending. Halvorsen Shipping's private security firm, Blackline, m
 | 31 | Drawbridge | King Kane | Pryce closes the bridges to the island. Hold the drawbridge control house while Marta's crew crosses (defend, timed). |
 
 ## Act Four — Tide (Gull Island)
-Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce stepped on comes with Taras: the Kings, Marta's crew, Rudy on a tug, Dee with a camera, and Ana, who has had enough of being protected.
+Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce stepped on comes with Taras: the Kings, Marta's crew, Rudy on a tug, Dee with a camera, and Bohdan, who has had enough of being protected.
 
 | # | Title | Giver | What you do |
 |---|---|---|---|
@@ -103,20 +101,20 @@ Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce step
 | 36 | Mercer, Again | — | Boss fight: Cole Mercer in the half-built casino floors (armoured, rifle). |
 | 37 | Halvorsen Sails | Rudy | Halvorsen flees on her yacht. Chase her across the harbor by boat and stop the yacht. |
 | 38 | Councilman | — | Pryce runs for the island's helipad. Chase on foot up the casino tower, through the guards. |
-| 39 | The Lucky Marie | Ana | Final scene on the roof: Taras, Pryce, and the truth about Sal on camera. Pryce is arrested live (or worse, if the player shoots him; both endings play). |
-| 40 | Home | Ana | Epilogue drive: take Ana back to the house. The deeds are void; the waterfront stays. Credits roll over a free drive along the coast. |
+| 39 | The Lucky Marie | Bohdan | Final scene on the roof: Taras, Pryce, and the truth about Sal on camera. Pryce is arrested live (or worse, if the player shoots him; both endings play). |
+| 40 | Home | Bohdan | Epilogue drive: take Bohdan back to the shop. The deeds are void; the waterfront stays. Credits roll over a free drive along the coast. |
 
 **Endings:** Pryce arrested (the "clean" ending, Dee's story wins) or Pryce dead (Taras's revenge; the city remembers it differently). Jinx alive or not changes a few lines in Act Four.
 
 ## Side content (about 1-2 hours)
 - **Vehicle jobs:**
   - Taxi fares (taxi).
-  - Ambulance runs for Ana's hospital (ambulance).
+  - Ambulance runs for Harbor General (ambulance).
   - Police vigilante (police car).
   - Marta's car export lists (steal specific cars).
 - **Tug jobs with Rudy** (after Act Two): tow barges, boat races around the harbor.
 - **Hidden packages:** Sal's 50 lost tug parts around the city. Rewards come at milestones (weapons at home, armour, and the restored *Lucky Marie* at 50).
-- **Stunt jumps**, a **stats screen**, and properties to buy (Marta's garage share, the club, a dock warehouse) that pay a little income.
+- **Stunt jumps**, a **stats screen**, and properties to buy (a share of Bohdan's Auto, the club, a dock warehouse) that pay a little income.
 - **Kings turf fights** in Act Two and later: random Danny Moran crews attack Kings corners.
 
 ## How missions are built
@@ -130,7 +128,7 @@ Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce step
   - **boss** (one armoured enemy)
 - **Cutscenes:** in-engine, with letterbox bars and a dialogue box. The mission giver stands in the street facing Taras: an establishing two-shot first, then over-the-shoulder cuts to whoever is speaking. Afterwards the giver walks away. Portraits stay off unless the owner supplies art.
 - **New people needed:**
-  - **Female ped models** for Ana and Dee. Marta and Jinx's outfits could also get female versions. Each new set is about 1 MB of ROM with near and far frames.
+  - **Female ped models** for Dee (and an older-man model for Bohdan). Marta and Jinx's outfits could also get female versions. Each new set is about 1 MB of ROM with near and far frames.
   - A Blackline guard (a recoloured cop).
 
 ## Systems
@@ -139,4 +137,4 @@ Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce step
 - **Saving:** battery SRAM, plus an autosave after every job. You can't save during a job or while wanted. Loading puts you back in the car you saved in, or on foot with no car.
 - **A crash alone never kills the player**, but a car that blows up with you inside does (WASTED). A burning car gives you at least 4 s and you can bail out at any speed.
 - **Car damage, from 0 to 1000:** smokes from 650, burns from 880 and then explodes. Gunfire, rams and blasts all count.
-- **Repairs:** Marta's garage charges $100, or $300 if the car is burning.
+- **Repairs:** Bohdan's Auto charges $100, or $300 if the car is burning.

@@ -1392,41 +1392,41 @@ static void update_pickups(int dt)
 
 /* ------------------------------------------------------------ story */
 /* Act One of STORY.md. Taras Melnyk, a Ukrainian army sergeant, flies to New York when his
-   sister Ana stops answering her phone. Ana, a nurse, lived on the New York waterfront with
-   Sal, an old tugboat captain who took her in; Sal died when his tug, the Lucky Marie, sank, and
-   left Ana his house. Victor Moran says Sal owed him $10,000 and the house is his. Taras works it
-   off: cars for Marta, product for Jinx, and Moran's dirty work, some of it ordered by Detective
-   Shaw. Jinx steals Moran's ledger, which proves the debts are invented to seize waterfront homes.
-   Taras takes Shaw's cash run apart, and Rudy, Sal's deckhand, comes out of hiding: Moran sank the
-   Lucky Marie. It ends at the old pier, and Moran's phone points at Councilman Pryce (Act Two). */
+   uncle Bohdan stops answering his phone. Bohdan runs a car shop on the waterfront; Moran's men
+   have put him in hospital, and Victor Moran says Bohdan owes him $10,000 or the shop is his.
+   Taras works it off: cars for Marta (Bohdan's shop foreman), product for Jinx, and Moran's dirty
+   work, some of it ordered by Detective Shaw. Jinx steals Moran's ledger, which proves the debts
+   are invented to seize waterfront property. Taras takes Shaw's cash run apart, and Rudy comes out
+   of hiding: Moran sank the Lucky Marie, the tug of Bohdan's old friend Sal, for refusing him.
+   It ends at the old pier, and Moran's phone points at Councilman Pryce (Act Two). */
 typedef struct { const char *who, *l1, *l2; } Page;
 static const Page *dlg; static int dlg_n, dlg_i, dlg_then;      /* dlg_then: 1 = start mission */
 #define NPAGES(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 static const Page st_intro[] = {
     { "", "NEW YORK. DOWN ON THE WATERFRONT,", "THE DOCKS RUN ON FAVOURS AND CASH." },
-    { "TARAS", "TEN YEARS IN THE UKRAINIAN ARMY.", "NOW ANA DOESN'T ANSWER HER PHONE." },
-    { "MARTA", "YOU'RE ANA'S BROTHER? TARAS?", "SHE TALKS ABOUT YOU ALL THE TIME." },
-    { "MARTA", "SHE'S OK. BUT SAL, THE OLD MAN SHE", "LIVED WITH, IS DEAD. HIS TUG SANK." },
-    { "MARTA", "SAL LEFT HER HIS HOUSE. NOW MORAN", "SAYS SAL OWED HIM $10,000." },
-    { "TARAS", "AND IF SHE CAN'T PAY?", 0 },
-    { "MARTA", "HE TAKES THE HOUSE. ANA'S ON THE", "STREET. UNLESS YOU PAY IT." },
-    { "MARTA", "I RUN A GARAGE. I'VE GOT WORK.", "FOLLOW THE YELLOW MARKER." },
+    { "TARAS", "TEN YEARS IN THE UKRAINIAN ARMY.", "NOW MY UNCLE STOPS ANSWERING." },
+    { "MARTA", "YOU'RE BOHDAN'S NEPHEW? TARAS?", "I'M MARTA. I RUN HIS SHOP FLOOR." },
+    { "MARTA", "HE'S IN THE HOSPITAL. MORAN'S MEN", "BROKE BOTH HIS ARMS." },
+    { "MARTA", "MORAN SAYS BOHDAN OWES HIM", "$10,000. OR HE TAKES THE SHOP." },
+    { "TARAS", "MY UNCLE NEVER BORROWED A DIME.", 0 },
+    { "MARTA", "TELL MORAN. TILL BOHDAN'S BACK,", "THE SHOP HAS WORK FOR YOU." },
+    { "MARTA", "THE KIND WE DON'T ADVERTISE.", "FOLLOW THE YELLOW MARKER." },
 };
 static const Page st_m0[] = {
     { "MARTA", "A RICH KID LEFT A YELLOW SUPERCAR", "ON THE STREET. I HAVE A BUYER." },
     { "TARAS", "I DROVE TANKS, NOT SUPERCARS.", 0 },
-    { "MARTA", "THEN LEARN FAST. BRING IT TO MY", "GARAGE. AND DON'T WRECK IT." } };
+    { "MARTA", "THEN LEARN FAST. BRING IT TO THE", "SHOP. AND DON'T WRECK IT." } };
 static const Page st_m1[] = {
-    { "JINX", "YOU'RE ANA'S BROTHER? I'M JINX.", "I MOVE PRODUCT FOR WHOEVER PAYS." },
+    { "JINX", "YOU'RE BOHDAN'S NEPHEW? I'M JINX.", "I MOVE PRODUCT FOR WHOEVER PAYS." },
     { "JINX", "A PACKAGE IS WAITING AT THE DOCKS.", "PICK IT UP. BRING IT TO THE CLUB." },
     { "TARAS", "WHAT'S IN IT?", 0 },
     { "JINX", "THE KIND OF STUFF THAT GETS YOU", "TEN YEARS. SO DON'T GET CAUGHT." } };
 static const Page st_m2[] = {
-    { "MORAN", "TARAS MELNYK. VICTOR MORAN.", "SAL'S DEBT IS YOURS NOW." },
+    { "MORAN", "TARAS MELNYK. VICTOR MORAN.", "BOHDAN'S DEBT IS YOURS NOW." },
     { "MORAN", "MY BOOKKEEPER IS TALKING TO COPS.", "THE MAN IN THE SUIT. SHUT HIM UP." },
     { "TARAS", "AND THAT COMES OFF THE DEBT?", 0 },
-    { "MORAN", "$1,500 OF IT. SAY HELLO TO ANA", "FOR ME. LOVELY GIRL." } };
+    { "MORAN", "$1,500 OF IT. TELL BOHDAN TO GET", "WELL SOON. HOSPITALS AREN'T SAFE." } };
 static const Page st_m3[] = {
     { "MORAN", "THE EASTSIDE KINGS ARE SELLING", "ON MY CORNER. SEND THEM A MESSAGE." },
     { "MORAN", "THREE CARS, PARKED LIKE THEY OWN", "THE STREET. BURN ALL THREE." },
@@ -1436,14 +1436,14 @@ static const Page st_m4[] = {
     { "SHAW", "DETECTIVE SHAW. I WORK FOR MORAN", "WHEN THE CITY ISN'T PAYING ME." },
     { "SHAW", "TWO OF MY OFFICERS ARE DIGGING", "INTO HIS BUSINESS. HONEST ONES." },
     { "TARAS", "YOU WANT ME TO KILL COPS?", "YOUR OWN COPS?" },
-    { "SHAW", "YOUR SISTER WORKS NIGHTS, RIGHT?", "OLD MILL. THEN LOSE THE HEAT." } };
+    { "SHAW", "YOUR UNCLE'S IN ROOM 12, RIGHT?", "OLD MILL. THEN LOSE THE HEAT." } };
 static const Page st_m5[] = {
     { "MORAN", "A VAN FULL OF MY PRODUCT HAS TO", "REACH THE EAST COAST ROAD." },
     { "MORAN", "90 SECONDS. THE BUYER DOESN'T WAIT,", "AND NEITHER DO I." } };
 static const Page st_m6[] = {
     { "JINX", "TARAS! MORAN'S MEN ARE COMING.", "THEY KNOW I TOOK HIS LEDGER." },
-    { "JINX", "SAL NEVER OWED HIM. NOBODY DID.", "MORAN INVENTS DEBTS TO TAKE HOMES." },
-    { "TARAS", "HOMES BY THE WATER. LIKE ANA'S.", 0 },
+    { "JINX", "BOHDAN NEVER OWED HIM. NOBODY DID.", "MORAN INVENTS DEBTS TO TAKE LAND." },
+    { "TARAS", "THE SHOP. THE HOMES BY THE WATER.", 0 },
     { "JINX", "DEAL WITH HIS GUYS, THEN MEET ME", "AT THE SAFEHOUSE. LOSE THE COPS." } };
 static const Page st_m7[] = {
     { "MARTA", "THE LEDGER NAMES SHAW. TONIGHT HE", "MOVES MORAN'S CASH IN A BLACK SUV." },
@@ -1451,13 +1451,14 @@ static const Page st_m7[] = {
     { "TARAS", "MORAN WILL KNOW IT WAS ME.", 0 },
     { "MARTA", "GOOD. LET HIM BE SCARED FOR ONCE.", 0 } };
 static const Page st_m8[] = {
-    { "RUDY", "TARAS. I WAS ON THE LUCKY MARIE", "THE NIGHT SHE WENT DOWN." },
+    { "RUDY", "I'M RUDY. I CREWED SAL'S TUG,", "THE LUCKY MARIE. BOHDAN'S FRIEND." },
     { "RUDY", "SAL WOULDN'T RUN MORAN'S CARGO.", "SO MORAN'S MEN SANK HER. WITH HIM." },
+    { "RUDY", "YOUR UNCLE WOULD HAVE BEEN NEXT.", 0 },
     { "TARAS", "WHERE IS MORAN?", 0 },
     { "RUDY", "THE OLD PIER, NORTHWEST. HE'S GOT", "GUNS WITH HIM. COPS ON THE WAY." },
     { "TARAS", "THEN HE PAYS. IN FULL.", 0 } };
 static const Page st_end[] = {
-    { "RUDY", "IT'S OVER. MORAN'S GONE.", "SAL CAN REST NOW." },
+    { "RUDY", "IT'S OVER. MORAN'S GONE. BOHDAN", "CAN COME HOME. SAL CAN REST." },
     { "TARAS", "MORAN'S PHONE KEPT RINGING.", "ONE NAME. 'PRYCE'." },
     { "RUDY", "COUNCILMAN PRYCE? HE WANTS THE", "WHOLE WATERFRONT FOR A CASINO." },
     { "TARAS", "THEN THIS ISN'T OVER.", 0 },
@@ -2192,7 +2193,7 @@ void game_update(u16 keys, int dt)
     update_pickups(dt);
     update_rockets(dt);
     update_cats(dt);
-    {   /* Marta's garage fixes your ride: stop in front of it */
+    {   /* Bohdan's shop (Marta runs it) fixes your ride: stop in front of it */
         static int in_garage;
         int near = pl.in_car >= 0 && dist_approx(garage_x - plx(), garage_y - ply()) < M(7) && !(mission == 0 && mstate == 1);
         if (near && !in_garage && iabs(cars[pl.in_car].speed) < Q8(M(3))) {

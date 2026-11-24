@@ -16,6 +16,13 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.28
+- **Uncle Bohdan replaces the sister.** Taras flies to New York when his uncle Bohdan stops
+  answering. Bohdan runs a car shop on the waterfront, *Bohdan's Auto*; Moran's men have put him
+  in hospital, and Moran says he owes $10,000 or the shop is his. Marta is now Bohdan's foreman
+  (the repair garage is his shop), and Rudy's reveal ties the sunken *Lucky Marie* to Bohdan's
+  best friend Sal. Act One's dialogue and the 40-mission plan in `STORY.md` are rewritten to match.
+
 ## What's new in v0.27
 - **New hero: Taras Melnyk**, a Ukrainian army sergeant. When his sister Ana stops answering her
   phone, he flies to New York to find her on the city's old waterfront. Sal, the old
