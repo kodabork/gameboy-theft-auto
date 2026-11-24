@@ -148,9 +148,9 @@ int main(void)
 
         flip_req = 1;                             /* the VBlank interrupt flips the page */
         /* HUD */
-        if (show_fps && !g_hud.title) { set_sprite(0, 4, 4, 11); draw_number(1, 12, 4, fps, 2); }
+        if (show_fps && !g_hud.title && !g_hud.mini) { set_sprite(0, 4, 4, 11); draw_number(1, 12, 4, fps, 2); }
         else for (int i = 0; i < 3; i++) set_sprite(i, 0, 0, -1);
-        int hide = g_hud.title || g_hud.dlg_l1 || g_hud.menu_n || g_hud.shop;
+        int hide = g_hud.title || g_hud.dlg_l1 || g_hud.menu_n || g_hud.shop || g_hud.mini;
         if (g_hud.in_car && !hide) draw_number(4, 212, 148, g_hud.speed_mph, 3);
         else for (int i = 4; i < 7; i++) set_sprite(i, 0, 0, -1);
         set_sprite(7, 116, 120, g_hud.near_car && !hide ? 10 : -1);

@@ -22,6 +22,10 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.36
+- The radar and the FPS counter are hidden while you play pool or bowl, so they don't cover the table
+  or the scoreboard.
+
 ## What's new in v0.35
 - **Ten radio stations** (UP/DOWN in a car). Five new ones:
   - **GULL 99.9:** reggae, with a one-drop beat and an offbeat skank.
