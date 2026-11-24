@@ -1,4 +1,4 @@
-# GTA (Gameboy Theft Auto): Steel Harbor
+# GTA (Gameboy Theft Auto): New York
 
 Original open-city game for the Game Boy Advance in the style of GTA: a pseudo-3D city, cars, peds, police, missions, cutscenes. The owner (GitHub: kodabork) is **not a coder**. Do all git, build and testing work for them, explain results in plain language, and hand them a ROM they can play.
 

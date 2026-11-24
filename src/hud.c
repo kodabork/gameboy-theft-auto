@@ -1,4 +1,4 @@
-/* Steel Harbor HUD: text in an original 5x7 pixel font drawn into the frame buffer
+/* New York HUD: text in an original 5x7 pixel font drawn into the frame buffer
    at full 240-pixel resolution, health bar, wanted stars, and a rotating radar. */
 #include "engine.h"
 #include "game.h"

@@ -1,4 +1,4 @@
-/* Steel Harbor game layer: player on foot / in cars, traffic, pedestrians, cops and
+/* New York game layer: player on foot / in cars, traffic, pedestrians, cops and
    wanted levels, weapons, pickups, missions and the chase camera. */
 #include "engine.h"
 #include "world.h"
@@ -1392,7 +1392,7 @@ static void update_pickups(int dt)
 
 /* ------------------------------------------------------------ story */
 /* Act One of STORY.md. Taras Melnyk, a Ukrainian army sergeant, flies to New York when his
-   sister Ana stops answering her phone. Ana, a nurse, lived in Steel Harbor (the waterfront) with
+   sister Ana stops answering her phone. Ana, a nurse, lived on the New York waterfront with
    Sal, an old tugboat captain who took her in; Sal died when his tug, the Lucky Marie, sank, and
    left Ana his house. Victor Moran says Sal owed him $10,000 and the house is his. Taras works it
    off: cars for Marta, product for Jinx, and Moran's dirty work, some of it ordered by Detective
@@ -1404,7 +1404,7 @@ static const Page *dlg; static int dlg_n, dlg_i, dlg_then;      /* dlg_then: 1 =
 #define NPAGES(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 static const Page st_intro[] = {
-    { "", "NEW YORK. STEEL HARBOR, WHERE THE", "DOCKS RUN ON FAVOURS AND CASH." },
+    { "", "NEW YORK. DOWN ON THE WATERFRONT,", "THE DOCKS RUN ON FAVOURS AND CASH." },
     { "TARAS", "TEN YEARS IN THE UKRAINIAN ARMY.", "NOW ANA DOESN'T ANSWER HER PHONE." },
     { "MARTA", "YOU'RE ANA'S BROTHER? TARAS?", "SHE TALKS ABOUT YOU ALL THE TIME." },
     { "MARTA", "SHE'S OK. BUT SAL, THE OLD MAN SHE", "LIVED WITH, IS DEAD. HIS TUG SANK." },

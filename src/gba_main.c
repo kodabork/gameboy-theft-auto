@@ -1,4 +1,4 @@
-/* Steel Harbor - GBA hardware layer: video setup, input, timing, HUD sprites. */
+/* New York - GBA hardware layer: video setup, input, timing, HUD sprites. */
 #include "engine.h"
 #include "game.h"
 #include "sound.h"

@@ -1,4 +1,4 @@
-# GTA (Gameboy Theft Auto): Steel Harbor — story bible (v0.27)
+# GTA (Gameboy Theft Auto): New York — story bible (v0.27)
 
 The plan for a story of about **6 hours**: 4 acts, 40 story missions, plus side content. Each act opens a new district of the bigger map (see `ROADMAP.md`).
 
@@ -7,13 +7,13 @@ The plan for a story of about **6 hours**: 4 acts, 40 story missions, plus side 
 ## Premise
 **Taras Melnyk** is a sergeant in the Ukrainian army, ten years in, calm under fire and quiet about what he has seen. His younger sister **Ana** emigrated to New York five years ago and works nights as a nurse. When her calls stop, Taras takes leave, gets on a plane and comes to find her.
 
-He finds her in **Steel Harbor**, New York's old waterfront: docks, tugboats, rowhouses and a lot of people who owe the wrong man money. Ana has been living with **Sal**, an old tugboat captain who rented her a room and came to treat her like a daughter. Sal is dead, lost when his tug, the *Lucky Marie*, sank in a storm. The police called it an accident. Sal left Ana his house.
+He finds her on the **New York waterfront**: docks, tugboats, rowhouses and a lot of people who owe the wrong man money. Ana has been living with **Sal**, an old tugboat captain who rented her a room and came to treat her like a daughter. Sal is dead, lost when his tug, the *Lucky Marie*, sank in a storm. The police called it an accident. Sal left Ana his house.
 
 Then loan shark **Victor Moran** turns up holding a page from his ledger. It says Sal owed him $10,000, with the house as collateral, and that the debt now falls on whoever lives there. Ana can't pay, so Taras will.
 
 Sal never borrowed a dime, and Taras doesn't believe in accidents. But Moran owns half the docks and has a detective on his payroll, so Taras starts paying.
 
-Theme: **debts, who invents them, and who pays.** Steel Harbor runs on favours, and Taras, a stranger in the city, learns to trade them.
+Theme: **debts, who invents them, and who pays.** New York runs on favours, and Taras, a stranger in the city, learns to trade them.
 
 ## Cast (all original)
 | Character | Who they are | Outfit in game | Acts |

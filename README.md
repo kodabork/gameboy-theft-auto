@@ -1,4 +1,4 @@
-# GTA (Gameboy Theft Auto): Steel Harbor
+# GTA (Gameboy Theft Auto): New York
 
 An original open-city game for Game Boy Advance, with a third-person chase camera,
 written from scratch in C. It's inspired by the GTA IV look but has no Rockstar code or assets.
@@ -18,10 +18,10 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 
 ## What's new in v0.27
 - **New hero: Taras Melnyk**, a Ukrainian army sergeant. When his sister Ana stops answering her
-  phone, he flies to New York to find her in Steel Harbor, the city's old waterfront. Sal, the old
+  phone, he flies to New York to find her on the city's old waterfront. Sal, the old
   tug captain Ana lived with, is dead (his boat, the *Lucky Marie*, sank) and left her his house.
   Loan shark Victor Moran says Sal owed him $10,000 and comes for the house, so Taras pays.
-- The game is now set in **New York**; Steel Harbor is its waterfront district. Act One's dialogue
+- The game is now set in **New York** (the Steel Harbor name is gone, title screen included). Act One's dialogue
   and the story plan in `STORY.md` are rewritten to match.
 
 ## What's new in v0.26

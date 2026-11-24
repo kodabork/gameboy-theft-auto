@@ -1,4 +1,4 @@
-/* Steel Harbor - original 3D open-city engine for Game Boy Advance.
+/* New York - original 3D open-city engine for Game Boy Advance.
    World units: 1 unit = 1/16 metre. Angles: 4096 per full turn. */
 #ifndef ENGINE_H
 #define ENGINE_H

@@ -1,4 +1,4 @@
-/* Steel Harbor renderer. ARM code, copied to IWRAM on GBA.
+/* New York renderer. ARM code, copied to IWRAM on GBA.
    - Building walls: column by column, near to far, per-column clip (no overdraw).
      Facades get floors, window bays with varied glass, storefronts, cornices.
    - Ground: flat, floor-cast row by row into every pixel no wall covers. Inside the grid it
