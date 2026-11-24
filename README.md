@@ -16,6 +16,12 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## License
+This project is under the **PolyForm Noncommercial License 1.0.0** (see `LICENSE.md`). You may play it,
+read and learn from the code, change it and share it for free. You may **not** sell it, sell
+cartridges or ROMs of it, or use it in anything commercial without written permission from the
+copyright holder (kodabork).
+
 ## What's new in v0.35
 - **Ten radio stations** (UP/DOWN in a car). Five new ones:
   - **GULL 99.9:** reggae, with a one-drop beat and an offbeat skank.
