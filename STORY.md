@@ -1,8 +1,8 @@
-# GTA (Gameboy Theft Auto): New York — story bible (v0.29)
+# GTA (Gameboy Theft Auto): New York — story bible (v0.33)
 
 The plan for a story of about **6 hours**: 4 acts, 40 story missions, plus side content. Each act opens a new district of the map built in v0.30 (see `ROADMAP.md`).
 
-**Act One is in the game now**: the 9 existing jobs, rewritten for Nick. Acts Two to Four are the plan: their missions get built next on the new districts.
+**All four acts are in the game (v0.33)**: 40 story missions. Acts Two to Four run on the scripted mission engine (`src/story_acts.h`).
 
 ## Premise
 **Nick Melnyk** (born Mykyta; everyone has called him Nick since basic training) is a sergeant in the Ukrainian army, ten years in, calm under fire and quiet about what he has seen. His uncle **Bohdan**, who raised him for a while as a boy, emigrated to New York twenty years ago and built a car shop on the waterfront, *Bohdan's Auto*. When Bohdan stops answering his phone, Nick takes leave, gets on a plane and comes to find him.
@@ -55,56 +55,56 @@ Side content (see the end) adds about 1-2 hours on top.
 
 **Ending of Act One:** Moran's phone keeps ringing with one name, *Pryce*. Rudy explains Councilman Pryce wants the whole waterfront for a casino. Nick: "Then this isn't over."
 
-## Act Two — Paper (Downtown)
-The bridges over the river to Downtown open. Moran is dead, but the houses are still being taken, now by "legal" eviction notices. Nick teams up with the reporter Dee to prove who is behind it, while Moran's leftover crew (run by his nephew **Danny Moran**) and the Eastside Kings fight over the docks.
+## Act Two — Paper (Downtown, in the game)
+Moran is dead, but the houses are still being taken, now by "legal" eviction notices. Nick teams up with the reporter Dee to prove who is behind it, while Moran's nephew **Danny Moran** and the Eastside Kings fight over the docks.
 
 | # | Title | Giver | What you do |
 |---|---|---|---|
-| 10 | Front Page | Dee | Meet Dee; she's being followed. Lose the tail (car chase), get her to the Gazette. |
-| 11 | Eviction Notice | Bohdan | Bailiffs and hired muscle are emptying a neighbour's house. Drive them off before the truck leaves. |
-| 12 | Crown Debt | King Kane | The Kings want payback for their burned cars. Pay it in work: steal 3 cars from Danny Moran's lot. |
-| 13 | City Hall Ink | Dee | Tail Pryce's aide without being spotted (new "tail" objective) to a meeting at the marina. |
-| 14 | Photo Op | Dee | Photograph the meeting from 3 rooftops/spots (new "spot" objective), then escape. |
-| 15 | Danny Boy | Marta | Danny Moran is torching garages that won't pay. Defend Bohdan's Auto from 3 waves (new "defend" objective). |
-| 16 | Kings' Ransom | King Kane | Danny took a Kings driver hostage. Chase the van, free him, escort him home. |
-| 17 | Shredder | Jinx | Pryce's office is shredding files tonight. Steal the shredding truck before it reaches the incinerator. |
-| 18 | Motorcade | Dee | Pryce's motorcade crosses Downtown. Get the briefcase from the second car without killing the councilman (a scandal must be alive to be printed). |
-| 19 | Moran's Heir | King Kane | Joint attack with the Kings on Danny Moran's warehouse; Danny flees by boat. Chase on the water (first boat mission). |
-| 20 | Retraction | Dee | Dee's story runs, and Pryce sues. The Gazette is firebombed. Get Dee out, survive a 3-star wanted level. Pryce's lawyers make the evidence disappear. Pryce is untouchable on paper, so he will have to be beaten some other way. |
+| 10 | Front Page | Dee | Pick Dee up downtown, shake the two cars tailing her (wreck or lose them), drive her to the Gazette. |
+| 11 | Eviction Notice | Bohdan | Race to Pier Street before the truck leaves, drive off the hired muscle, wreck the eviction truck, lose the cops. |
+| 12 | Crown Debt | Kane | Steal three cars from Danny's lot in the port for the Kings: the second brings the cops, the third brings Danny's crew. |
+| 13 | City Hall Ink | Dee | Tail Pryce's aide Baxter without being seen, get out and listen in (Halvorsen Shipping), report back. |
+| 14 | Photo Op | Dee | Photograph the marina meeting from three spots, then fight off Blackline security and lose the cops. |
+| 15 | Danny Boy | Marta | Defend Bohdan's Auto from three waves of Danny's men, then chase Danny's SUV and wreck it. |
+| 16 | Kings' Ransom | Kane | Ride the kidnappers' van until it stops, take them out, get Luis in your car and bring him home. |
+| 17 | Shredder | Jinx | Stop the shredding truck, take it, lose the cops in it and deliver the bags to the Gazette. |
+| 18 | Motorcade | Dee | Ride Baxter's car until he bails, stop him running, grab the briefcase, lose 3 stars, bring it to Dee. |
+| 19 | Moran's Heir | Kane | Hit Danny's warehouse with the Kings (SMG provided), chase his supercar, finish him. |
+| 20 | Retraction | Dee | The Gazette is firebombed: stop the arsonists, get Dee out, survive and lose 3 stars, reach the safehouse. Pryce's lawyers kill the story. |
 
-## Act Three — Iron (Industrial port and the Heights)
-Pryce stops pretending. Halvorsen Shipping's private security firm, Blackline, moves into the port: armoured SUVs, checkpoints and better guns than the police. Pryce offers Nick a deal: the house deeds back, signed, if he walks away. Someone close to Nick takes a deal too.
-
-| # | Title | Giver | What you do |
-|---|---|---|---|
-| 21 | New Management | Rudy | Blackline checkpoints are going up at the port. Scout them (spot 4) without raising an alarm. |
-| 22 | Container 7 | Marta | Steal a Halvorsen truck carrying a sealed container. Inside: forged deeds for 200 dock homes. |
-| 23 | The Offer | Pryce | Cutscene-heavy: Pryce meets Nick at a Heights mansion and offers the deeds. Nick refuses. Escape the grounds with Blackline after you. |
-| 24 | Night Shift | Bohdan | Bohdan is followed home from the shop. Protect his ride home (escort), then deal with the followers. |
-| 25 | Iron Yard | King Kane | Wreck Blackline's armoured SUVs in the scrapyard before they deploy (destroy 4, rocket launcher pickup). |
-| 26 | Paper Trail | Dee | Dee traces the forged deeds to Halvorsen's office tower. Steal the hard drive from a courier on a bike route (chase). |
-| 27 | Hill Climb | Jinx | Jinx says Halvorsen keeps the originals in a Heights safe. Drive the getaway car for the break-in. It's a trap: Blackline is waiting. |
-| 28 | Burned | Marta | Jinx sold Nick out to save himself. The safehouse is raided; get out alive and lose a 4-star wanted level. |
-| 29 | Mercer | Rudy | Cole Mercer has Rudy. Rescue him from a Blackline compound in the Heights (assault with armed guards). |
-| 30 | What Jinx Knew | Jinx | Jinx, beaten and dumped by Blackline, begs to make it right: Halvorsen and Pryce meet on Gull Island when the casino's steel goes up. Choice: spare Jinx (he helps in Act Four) or don't. |
-| 31 | Drawbridge | King Kane | Pryce closes the bridges to the island. Hold the drawbridge control house while Marta's crew crosses (defend, timed). |
-
-## Act Four — Tide (Gull Island)
-Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce stepped on comes with Nick: the Kings, Marta's crew, Rudy on a tug, Dee with a camera, and Bohdan, who has had enough of being protected.
+## Act Three — Iron (the Industrial port and the Heights, in the game)
+Pryce stops pretending. Halvorsen Shipping's private security firm, Blackline, moves into the port: armoured SUVs, checkpoints and better guns than the police. Pryce offers Nick a deal and is refused. Jinx sells Nick out to save his mother.
 
 | # | Title | Giver | What you do |
 |---|---|---|---|
-| 32 | Landing Party | Rudy | Rudy's tug lands Nick on the island at night. Get to the construction site unseen. |
-| 33 | Power Down | Marta | Destroy 3 generators to black out Blackline's cameras. |
-| 34 | Hard Hats | King Kane | The Kings storm the site's front gate while Nick hits the back. Clear the yard. |
-| 35 | Live Feed | Dee | Escort Dee to the crane top; she broadcasts the forged deeds live. |
-| 36 | Mercer, Again | — | Boss fight: Cole Mercer in the half-built casino floors (armoured, rifle). |
-| 37 | Halvorsen Sails | Rudy | Halvorsen flees on her yacht. Chase her across the harbor by boat and stop the yacht. |
-| 38 | Councilman | — | Pryce runs for the island's helipad. Chase on foot up the casino tower, through the guards. |
-| 39 | The Lucky Marie | Bohdan | Final scene on the roof: Nick, Pryce, and the truth about Sal on camera. Pryce is arrested live (or worse, if the player shoots him; both endings play). |
-| 40 | Home | Bohdan | Epilogue drive: take Bohdan back to the shop. The deeds are void; the waterfront stays. Credits roll over a free drive along the coast. |
+| 21 | New Management | Rudy | Scout four Blackline checkpoints on foot (one patrol spots you), report back. |
+| 22 | Container 7 | Marta | Stop a Halvorsen truck, take it, shake two Blackline SUVs, bring it to the shop: forged deeds for 200 homes. |
+| 23 | The Offer | Pryce | Pryce offers Bohdan's deed if Nick leaves. Nick refuses; fight off the grounds, shake the SUVs. |
+| 24 | Night Shift | Bohdan | Drive Bohdan home, wreck the two cars following you, clear the men waiting at his apartment. |
+| 25 | Iron Yard | Kane | With a rocket launcher from the Kings, destroy three Blackline SUVs at the scrapyard. |
+| 26 | Paper Trail | Dee | Stop the courier's car, take the hard drive, wreck Blackline's pursuit, deliver it to Dee's new office. |
+| 27 | Hill Climb | Jinx | Drive Jinx's getaway car to Halvorsen's house. It's a trap: fight out, lose 3 stars. |
+| 28 | Burned | Marta | The safehouse is raided: fight out, survive and lose 4 stars, reach Marta's backup garage. |
+| 29 | Mercer | Marta | Storm the Blackline compound (rifle provided), free Rudy, shake Mercer's SUVs, bring Rudy to the docks. |
+| 30 | What Jinx Knew | Jinx | Jinx confesses and tells you about the Gull Island meeting. **Choice:** shoot him, or walk up and let him go. |
+| 31 | Drawbridge | Kane | Hold the bridge control house north of Gull Island through four waves while Marta's crew crosses. |
 
-**Endings:** Pryce arrested (the "clean" ending, Dee's story wins) or Pryce dead (Nick's revenge; the city remembers it differently). Jinx alive or not changes a few lines in Act Four.
+## Act Four — Tide (Gull Island, in the game)
+Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce stepped on comes with Nick: the Kings, Marta's crew, Rudy, Dee with a camera, and Bohdan.
+
+| # | Title | Giver | What you do |
+|---|---|---|---|
+| 32 | Landing Party | Rudy | Cross to the island, check two Blackline posts on foot, take out a patrol, reach the construction site. |
+| 33 | Power Down | Marta | Destroy the three generator trucks that run the cameras, mop up the guards. |
+| 34 | Hard Hats | Kane | Hold the back gate through three waves while the Kings hit the front, then clear the yard. |
+| 35 | Live Feed | Dee | Pick up Dee, wreck the SUVs coming for her, defend the crane while she broadcasts the forged deeds live. |
+| 36 | Mercer, Again | Mercer | Boss fight: armoured Cole Mercer and his guards at the casino. |
+| 37 | Halvorsen Sails | Rudy | Chase Halvorsen's maroon land yacht of a car and wreck it, then her bodyguards. She is arrested. |
+| 38 | Councilman | Dee | Fight through two floors of Pryce's guards to the helipad. |
+| 39 | The Lucky Marie | Pryce | Pryce admits the *Lucky Marie* was sunk on his say-so, on camera. **Choice:** shoot him, or walk up and let the police take him. |
+| 40 | Home | Bohdan | Drive Bohdan home to the shop. The end; free roam carries on. |
+
+**Endings:** Pryce arrested (the "clean" ending: the story wins and he grows old in a cell) or Pryce shot (Nick's revenge, live on camera). Both close with "Sal can rest."
 
 ## Side content (about 1-2 hours)
 - **Vehicle jobs:**
@@ -119,17 +119,12 @@ Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce step
 
 ## How missions are built
 - Act One uses the existing objective types: steal and deliver, collect and deliver, kill target(s), destroy cars, timed drive, chase until bail-out, lose the wanted level.
-- Acts Two to Four also need:
-  - **tail** (stay within range but not too close)
-  - **spot/photograph** (stand at points)
-  - **defend** (waves at a location)
-  - **escort** (an NPC in your car or on foot)
-  - **boat chase**
-  - **boss** (one armoured enemy)
+- Acts Two to Four are step lists (`src/story_acts.h`) run by the engine in `game.c`. Step types: go somewhere (on foot, in any car, or in the job's car; optionally with a timer or "lose the cops first"), get in a car, deliver it, kill a group (or a fleeing target), wreck parked cars, chase a car (wreck it, or ride its bumper until the driver bails), tail a car unseen, defend a spot against waves, hunter cars that ram you (wreck or shake them), lose a wanted level, survive a wanted level for a time, photograph a spot, a mid-mission phone call, get a weapon, a boss, a choice (shoot or spare), and picking up a passenger.
+- There are no boats yet, so the boat chases from the first plan became car chases.
 - **Cutscenes:** in-engine, with letterbox bars and a dialogue box. The mission giver stands in the street facing Nick: an establishing two-shot first, then over-the-shoulder cuts to whoever is speaking. Afterwards the giver walks away. Portraits stay off unless the owner supplies art.
 - **New people needed:**
-  - **Female ped models** for Dee (and an older-man model for Bohdan). Marta and Jinx's outfits could also get female versions. Each new set is about 1 MB of ROM with near and far frames.
-  - A Blackline guard (a recoloured cop).
+  - **Female ped models** for Dee and Marta (they wear the navy and red outfits for now), and an older-man model for Bohdan (grey outfit). Each new set is about 1 MB of ROM with near and far frames.
+  - A Blackline guard (they use the uniformed cop model for now).
 
 ## Systems
 - **Title screen:** a "GTA" wordmark with NEW GAME / CONTINUE.

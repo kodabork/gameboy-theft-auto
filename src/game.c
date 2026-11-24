@@ -237,6 +237,7 @@ static void approach_speed(Car *c, int target, int acc, int dec, int dt)
     else { c->speed -= dec / 64 * dt / (TICKS / 64); if (c->speed < target) c->speed = target; }
 }
 
+static int tail_mode;
 static void update_traffic(int i, int dt)
 {
     Car *c = &cars[i];
@@ -251,7 +252,7 @@ static void update_traffic(int i, int dt)
     } else if (dx * dx + dy * dy < M(3) * M(3)) ai_choose(c);
     int diff; steer_to(c, c->tx, c->ty, 1100, dt, &diff);
     int target = coast ? Q8(M(12)) : Q8(M(9));
-    if (i == SLOT_MISSION) target = Q8(M(17));               /* a fleeing mission car */
+    if (i == SLOT_MISSION) target = tail_mode ? Q8(M(10)) : Q8(M(17));   /* a fleeing (or unaware, tailed) mission car */
     if (diff > 6 || diff < -6) target = Q8(M(5));
     int nearp = dist_approx(x - plx(), y - ply()) < M(70);
     if (nearp && c->wait > 0 && obstacle_ahead(i, c)) target = 0;
@@ -1721,10 +1722,12 @@ static void cutscene(const Page *pg, int n, int then, int model)
 static int is_hero(const char *w) { return w && w[0] == 'N' && w[1] == 'I'; }
 
 /* ------------------------------------------------------------ missions */
-#define NMISSIONS 9
+#define NACT1 9                    /* Act One: the hand-written jobs below */
+#define NMISSIONS 40               /* Acts Two to Four come from story_acts.h */
 static int mission, mstate, mtimer;          /* mstate: 0 marker shown, 1 active */
 static int phase;                            /* step within the current job */
-EWRAM_BSS static int mission_start_x[NMISSIONS], mission_start_y[NMISSIONS];
+EWRAM_BSS static int mission_start_x[NACT1], mission_start_y[NACT1];
+static int story_flags;                      /* 1: Jinx spared, 2: Pryce taken alive */
 static int garage_x, garage_y, drop_x, drop_y, safe_x, safe_y, pier_x, pier_y;
 static int dock_x, dock_y, club_x, club_y, corner_x, corner_y, mill_x, mill_y;
 static int time_left, pressure, chase_phase;
@@ -1737,11 +1740,11 @@ static const int gang_slot[3] = { SLOT_RIVAL0, SLOT_RIVAL0 + 1, SLOT_MISSION };
 
 static void setup_missions(void)
 {
-    static const s16 st[NMISSIONS][2] = {     /* metres */
+    static const s16 st[NACT1][2] = {     /* metres */
         { 3 * 64 + 32, 4 * 64 + 13 }, { 5 * 64 + 13, 4 * 64 + 40 }, { 2 * 64 + 40, 2 * 64 + 13 }, { 4 * 64 + 40, 6 * 64 + 62 },
         { 1 * 64 + 40, 3 * 64 + 13 }, { 3 * 64 + 13, 1 * 64 + 40 }, { 7 * 64 + 40, 4 * 64 + 13 }, { 4 * 64 + 13, 2 * 64 + 40 },
         { 0 * 64 + 40, 0 * 64 + 13 } };   /* the van (5) and Shaw's SUV (7) start beside their markers */
-    for (int i = 0; i < NMISSIONS; i++) { mission_start_x[i] = M(1) * st[i][0]; mission_start_y[i] = M(1) * st[i][1]; }
+    for (int i = 0; i < NACT1; i++) { mission_start_x[i] = M(1) * st[i][0]; mission_start_y[i] = M(1) * st[i][1]; }
     mission_start_y[3] = 6 * 1024 + M(62.5);
     garage_x = ROAD_C(1) + M(4.5); garage_y = 6 * 1024 + M(40);
     drop_x = -M(44); drop_y = ROAD_C(2);                            /* west connector, by the coast */
@@ -1757,24 +1760,30 @@ static void setup_missions(void)
     mission = 0; mstate = 0; time_left = -1; phase = 0;
 }
 
+static void story_clear(void);
+static void story_after(int done);
 static void reward(int money, const char *text)
 {
+    story_clear();
     pl.money += money;
     g_snd.sfx |= SFX_PASS;
     big(text, 1, 4);
     time_left = -1;
     int done = mission;
     mission++; mstate = 0; phase = 0;
-    if (done == NMISSIONS - 1) {                  /* the ending */
+    if (done == NACT1 - 1) {                      /* the end of Act One */
         wanted = 0; wanted_cool = 0;
         for (int i = 0; i < NPOLICE; i++) cars[SLOT_POLICE0 + i].active = 0;
         cutscene(st_end, NPAGES(st_end), 0, PED_WHITE);
     }
+    story_after(done);
     save_write(); has_save = 1;                   /* autosave after every job */
 }
 
+static void story_after(int done);
 static void mission_fail(const char *why)
 {
+    story_clear();
     big(why, 0, 3);
     g_snd.sfx |= SFX_FAIL;
     mstate = 0; time_left = -1; phase = 0;
@@ -1802,9 +1811,11 @@ static void park_car(int slot, int model, int x, int y, int head, int police)
     c->police = (u8)police; c->dmg = 0; c->burn = 0; c->x = Q8(x); c->y = Q8(y); c->head = Q8(head);
 }
 
+static void story_start(void);
 static void start_mission(void)
 {
     mstate = 1; mtimer = 0; time_left = -1; phase = 0;
+    if (mission >= NACT1) { story_start(); return; }
     Car *mc = &cars[SLOT_MISSION];
     switch (mission) {
     case 0:
@@ -1876,10 +1887,12 @@ static void start_mission(void)
     }
 }
 
+static void story_update(int dt);
 static void update_mission(int dt)
 {
     mk_col = -1; nmb = 0;
     if (mission >= NMISSIONS || pl.dead_t > 0) return;
+    if (mission >= NACT1) { story_update(dt); return; }
     if (mstate == 0) {
         mk_x = mission_start_x[mission]; mk_y = mission_start_y[mission]; mk_col = 0;
         mblip(mk_x, mk_y, 1);
@@ -1985,6 +1998,291 @@ static void update_mission(int dt)
         else if (dist_approx((t->x >> 8) - pier_x, (t->y >> 8) - pier_y) > M(200)) mission_fail("MORAN GOT AWAY");
         break;
     }
+}
+
+
+/* ------------------------------------------------------------ Acts Two to Four: scripted missions */
+/* Each mission is a list of steps (story_acts.h). One step runs at a time: phase = step index,
+   ssub = 0 on the step's first frame (set-up), then 1. Coordinates are in metres. */
+enum { OP_GO, OP_CAR, OP_DROP, OP_KILL, OP_WRECK, OP_CHASE, OP_TAIL, OP_DEFEND, OP_HUNT, OP_HEAT, OP_SURVIVE,
+       OP_SPOT, OP_SAY, OP_GIVE, OP_BOSS, OP_CHOICE, OP_PICKUP };
+enum { F_FOOT = 1, F_CAR = 2, F_MCAR = 4, F_BAIL = 8, F_LOSE = 16, F_HERE = 32, F_FLEE = 64, F_KEEP = 128 };
+typedef struct { u8 op, n, flags, arg; u16 model; s16 x, y, t; const char *m1, *m2; } Step;
+typedef struct { const char *title; u16 giver; s16 sx, sy; const Page *intro; u8 nintro, nsteps; const Step *steps; u16 pay; const Page *after; u8 nafter; } MissionDef;
+#define NOWHERE (-32000)
+static int ssub, stimer, scount, swave, sx_dyn, sy_dyn, spress;
+static const Step *cur_step(void);
+
+static void story_clear(void)
+{
+    tail_mode = 0; spress = 0;
+    for (int i = 0; i < 3; i++) { Car *c = &cars[gang_slot[i]]; if (c->ai == AI_RIVAL) c->ai = AI_NONE; }
+}
+static int story_pressure(void)
+{
+    const Step *st = cur_step();
+    if (!st || mstate != 1) return -1;
+    if (st->op == OP_TAIL) return stimer * 100 / (st->t * TICKS);
+    if (st->op == OP_CHASE && (st->flags & F_BAIL)) return spress * 100 / (4 * TICKS);
+    if (st->op == OP_SPOT) return stimer * 100 / (2 * TICKS);
+    if (st->op == OP_SURVIVE) return stimer * 100 / (st->t * TICKS);
+    return -1;
+}
+/* a free spot near (x, y): tries a ring of points until one is not inside a building or the water */
+static void free_spot(int *x, int *y, int r)
+{
+    for (int k = 0; k < 12; k++) {
+        int a = k * 341, px = *x + ((icos(a) * r) >> 14), py = *y + ((isin(a) * r) >> 14);
+        if (!world_point_blocked(px, py, M(0.6))) { *x = px; *y = py; return; }
+    }
+}
+static void spawn_gunmen(int k0, int n, int model, int x, int y, int hp, int chase, int type)
+{
+    for (int k = 0; k < n && k0 + k < 9; k++) {
+        int px = x, py = y;
+        free_spot(&px, &py, M(3 + 2 * k));
+        mission_ped(k0 + k, type, model, px, py, hp ? hp : 100);
+        if (chase) peds[PED_MISSION0 + k0 + k].state = S_CHASE;
+    }
+}
+static void car_on_road(Car *c, int x, int y)       /* a moving car on the nearest east-west road */
+{
+    int road = clampi((y + M(32)) >> 10, 0, NB), at = clampi(x >> 10, 0, NB - 1);
+    place_on_lane(c, 0, road, at, 10);
+}
+static void blip_car(Car *c, int col) { if (c->active) mblip(c->x >> 8, c->y >> 8, col); }
+static int near_pt(int x, int y, int r) { return dist_approx(x - plx(), y - ply()) < r; }
+
+#include "story_acts.h"
+
+static const MissionDef *story_def(void) { return mission >= NACT1 && mission < NMISSIONS ? &story_defs[mission - NACT1] : 0; }
+static const Step *cur_step(void) { const MissionDef *d = story_def(); return d && phase < d->nsteps ? &d->steps[phase] : 0; }
+static const char *mission_name(int m) { return m < NACT1 ? mission_title[m] : story_defs[m - NACT1].title; }
+
+static void story_start(void)
+{
+    const MissionDef *d = story_def();
+    phase = 0; ssub = 0;
+    msg(d->title, 0, 3);
+}
+static void step_done(void)
+{
+    const MissionDef *d = story_def();
+    phase++; ssub = 0; time_left = -1; tail_mode = 0; spress = 0;
+    if (phase >= d->nsteps) {
+        static char buf[24]; char *q = buf; const char *a = "JOB DONE  $";
+        while (*a) *q++ = *a++;
+        { char t[8]; int n = 0, v = d->pay; do { t[n++] = (char)('0' + v % 10); v /= 10; } while (v); while (n) *q++ = t[--n]; *q = 0; }
+        int had_after = d->after != 0;
+        const Page *ap = d->after; int an = d->nafter;
+        if (mission == NMISSIONS - 2 && (story_flags & 2) && d[0].after) { ap = st_end_arrest; an = NPAGES(st_end_arrest); }
+        reward(d->pay, buf);
+        if (had_after) cutscene(ap, an, 0, d->giver);
+    }
+}
+
+static void story_update(int dt)
+{
+    const MissionDef *d = story_def();
+    if (mstate == 0) {
+        mk_x = M(1) * d->sx; mk_y = M(1) * d->sy; mk_col = 0; mblip(mk_x, mk_y, 1);
+        if (near_pt(mk_x, mk_y, M(3.5)) && wanted == 0) cutscene(d->intro, d->nintro, 1, d->giver);
+        return;
+    }
+    mtimer += dt;
+    if (time_left >= 0) { time_left -= dt; if (time_left <= 0) { time_left = -1; mission_fail("OUT OF TIME"); return; } }
+    const Step *st = cur_step();
+    if (!st) return;
+    Car *mc = &cars[SLOT_MISSION];
+    int X = st->x == NOWHERE ? sx_dyn : M(1) * st->x, Y = st->x == NOWHERE ? sy_dyn : M(1) * st->y;
+    int first = ssub == 0;
+    if (first) {
+        ssub = 1; stimer = 0; scount = 0; swave = 0;
+        if (st->m1) msg(st->m1, st->m2, 5);
+        if (st->t > 0 && (st->op == OP_GO || st->op == OP_DROP || st->op == OP_PICKUP)) time_left = st->t * TICKS;
+    }
+    switch (st->op) {
+    case OP_GO: {
+        int r = (st->flags & F_FOOT) ? M(2.5) : M(7);
+        mk_x = X; mk_y = Y; mk_col = 1; mblip(X, Y, 2);
+        if ((st->flags & F_MCAR) && (!mc->active || IS_WRECK(mc))) { mission_fail("THE CAR IS WRECKED"); break; }
+        int ok = near_pt(X, Y, r);
+        if (st->flags & F_FOOT) ok = ok && pl.in_car < 0;
+        if (st->flags & F_CAR) ok = ok && pl.in_car >= 0 && iabs(cars[pl.in_car].speed) < Q8(M(8));
+        if (st->flags & F_MCAR) ok = ok && pl.in_car == SLOT_MISSION && iabs(mc->speed) < Q8(M(8));
+        if ((st->flags & F_LOSE) && wanted > 0) { ok = 0; if (near_pt(X, Y, r)) msg("LOSE THE COPS FIRST", 0, 1); }
+        if ((st->flags & (F_CAR | F_MCAR)) && pl.in_car < 0 && near_pt(X, Y, r) && g_hud.msg_t <= 0) msg("YOU NEED TO BE IN A CAR", 0, 2);
+        if (ok) step_done();
+        break; }
+    case OP_CAR:                                   /* get in the job's car */
+        if (first && !(st->flags & F_KEEP)) park_car(SLOT_MISSION, st->model, X, Y, st->arg * 1024, 0);
+        if (!mc->active || IS_WRECK(mc)) { mission_fail("THE CAR IS WRECKED"); break; }
+        if (pl.in_car == SLOT_MISSION) { mc->ai = AI_NONE; step_done(); break; }
+        blip_car(mc, 2);
+        break;
+    case OP_DROP:
+        if (!mc->active || IS_WRECK(mc)) { mission_fail("THE CAR IS WRECKED"); break; }
+        if (pl.in_car == SLOT_MISSION) { mk_x = X; mk_y = Y; mk_col = 1; mblip(X, Y, 2); }
+        else { blip_car(mc, 2); if (first) msg("GET BACK IN THE CAR", 0, 2); }
+        if ((st->flags & F_LOSE) && wanted > 0) break;
+        if (pl.in_car == SLOT_MISSION && near_pt(X, Y, M(8)) && iabs(mc->speed) < Q8(M(7))) step_done();
+        break;
+    case OP_KILL: case OP_BOSS: {
+        if (first) {
+            int type = (st->flags & F_FLEE) ? P_TARGET : P_GUARD;
+            if (st->op == OP_BOSS) {
+                mission_ped(0, P_GUARD, st->model, X, Y, st->t ? st->t : 600);
+                spawn_gunmen(1, st->n, st->arg ? PED_COP : PED_GREY, X, Y, 110, 0, P_GUARD);
+            } else spawn_gunmen(0, st->n, st->model, X, Y, st->t, st->flags & F_HERE, type);
+        }
+        int left = 0, cnt = st->op == OP_BOSS ? st->n + 1 : st->n;
+        for (int k = 0; k < cnt && k < 9; k++) {
+            Ped *g = &peds[PED_MISSION0 + k];
+            if (g->active && !g->down) { left++; mblip(g->x >> 8, g->y >> 8, 3); }
+        }
+        if ((st->flags & F_FLEE) && left && dist_approx((peds[PED_MISSION0].x >> 8) - plx(), (peds[PED_MISSION0].y >> 8) - ply()) > M(170)) { mission_fail("HE GOT AWAY"); break; }
+        if (!left) { crime(2); if (cnt > 0) { sx_dyn = peds[PED_MISSION0].x >> 8; sy_dyn = peds[PED_MISSION0].y >> 8; } step_done(); }
+        break; }
+    case OP_WRECK: {
+        if (first) {
+            for (int k = 0; k < st->n && k < 3; k++)
+                park_car(gang_slot[k], st->model, X + M(4.9), Y + (k - 1) * M(7), 1024, 0);
+            if (st->arg) spawn_gunmen(0, st->arg, st->t ? PED_COP : PED_GREEN, X + M(8.5), Y, 100, 0, P_GUARD);
+        }
+        int left = 0;
+        for (int k = 0; k < st->n && k < 3; k++) { Car *g = &cars[gang_slot[k]]; if (g->active && !IS_WRECK(g)) { left++; blip_car(g, 3); } }
+        for (int k = 0; k < st->arg; k++) { Ped *g = &peds[PED_MISSION0 + k]; if (g->active && !g->down) mblip(g->x >> 8, g->y >> 8, 3); }
+        if (!left) { crime(2); step_done(); }
+        break; }
+    case OP_CHASE:                                 /* a car runs: wreck it, or (F_BAIL) ride its bumper until the driver gives up */
+        if (first) {
+            park_car(SLOT_MISSION, st->model, 0, 0, 0, 0);
+            car_on_road(mc, X, Y);
+            mc->ai = AI_TRAFFIC; mc->speed = Q8(M(10)); mc->wait = 1;
+        }
+        blip_car(mc, 3);
+        if (!mc->active || IS_WRECK(mc)) { crime(2); sx_dyn = mc->x >> 8; sy_dyn = mc->y >> 8; step_done(); break; }
+        {
+            int dd = dist_approx((mc->x >> 8) - plx(), (mc->y >> 8) - ply());
+            if (dd < M(120)) swave = 1;                     /* caught up: from now on they can get away */
+            if (swave && dd > M(st->t ? st->t : 240)) { mission_fail("THEY GOT AWAY"); break; }
+            if (st->flags & F_BAIL) {
+                if (pl.in_car >= 0 && dd < M(9)) spress += dt; else if (spress > 0) spress -= dt / 4;
+                if (spress >= 4 * TICKS) {
+                    mc->ai = AI_NONE; mc->speed = 0; mc->vx = mc->vy = 0;
+                    sx_dyn = mc->x >> 8; sy_dyn = mc->y >> 8;
+                    msg("THE DRIVER BAILED!", 0, 3);
+                    step_done();
+                }
+            }
+        }
+        break;
+    case OP_TAIL:                                  /* follow without being seen: not closer than 15 m, not further than 110 m */
+        if (first) {
+            park_car(SLOT_MISSION, st->model, 0, 0, 0, 0);
+            car_on_road(mc, X, Y);
+            mc->ai = AI_TRAFFIC; mc->speed = Q8(M(8)); mc->wait = 1; tail_mode = 1;
+        }
+        blip_car(mc, 3);
+        if (!mc->active || IS_WRECK(mc)) { mission_fail("YOU WRECKED THE CAR YOU WERE TAILING"); break; }
+        {
+            int dd = dist_approx((mc->x >> 8) - plx(), (mc->y >> 8) - ply());
+            if (dd < M(90)) swave = 1;                      /* found them: the tail starts now */
+            if (!swave) break;
+            if (dd > M(110)) { mission_fail("YOU LOST THEM"); break; }
+            if (dd < M(15)) { scount += dt; if (scount > 2 * TICKS) { mission_fail("YOU WERE SPOTTED"); break; } if (scount < dt * 2) msg("TOO CLOSE! BACK OFF", 0, 2); }
+            else scount = 0;
+            stimer += dt;
+            if (stimer >= st->t * TICKS) {
+                tail_mode = 0; mc->ai = AI_NONE; mc->speed = 0; mc->vx = mc->vy = 0;
+                sx_dyn = mc->x >> 8; sy_dyn = mc->y >> 8;
+                step_done();
+            }
+        }
+        break;
+    case OP_DEFEND:                                /* waves of gunmen come for a spot; stay and fight */
+        mk_x = X; mk_y = Y; mk_col = 1;
+        if (!near_pt(X, Y, M(70))) { mission_fail("YOU LEFT THEM UNPROTECTED"); break; }
+        if (first || mission_peds_down(0, 3)) {
+            if (!first) swave++;
+            if (swave >= st->n) { crime(2); step_done(); break; }
+            int a = (int)(rnd() & 4095);
+            spawn_gunmen(0, 3, st->model, X + ((icos(a) * M(26)) >> 14), Y + ((isin(a) * M(26)) >> 14), 100, 1, P_GUARD);
+            if (!first) msg(swave == st->n - 1 ? "LAST WAVE!" : "MORE ARE COMING", 0, 2);
+        }
+        for (int k = 0; k < 3; k++) { Ped *g = &peds[PED_MISSION0 + k]; if (g->active && !g->down) mblip(g->x >> 8, g->y >> 8, 3); }
+        break;
+    case OP_HUNT: {                                /* cars come after you: wreck them, or (F_LOSE) shake them */
+        if (first)
+            for (int k = 0; k < st->n && k < 2; k++) {
+                Car *h = &cars[gang_slot[k]];
+                park_car(gang_slot[k], st->model, 0, 0, 0, 0);
+                spawn_traffic_near(h);
+                h->model = st->model; h->ai = AI_RIVAL; h->police = 0; h->crew = 0; h->speed = Q8(M(15)); h->stuck = 0; h->rev = 0;
+            }
+        int left = 0;
+        for (int k = 0; k < st->n && k < 2; k++) {
+            Car *h = &cars[gang_slot[k]];
+            if (!h->active || IS_WRECK(h)) continue;
+            if ((st->flags & F_LOSE) && dist_approx((h->x >> 8) - plx(), (h->y >> 8) - ply()) > M(170)) { h->ai = AI_NONE; h->active = 0; continue; }
+            left++; blip_car(h, 3);
+        }
+        if (!left) step_done();
+        break; }
+    case OP_HEAT:
+        if (first && wanted < st->n) { wanted = st->n; wanted_cool = 0; }
+        if (wanted == 0) step_done();
+        break;
+    case OP_SURVIVE:
+        if (wanted < st->n) { wanted = st->n; wanted_cool = 0; }
+        if (first) time_left = -1;
+        stimer += dt;
+        if (stimer >= st->t * TICKS) step_done();
+        break;
+    case OP_SPOT:                                  /* stand on the spot (on foot) for two seconds */
+        mk_x = X; mk_y = Y; mk_col = 1; mblip(X, Y, 2);
+        if (pl.in_car < 0 && near_pt(X, Y, M(2.2))) { stimer += dt; if (stimer >= 2 * TICKS) { g_snd.sfx |= SFX_PICKUP; msg(st->m2 ? st->m2 : "GOT IT", 0, 2); step_done(); } }
+        else stimer = 0;
+        break;
+    case OP_SAY:
+        step_done();
+        dialog(story_says[st->n].pg, story_says[st->n].n, 0);
+        break;
+    case OP_GIVE:
+        pl.owned |= (u8)(1 << (st->n - 1)); if (pl.ammo[st->n] < st->t) pl.ammo[st->n] = st->t; pl.weapon = st->n;
+        g_snd.sfx |= SFX_SWAP;
+        step_done();
+        break;
+    case OP_CHOICE: {                              /* kill them, or walk up to them */
+        Ped *t = &peds[PED_MISSION0];
+        if (first) { mission_ped(0, P_CIV, st->model, X, Y, 100); t->state = S_IDLE; }
+        mblip(t->x >> 8, t->y >> 8, 3);
+        if (t->down) { story_flags &= ~st->n; step_done(); break; }
+        if (pl.in_car < 0 && dist_approx((t->x >> 8) - plx(), (t->y >> 8) - ply()) < M(1.8)) {
+            story_flags |= st->n; t->active = 0; step_done();
+        }
+        t->state = S_IDLE;
+        break; }
+    case OP_PICKUP: {                              /* a friend waits at the spot: pull up next to them */
+        Ped *f = &peds[PED_MISSION0 + 9];
+        if (first) { mission_ped(9, P_CIV, st->model, X, Y, 100); f->state = S_IDLE; }
+        if (f->down) { mission_fail("THEY'RE DEAD"); break; }
+        mk_x = X; mk_y = Y; mk_col = 1; mblip(X, Y, 2);
+        f->state = S_IDLE;
+        if (pl.in_car >= 0 && near_pt(X, Y, M(8)) && iabs(cars[pl.in_car].speed) < Q8(M(3))) {
+            f->active = 0; g_snd.door = 1; step_done();
+        } else if (pl.in_car < 0 && near_pt(X, Y, M(6)) && g_hud.msg_t <= 0) msg("COME BACK IN A CAR", 0, 2);
+        break; }
+    }
+}
+
+static void story_after(int done)
+{
+    /* act titles when a new act begins */
+    if (done == NACT1 - 1) big("ACT TWO: PAPER", 1, 5);
+    else if (mission == 20) big("ACT THREE: IRON", 1, 5);
+    else if (mission == 31) big("ACT FOUR: TIDE", 1, 5);
+    else if (mission == NMISSIONS) big("THE END", 1, 8);
 }
 
 /* ------------------------------------------------------------ respawn */
@@ -2218,13 +2516,13 @@ static int save_read(SaveData *d)
 {
     u8 *b = (u8 *)d;
     for (unsigned i = 0; i < sizeof *d; i++) b[i] = SRAM_B(i);
-    return d->magic == SAVE_MAGIC && d->sum == save_sum(d) && d->mission <= NMISSIONS;
+    return d->magic == SAVE_MAGIC && d->sum == save_sum(d) && (d->mission & 255) <= NMISSIONS;
 }
 static void save_write(void)
 {
     SaveData d;
     { u8 *z = (u8 *)&d; for (unsigned i = 0; i < sizeof d; i++) z[i] = 0; }   /* no stray padding bytes in the checksum */
-    d.magic = SAVE_MAGIC; d.ver = 1; d.mission = (u16)mission; d.money = pl.money; d.hp = (s16)pl.hp;
+    d.magic = SAVE_MAGIC; d.ver = 1; d.mission = (u16)(mission | (story_flags << 8)); d.money = pl.money; d.hp = (s16)pl.hp;
     d.owned = pl.owned; d.weapon = pl.weapon;
     for (int i = 1; i < 5; i++) d.ammo[i] = pl.ammo[i];
     d.ammo[0] = pl.ammo[5];                       /* slot 0 (fists) was unused: it holds the rockets */
@@ -2262,7 +2560,7 @@ static void new_game_state(void)
 static void load_game(const SaveData *d)
 {
     new_game_state();
-    mission = d->mission; pl.money = d->money; pl.hp = d->hp > 0 ? d->hp : 100;
+    mission = d->mission & 255; story_flags = d->mission >> 8; pl.money = d->money; pl.hp = d->hp > 0 ? d->hp : 100;
     pl.owned = d->owned; pl.weapon = d->weapon;
     for (int i = 1; i < 5; i++) pl.ammo[i] = d->ammo[i];
     pl.ammo[0] = 0; pl.ammo[5] = d->ammo[0];
@@ -2309,7 +2607,7 @@ static void meta_update(u16 keys, u16 pressed, int dt)
             g_snd.door = 1;
             if (menu_sel == 1) {
                 SaveData d;
-                if (save_read(&d)) { load_game(&d); gstate = GS_PLAY; msg("GAME LOADED", mission < NMISSIONS ? mission_title[mission] : "FREE ROAM", 3); }
+                if (save_read(&d)) { load_game(&d); gstate = GS_PLAY; msg("GAME LOADED", mission < NMISSIONS ? mission_name(mission) : "FREE ROAM", 3); }
             } else { new_game_state(); cutscene(st_intro, NPAGES(st_intro), 0, PED_RED); }
         }
         return;
@@ -2412,7 +2710,7 @@ void game_update(u16 keys, int dt)
             mdt[i] = dts;
             continue;
         }
-        else if (c->ai == AI_POLICE) update_police(i, dt);
+        else if (c->ai == AI_POLICE || c->ai == AI_RIVAL) update_police(i, dt);   /* rival: a hunter car rams you */
         else {
             int drag = Q8(M(8)) * dt / TICKS;
             if (c->speed > drag) c->speed -= drag; else if (c->speed < -drag) c->speed += drag; else c->speed = 0;
@@ -2580,7 +2878,7 @@ void game_update(u16 keys, int dt)
     g_hud.race_total = 0;
     g_hud.car_hp = pl.in_car >= 0 ? 100 - cars[pl.in_car].dmg / 10 : -1;
     g_hud.timer_s = time_left >= 0 ? (time_left + TICKS - 1) / TICKS : -1;
-    g_hud.pressure = (mission == 7 && mstate == 1 && chase_phase == 0) ? pressure * 100 / (4 * TICKS) : -1;
+    g_hud.pressure = (mission == 7 && mstate == 1 && chase_phase == 0) ? pressure * 100 / (4 * TICKS) : story_pressure();
     /* radar */
     g_hud.px = plx(); g_hud.py = ply(); g_hud.pang = cam_ang >> 8;
     int nb = 0;
@@ -3032,6 +3330,13 @@ void game_debug_shop(int i)            /* stand 3 m in front of shop i's door, f
     if (pl.in_car >= 0) { cars[pl.in_car].ai = AI_NONE; pl.in_car = -1; }
     i %= nshops;
     pl.x = Q8(shops[i].x + M(3)); pl.y = Q8(shops[i].y); pl.head = Q8(2048); cam_ang = pl.head; wanted = 0; pl.money += 5000;
+}
+void game_debug_mission(int m)         /* jump to mission m, standing next to its marker */
+{
+    mission = m; mstate = 0; phase = 0; wanted = 0;
+    if (pl.in_car >= 0) { cars[pl.in_car].ai = AI_NONE; pl.in_car = -1; }
+    int x = m < NACT1 ? mission_start_x[m] : M(1) * story_defs[m - NACT1].sx, y = m < NACT1 ? mission_start_y[m] : M(1) * story_defs[m - NACT1].sy;
+    pl.x = Q8(x - M(5)); pl.y = Q8(y); pl.head = 0; cam_ang = 0;
 }
 void game_debug_set(int w, int give_guns)
 {

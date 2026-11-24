@@ -23,13 +23,11 @@ This is the plan the owner asked to queue up. Work goes down the **Next up** lis
 - **Bowling and pool (v0.32):** `src/minigames.c` (bowling with pin physics and a pin cam, 8-ball with a
   CPU hustler), art from `tools/make_interiors.py` into `src/minigame_art.c`. Venues use the shop doors.
 
+- **The full story (v0.33):** 40 missions in four acts on a scripted mission engine (`src/story_acts.h`).
+  District locks were not added: every district is open from the start.
+
 ## Next up (owner's requests)
-1. **Build Acts Two to Four on the new districts** (see `STORY.md`).
-   - Districts unlock as the story goes. Today every district is open; story locks (police
-     roadblocks on the bridges) get added with Act Two.
-   - New objective types: tail a car without being seen, timed delivery, defend a spot,
-     photograph/spot, escort, boat chase, boss.
-2. **People and police react to each other.**
+1. **People and police react to each other.**
    - Peds can commit crimes (mugging, carjacking, fights, running red lights). Nearby cops chase and arrest or shoot them, and peds flee, fight back or watch.
    - Performance: evaluate a few peds per frame in round-robin rather than every ped every frame, so the CPU cost stays flat. Same number of peds and cars on screen as today.
 
