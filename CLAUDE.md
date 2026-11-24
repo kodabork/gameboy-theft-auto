@@ -64,6 +64,8 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - Pool: positions in 1/256 px on the 240x160 table; the CPU picks the best ghost-ball pot (cut angle, distance, blockers) with a small aim error.
 - `tools/mini_test.c` plays 20 full games of each and checks they all end; `mini_test table` prints pins knocked per start spot and hook.
 - When the full-screen 2D screens (shops, minigames) are up, `gba_main` skips the 3D render.
+- Speed (v0.38): full-screen opaque pictures (`room_*`, `lane_img`, `pincam_img`, `pool_img`) go through a DMA fast path in `blit_img` (the generator aligns them to 4 bytes); HUD text uses hardware OBJ glyphs and falls back to frame-buffer text only past `MAX_TXT` glyphs; the radar and scene build are skipped on 2D screens; pool physics runs fixed 1/256 s steps and skips resting ball pairs.
+- Test builds: `EXTRA_CF="-DDEBUG_MINI=1" ./build.sh` (2 = pool) boots straight into a minigame, for `gbaprof` frame-rate checks and screenshots. `mini_test g` reports how often throws find the gutter.
 
 ## Street crime (v0.34)
 - `street_life` (game.c, "street crime" section) starts one crime at a time near the player, 18-38 s apart, never during a job or while wanted: `S_MUG` (a civilian runs at a victim, or at a traffic car for a carjacking: `tgt` = ped, or 100 + car), then flees (criminals run 4.4 m/s, cops 5.0). `dispatch_police` sends the nearest beat cop (`S_COPCHASE`) or a patrol car (`crim_police`, which `update_police` aims at the criminal while `wanted == 0`). Armed criminals (`crim == 2`) get shot. `kill_ped` turns a player kill of a criminal into a $100 reward.

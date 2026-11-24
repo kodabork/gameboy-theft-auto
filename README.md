@@ -22,6 +22,16 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.38
+- **Pool and bowling run much smoother:** bowling at about 60 fps (it was about 7), pool at 60 fps while
+  you aim and 30-45 while the balls roll. The background picture is now copied by hardware DMA and the
+  text uses the GBA's hardware letter sprites instead of being drawn pixel by pixel.
+- **Gutter balls:** you can stand right at the edge of the lane and the aim arrow swings wider, so a bad
+  line or a late lock drops the ball in the gutter. A good throw still strikes.
+- **More places to play:** 4 bowling alleys and 5 pool halls, at least one in every district (Downtown,
+  the Industrial port, the Heights and Gull Island got new ones).
+- The radar, FPS counter and the hidden radar drawing all stay off during both minigames.
+
 ## What's new in v0.37
 - **Winning at pool or bowling now shows your payout clearly:** a big "+$200" (or "+$1000" for a
   high-stakes game) with the cash sound, and a line saying what you bet and what you were paid. A

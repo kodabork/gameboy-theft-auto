@@ -138,13 +138,13 @@ int main(void)
         /* game logic runs while the previous frame waits for its VBlank flip */
         game_update(keys, dt);
         Camera cam; int nobj;
-        game_build_scene(&cam, sprs, &nobj);
+        if (!g_hud.shop && !g_hud.mini) game_build_scene(&cam, sprs, &nobj); else nobj = 0;
         while (flip_req) ;
         u16 *back = (REG_DISPCNT & 0x0010) ? PAGE0 : PAGE1;
         if (!g_hud.shop && !g_hud.mini) render_frame(back, &cam, sprs, nobj);   /* full-screen 2D screens skip the 3D view */
         hud_draw(back);
         int part = frame_n++ & 3, radar_new = part == 3;
-        radar_build(radar_buf, part);
+        if (!g_hud.shop && !g_hud.mini) radar_build(radar_buf, part);   /* hidden on the 2D screens */
 
         flip_req = 1;                             /* the VBlank interrupt flips the page */
         /* HUD */

@@ -1697,7 +1697,7 @@ enum { GS_TITLE, GS_PLAY, GS_PAUSE, GS_DIALOG, GS_SHOP, GS_MINI };
    with a buy menu. Any shop can be held up at gunpoint in free roam (never during a job). */
 enum { SHOP_GUN, SHOP_STORE, SHOP_PAWN, SHOP_CARS, SHOP_BOWL, SHOP_POOL };
 typedef struct { s16 x, y; u8 type, bx, by; int cd; } Shop;        /* cd: ticks until it can be robbed again */
-#define MAX_SHOPS 28
+#define MAX_SHOPS 40
 EWRAM_BSS static Shop shops[MAX_SHOPS];
 static int nshops, shop_cur = -1, shop_away = 1, shop_rob, shop_take, shop_goal, shop_loose;
 static const char *shop_note; static int shop_note_t;
@@ -1728,7 +1728,9 @@ static const s16 resale[6] = { 0, 60, 180, 240, 360, 900 };
 static void setup_shops(void)
 {
     static const u8 tab[][3] = {      /* block x, block y, type */
-        {6,4,SHOP_POOL}, {4,10,SHOP_BOWL},                                                                       /* games */
+        {6,4,SHOP_POOL}, {4,10,SHOP_BOWL},                                                                       /* games: the first two */
+        {14,1,SHOP_POOL}, {17,8,SHOP_BOWL}, {16,13,SHOP_POOL}, {12,14,SHOP_BOWL}, {2,17,SHOP_POOL},           /* more games around town */
+        {18,17,SHOP_POOL}, {16,16,SHOP_BOWL},
         {3,3,SHOP_GUN}, {1,4,SHOP_STORE}, {5,6,SHOP_STORE}, {2,6,SHOP_PAWN}, {7,3,SHOP_CARS},                       /* Docks */
         {10,2,SHOP_STORE}, {13,6,SHOP_STORE}, {16,3,SHOP_GUN}, {11,8,SHOP_PAWN}, {18,5,SHOP_CARS}, {15,9,SHOP_STORE}, /* Downtown */
         {12,12,SHOP_GUN}, {17,11,SHOP_STORE}, {10,16,SHOP_PAWN}, {13,17,SHOP_CARS}, {11,13,SHOP_STORE},          /* Industrial */
@@ -2680,6 +2682,9 @@ void game_init(void)
     spawn_lamps(); bucket_lamps();
     spawn_props();
     setup_shops();
+#ifdef DEBUG_MINI                              /* test builds: boot straight into a minigame */
+    gstate = GS_MINI; mini_bet = 100; mini_start(DEBUG_MINI); return;
+#endif
     setup_pickups();
     setup_missions();
     pl.in_car = 0; pl.head = 0; pl.hp = 100; pl.money = 0; pl.weapon = 0; pl.owned = 0;
