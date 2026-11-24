@@ -93,7 +93,7 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
   - **Benchmark:** `tools/bench.sh [rom]` (needs `build/bench.txt`, the standard drive script in displayed frames). v0.19: 14.4 fps, v0.20: 18.2 fps, v0.24: 19.0 fps, v0.30 (big map): 19.2 fps, v0.31: 18.9 fps. The drive can take a different path after about frame 300 if traffic changes, so compare builds with `HIST=60-300` when the scenery differs.
 
 ## Sound
-- `src/sound.c`: DirectSound mixer (engine, horn, skid, guns, siren, effect synth) and PSG radio. Five stations (`stations[]`): 64-step patterns for lead, chord stabs, bass and drums.
+- `src/sound.c`: DirectSound mixer (engine, horn, skid, guns, siren, effect synth) and PSG radio. Ten stations (`stations[]`, names and genre labels in `station_name` / `station_label` in game.c): each song has a verse and a chorus of 64-step patterns (lead, bass, one chord per bar) played A A B A, plus a 32-step drum loop. `tools/radio_preview.py out.wav` renders every station with a rough PSG model so the music can be checked on a PC.
 - Effects: `g_snd.sfx |= SFX_*` from game code. Each effect is a short note list (`SfxNote`) played on 4 synth voices. `tools/sfx_wav.c` renders every effect, and every gun with its follow-up (`SFX_SHELL`, `SFX_PUMP`, `SFX_BOLT`, `SFX_LAUNCH`), to WAV with the real mixer. Gun recipes are in `recipes[]`: 1 pistol, 2 SMG, 3 shotgun, 4 rifle, 5 explosion, 6 rocket launch.
 
 ## People

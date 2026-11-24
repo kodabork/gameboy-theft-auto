@@ -16,6 +16,18 @@ written from scratch in C. It's inspired by the GTA IV look but has no Rockstar 
 | START | Pause menu (resume, save, radio station, quit) | |
 | SELECT + START | Toggle FPS counter | |
 
+## What's new in v0.35
+- **Ten radio stations** (UP/DOWN in a car). Five new ones:
+  - **GULL 99.9:** reggae, with a one-drop beat and an offbeat skank.
+  - **NEON 106:** synthwave, with a driving octave bass.
+  - **RIOT 94.1:** fast punk, with power chords.
+  - **FUNK 102.7:** disco funk, with octave bass and open hi-hats.
+  - **HERITAGE 90.5:** classical, flowing arpeggios and no drums.
+- **Every station now plays a whole song,** verse, verse, chorus, verse, instead of one short loop
+  on repeat. The original five got choruses too.
+- Tuning in shows the station's name and genre ("NEON 106 - SYNTHWAVE").
+- `tools/radio_preview.py` renders every station to a WAV so the music can be heard on a PC.
+
 ## What's new in v0.34
 - **The streets have crime, and the police deal with it.** About once a minute, somewhere near you, a
   passer-by mugs someone, starts a fight or carjacks a car. You hear it ("HELP! MY BAG!",
