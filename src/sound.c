@@ -43,15 +43,17 @@ static void build_engine_wave(void)
 }
 
 /* ------------------------------------------------------------ radio stations */
-/* Five original 4-bar loops on the PSG: lead (ch1), chord stabs (ch2), bass (ch3 wave), drums
-   (ch4 noise). Each pattern is 64 sixteenth steps, MIDI note numbers, 0 = rest / sustain.
-   Drums: 1 kick, 2 snare, 3 closed hat, 4 open hat (32 steps). */
+/* Ten original songs on the PSG: lead (ch1), chord stabs (ch2), bass (ch3 wave), drums (ch4 noise).
+   Each song has a verse (A) and a chorus (B) of 4 bars each, played A A B A. A pattern is 64
+   sixteenth steps of MIDI note numbers, 0 = rest / sustain; chords are one triad per bar.
+   Drums: 1 kick, 2 snare, 3 closed hat, 4 open hat (32 steps, shared by both sections). */
 typedef struct {
     u16 step;                 /* sixteenths per VBlank, 16.16 (BPM * 73.15) */
     u8 stab_mask;             /* chord stab when bit (s & 7) is set */
     u8 wave;                  /* bass wavetable */
     const u8 *bass, *lead, *chords, *drums;
     u16 lead_nr, stab_nr;     /* PSG envelope + duty for lead and stabs */
+    const u8 *bass_b, *lead_b, *chords_b;   /* the chorus */
 } Station;
 
 /* HARBOR FM: synth-pop, 92 BPM, Am - F - C - G */
@@ -104,12 +106,139 @@ static const u8 sm_lead[64] = {
 static const u8 sm_chords[12] = { 53,57,60, 53,55,59, 52,55,59, 55,57,60 };
 static const u8 sm_drums[32] = { 1,0,0,0, 3,0,0,3, 3,0,0,0, 3,0,2,3,  1,0,0,0, 3,0,0,3, 3,0,1,0, 3,0,2,3 };
 
+/* choruses for the first five */
+static const u8 hb_bass_b[64] = {
+    41,0,0,41, 0,0,48,0, 41,0,0,41, 0,0,48,50,  43,0,0,43, 0,0,50,0, 43,0,0,43, 0,0,50,52,
+    40,0,0,40, 0,0,47,0, 40,0,0,40, 0,0,47,48,  45,0,0,45, 0,0,52,0, 45,0,0,45, 0,0,43,40 };
+static const u8 hb_lead_b[64] = {
+    72,0,0,0, 72,0,74,0, 76,0,0,0, 77,0,76,0,  74,0,0,0, 74,0,76,0, 79,0,0,0, 77,0,76,0,
+    76,0,0,0, 74,0,72,0, 71,0,0,0, 67,0,0,0,  69,0,0,0, 72,0,0,0, 76,0,0,0, 0,0,0,0 };
+static const u8 hb_chords_b[12] = { 53,57,60, 55,59,62, 52,55,59, 57,60,64 };
+static const u8 kk_bass_b[64] = {
+    46,0,58,0, 0,0,58,0, 46,0,58,0, 0,46,58,0,  42,0,54,0, 0,0,54,0, 42,0,54,0, 0,42,54,0,
+    37,0,49,0, 0,0,49,0, 37,0,49,0, 0,37,49,0,  39,0,51,0, 0,0,51,0, 39,0,51,0, 39,51,39,51 };
+static const u8 kk_lead_b[64] = {
+    77,0,0,0, 73,0,0,0, 70,0,73,0, 77,0,0,0,  78,0,0,0, 73,0,0,0, 70,0,73,0, 78,0,0,0,
+    80,0,0,0, 77,0,0,0, 73,0,77,0, 80,0,0,0,  82,0,0,0, 79,0,0,0, 75,0,79,0, 82,0,80,0 };
+static const u8 kk_chords_b[12] = { 58,61,65, 54,58,61, 49,53,56, 51,55,58 };
+static const u8 ir_bass_b[64] = {
+    45,0,45,0, 45,0,45,0, 45,0,45,0, 57,0,52,0,  41,0,41,0, 41,0,41,0, 41,0,41,0, 53,0,48,0,
+    36,0,36,0, 36,0,36,0, 36,0,36,0, 48,0,43,0,  47,0,47,0, 47,0,47,0, 47,0,47,0, 47,0,51,0 };
+static const u8 ir_lead_b[64] = {
+    76,0,0,0, 76,0,74,0, 76,0,0,0, 79,0,0,0,  77,0,0,0, 77,0,76,0, 74,0,0,0, 72,0,0,0,
+    72,0,0,0, 74,0,76,0, 79,0,0,0, 76,0,72,0,  71,0,0,0, 75,0,0,0, 78,0,0,0, 83,0,0,0 };
+static const u8 ir_chords_b[12] = { 57,64,69, 53,60,65, 48,55,60, 47,54,59 };
+static const u8 le_bass_b[64] = {
+    41,0,0,0, 0,0,0,41, 0,0,53,0, 0,0,48,0,  43,0,0,0, 0,0,0,43, 0,0,50,0, 0,0,43,0,
+    46,0,0,0, 0,0,0,46, 0,0,53,0, 0,0,46,0,  45,0,0,0, 0,0,0,45, 0,0,49,0, 52,0,45,0 };
+static const u8 le_lead_b[64] = {
+    77,0,0,0, 0,0,76,0, 0,0,72,0, 0,0,0,0,  79,0,0,0, 0,0,77,0, 0,0,74,0, 0,0,0,0,
+    77,0,0,0, 0,0,74,0, 0,0,70,0, 74,0,77,0,  76,0,0,0, 0,0,73,0, 0,0,69,0, 0,0,0,0 };
+static const u8 le_chords_b[12] = { 53,57,60, 55,58,62, 46,50,53, 45,49,52 };
+static const u8 sm_bass_b[64] = {
+    41,0,0,0, 45,0,0,0, 48,0,0,0, 47,0,0,0,  40,0,0,0, 44,0,0,0, 47,0,0,0, 45,0,0,0,
+    38,0,0,0, 41,0,0,0, 45,0,0,0, 43,0,0,0,  43,0,0,0, 47,0,0,0, 50,0,0,0, 49,0,0,0 };
+static const u8 sm_lead_b[64] = {
+    81,0,0,79, 0,0,76,0, 0,0,72,0, 76,0,0,0,  80,0,0,0, 76,0,0,0, 74,0,71,0, 0,0,0,0,
+    77,0,0,76, 0,0,74,0, 72,0,0,0, 69,0,0,0,  71,0,0,74, 0,0,77,0, 0,0,79,0, 0,0,0,0 };
+static const u8 sm_chords_b[12] = { 53,57,64, 52,56,62, 50,53,60, 53,55,59 };
+
+/* GULL 99.9: reggae, 76 BPM, Am - Dm - Em - Am (one drop, skank on the offbeat) */
+static const u8 gl_bass[64] = {
+    45,0,0,0, 0,0,45,0, 0,0,48,0, 52,0,0,0,  38,0,0,0, 0,0,38,0, 0,0,41,0, 45,0,0,0,
+    40,0,0,0, 0,0,40,0, 0,0,43,0, 47,0,0,0,  45,0,0,0, 0,0,45,0, 0,0,43,0, 40,0,0,0 };
+static const u8 gl_lead[64] = {
+    76,0,0,0, 0,0,74,0, 72,0,0,0, 69,0,0,0,  74,0,0,0, 0,0,72,0, 69,0,0,0, 65,0,0,0,
+    71,0,0,0, 0,0,72,0, 74,0,0,0, 76,0,0,0,  72,0,0,0, 71,0,0,0, 69,0,0,0, 0,0,0,0 };
+static const u8 gl_chords[12] = { 57,60,64, 50,53,57, 52,55,59, 57,60,64 };
+static const u8 gl_drums[32] = { 3,0,3,0, 3,0,3,1, 2,0,3,0, 3,0,3,0,  3,0,3,0, 3,0,3,1, 2,0,3,0, 3,0,4,0 };
+static const u8 gl_bass_b[64] = {
+    41,0,0,0, 0,0,41,0, 0,0,45,0, 48,0,0,0,  43,0,0,0, 0,0,43,0, 0,0,47,0, 50,0,0,0,
+    40,0,0,0, 0,0,40,0, 0,0,43,0, 47,0,0,0,  45,0,0,0, 0,0,45,0, 0,0,52,0, 45,0,0,0 };
+static const u8 gl_lead_b[64] = {
+    77,0,0,76, 0,0,72,0, 0,0,69,0, 72,0,0,0,  79,0,0,77, 0,0,74,0, 0,0,71,0, 74,0,0,0,
+    76,0,0,0, 74,0,72,0, 71,0,0,0, 67,0,0,0,  69,0,0,0, 0,0,0,0, 72,0,71,0, 69,0,0,0 };
+static const u8 gl_chords_b[12] = { 53,57,60, 55,59,62, 52,55,59, 57,60,64 };
+
+/* NEON 106: synthwave, 112 BPM, Cm - Ab - Eb - Bb, driving octave bass */
+static const u8 ne_bass[64] = {
+    36,0,48,0, 36,0,48,0, 36,0,48,0, 36,0,48,0,  44,0,56,0, 44,0,56,0, 44,0,56,0, 44,0,56,0,
+    39,0,51,0, 39,0,51,0, 39,0,51,0, 39,0,51,0,  46,0,58,0, 46,0,58,0, 46,0,58,0, 46,0,58,0 };
+static const u8 ne_lead[64] = {
+    72,0,75,0, 79,0,0,0, 77,0,75,0, 72,0,0,0,  72,0,75,0, 80,0,0,0, 79,0,77,0, 75,0,0,0,
+    70,0,75,0, 79,0,0,0, 82,0,79,0, 75,0,0,0,  74,0,77,0, 82,0,0,0, 81,0,79,0, 77,0,74,0 };
+static const u8 ne_chords[12] = { 48,51,55, 44,48,51, 51,55,58, 46,50,53 };
+static const u8 ne_drums[32] = { 1,0,3,0, 2,0,3,0, 1,0,3,0, 2,0,3,3,  1,0,3,0, 2,0,3,0, 1,0,3,1, 2,0,4,0 };
+static const u8 ne_bass_b[64] = {
+    41,0,53,0, 41,0,53,0, 41,0,53,0, 41,0,53,0,  44,0,56,0, 44,0,56,0, 44,0,56,0, 44,0,56,0,
+    46,0,58,0, 46,0,58,0, 46,0,58,0, 46,0,58,0,  43,0,55,0, 43,0,55,0, 43,0,55,0, 47,0,50,0 };
+static const u8 ne_lead_b[64] = {
+    77,0,0,0, 80,0,0,0, 84,0,0,0, 82,0,80,0,  80,0,0,0, 79,0,0,0, 75,0,0,0, 72,0,0,0,
+    74,0,0,0, 77,0,0,0, 82,0,0,0, 81,0,79,0,  79,0,0,0, 0,0,0,0, 74,0,77,0, 79,0,0,0 };
+static const u8 ne_chords_b[12] = { 53,56,60, 44,48,51, 46,50,53, 43,47,50 };
+
+/* RIOT 94.1: punk, 172 BPM, E - C - D - B, power chords and eighth-note bass */
+static const u8 ri_bass[64] = {
+    40,0,40,0, 40,0,40,0, 40,0,40,0, 40,0,40,0,  36,0,36,0, 36,0,36,0, 36,0,36,0, 36,0,36,0,
+    38,0,38,0, 38,0,38,0, 38,0,38,0, 38,0,38,0,  47,0,47,0, 47,0,47,0, 47,0,47,0, 47,0,47,0 };
+static const u8 ri_lead[64] = {
+    76,0,76,0, 74,0,76,0, 79,0,0,0, 76,0,0,0,  72,0,72,0, 71,0,72,0, 76,0,0,0, 72,0,0,0,
+    74,0,74,0, 72,0,74,0, 78,0,0,0, 74,0,0,0,  71,0,71,0, 69,0,71,0, 75,0,0,0, 71,0,0,0 };
+static const u8 ri_chords[12] = { 52,59,64, 48,55,60, 50,57,62, 47,54,59 };
+static const u8 ri_drums[32] = { 1,0,3,0, 2,0,3,0, 1,0,1,0, 2,0,3,0,  1,0,3,0, 2,0,3,0, 1,1,1,0, 2,2,2,2 };
+static const u8 ri_bass_b[64] = {
+    45,0,45,0, 45,0,45,0, 45,0,45,0, 45,0,45,0,  45,0,45,0, 45,0,45,0, 45,0,45,0, 45,0,45,0,
+    48,0,48,0, 48,0,48,0, 48,0,48,0, 48,0,48,0,  47,0,47,0, 47,0,47,0, 47,0,47,0, 47,47,47,47 };
+static const u8 ri_lead_b[64] = {
+    81,0,0,0, 79,0,76,0, 81,0,0,0, 79,0,76,0,  81,0,81,0, 83,0,81,0, 79,0,0,0, 76,0,0,0,
+    72,0,0,0, 76,0,79,0, 84,0,0,0, 79,0,0,0,  78,0,0,0, 75,0,78,0, 83,0,0,0, 0,0,0,0 };
+static const u8 ri_chords_b[12] = { 45,52,57, 45,52,57, 48,55,60, 47,54,59 };
+
+/* FUNK 102.7: disco-funk, 116 BPM, Em7 - A7 vamp, octave bass and offbeat open hats */
+static const u8 fu_bass[64] = {
+    40,0,52,0, 0,40,52,0, 40,0,52,50, 0,52,40,0,  45,0,57,0, 0,45,57,0, 45,0,57,55, 0,57,45,0,
+    40,0,52,0, 0,40,52,0, 40,0,52,50, 0,52,40,0,  45,0,57,0, 0,45,57,0, 45,0,55,57, 0,52,50,0 };
+static const u8 fu_lead[64] = {
+    0,0,76,0, 74,0,0,71, 0,0,74,0, 0,0,0,0,  0,0,76,0, 79,0,0,76, 0,0,73,0, 0,0,0,0,
+    0,0,76,0, 74,0,0,71, 0,0,74,0, 76,0,79,0,  81,0,0,79, 0,0,76,0, 73,0,0,0, 0,0,0,0 };
+static const u8 fu_chords[12] = { 52,55,62, 55,57,61, 52,55,62, 55,57,61 };
+static const u8 fu_drums[32] = { 1,0,4,0, 2,0,4,0, 1,0,4,0, 2,0,4,3,  1,0,4,0, 2,0,4,0, 1,0,4,0, 2,0,2,4 };
+static const u8 fu_bass_b[64] = {
+    48,0,0,48, 0,0,55,0, 48,0,0,48, 0,0,55,0,  47,0,0,47, 0,0,54,0, 47,0,0,47, 0,0,54,0,
+    45,0,0,45, 0,0,52,0, 45,0,0,45, 0,0,52,0,  47,0,51,0, 54,0,51,0, 47,0,0,0, 54,0,51,0 };
+static const u8 fu_lead_b[64] = {
+    79,0,0,0, 76,0,72,0, 0,0,76,0, 79,0,0,0,  78,0,0,0, 74,0,71,0, 0,0,74,0, 78,0,0,0,
+    76,0,0,0, 72,0,69,0, 0,0,72,0, 76,0,0,0,  75,0,0,0, 78,0,0,0, 81,0,0,0, 78,0,75,0 };
+static const u8 fu_chords_b[12] = { 55,60,64, 54,59,62, 52,57,60, 51,54,59 };
+
+/* HERITAGE 90.5: classical, 84 BPM, C - Am - F - G, flowing arpeggios, no drums */
+static const u8 he_bass[64] = {
+    36,0,0,0, 0,0,0,0, 43,0,0,0, 0,0,0,0,  45,0,0,0, 0,0,0,0, 40,0,0,0, 0,0,0,0,
+    41,0,0,0, 0,0,0,0, 36,0,0,0, 0,0,0,0,  43,0,0,0, 0,0,0,0, 38,0,0,0, 43,0,0,0 };
+static const u8 he_lead[64] = {
+    60,64,67,72, 67,64,60,64, 67,72,76,72, 67,64,67,72,  57,60,64,69, 64,60,57,60, 64,69,72,69, 64,60,64,69,
+    53,57,60,65, 60,57,53,57, 60,65,69,65, 60,57,60,65,  55,59,62,67, 62,59,55,59, 62,67,71,67, 62,59,62,67 };
+static const u8 he_chords[12] = { 60,64,67, 57,60,64, 53,57,60, 55,59,62 };
+static const u8 he_drums[32] = { 0 };
+static const u8 he_bass_b[64] = {
+    38,0,0,0, 0,0,0,0, 45,0,0,0, 0,0,0,0,  43,0,0,0, 0,0,0,0, 38,0,0,0, 0,0,0,0,
+    40,0,0,0, 0,0,0,0, 47,0,0,0, 0,0,0,0,  45,0,0,0, 0,0,0,0, 40,0,0,0, 45,0,0,0 };
+static const u8 he_lead_b[64] = {
+    62,65,69,74, 69,65,62,65, 69,74,77,74, 69,65,69,74,  59,62,67,71, 67,62,59,62, 67,71,74,71, 67,62,67,71,
+    64,67,71,76, 71,67,64,67, 71,76,79,76, 71,67,71,76,  69,72,76,81, 76,72,69,72, 76,72,69,64, 69,0,0,0 };
+static const u8 he_chords_b[12] = { 50,53,57, 55,59,62, 52,55,59, 57,60,64 };
+
 static const Station stations[NSTATIONS] = {
-    { 6730, 0x44, 0, hb_bass, hb_lead, hb_chords, hb_drums, 0xA780 | 0x0040, 0x6180 | 0x0080 },
-    { 9071, 0x88, 1, kk_bass, kk_lead, kk_chords, kk_drums, 0x8180 | 0x0080, 0x5180 | 0x0040 },
-    { 10241, 0x11, 1, ir_bass, ir_lead, ir_chords, ir_drums, 0xB780 | 0x0080, 0x7380 | 0x00C0 },
-    { 6437, 0x10, 0, le_bass, le_lead, le_chords, le_drums, 0x9600 | 0x0000, 0x5280 | 0x0080 },
-    { 7315, 0x48, 2, sm_bass, sm_lead, sm_chords, sm_drums, 0x8500 | 0x0080, 0x4380 | 0x0080 },
+    { 6730, 0x44, 0, hb_bass, hb_lead, hb_chords, hb_drums, 0xA780 | 0x0040, 0x6180 | 0x0080, hb_bass_b, hb_lead_b, hb_chords_b },
+    { 9071, 0x88, 1, kk_bass, kk_lead, kk_chords, kk_drums, 0x8180 | 0x0080, 0x5180 | 0x0040, kk_bass_b, kk_lead_b, kk_chords_b },
+    { 10241, 0x11, 1, ir_bass, ir_lead, ir_chords, ir_drums, 0xB780 | 0x0080, 0x7380 | 0x00C0, ir_bass_b, ir_lead_b, ir_chords_b },
+    { 6437, 0x10, 0, le_bass, le_lead, le_chords, le_drums, 0x9600 | 0x0000, 0x5280 | 0x0080, le_bass_b, le_lead_b, le_chords_b },
+    { 7315, 0x48, 2, sm_bass, sm_lead, sm_chords, sm_drums, 0x8500 | 0x0080, 0x4380 | 0x0080, sm_bass_b, sm_lead_b, sm_chords_b },
+    { 5559, 0x10, 2, gl_bass, gl_lead, gl_chords, gl_drums, 0x9500 | 0x0040, 0x6180 | 0x0080, gl_bass_b, gl_lead_b, gl_chords_b },
+    { 8193, 0x55, 0, ne_bass, ne_lead, ne_chords, ne_drums, 0xA680 | 0x0080, 0x4180 | 0x0040, ne_bass_b, ne_lead_b, ne_chords_b },
+    { 12582, 0x55, 1, ri_bass, ri_lead, ri_chords, ri_drums, 0xB680 | 0x00C0, 0x7280 | 0x00C0, ri_bass_b, ri_lead_b, ri_chords_b },
+    { 8485, 0x22, 1, fu_bass, fu_lead, fu_chords, fu_drums, 0x9280 | 0x0040, 0x5180 | 0x0040, fu_bass_b, fu_lead_b, fu_chords_b },
+    { 6145, 0x01, 2, he_bass, he_lead, he_chords, he_drums, 0x7380 | 0x0080, 0x4500 | 0x0080, he_bass_b, he_lead_b, he_chords_b },
 };
 /* bass wavetables: soft saw, square-ish growl, round sine-like */
 static const u32 bass_waves[3][4] = {
@@ -117,7 +246,7 @@ static const u32 bass_waves[3][4] = {
     { 0xFFDFBF9F, 0xFFFFFFFF, 0x20406080, 0x00000000 },
     { 0xCBA98877, 0xFFFEEDDC, 0x34567788, 0x00011223 },
 };
-static u32 mus_acc; static int mus_step = -1, chord_tog, cur_station = -1;
+static u32 mus_acc; static int mus_step = -1, chord_tog, cur_station = -1, mus_loop;
 
 static void load_wave(int w)
 {
@@ -150,28 +279,30 @@ __attribute__((section(".romcode"))) static void music_tick(void)
     int st = g_snd.station; if ((unsigned)st >= NSTATIONS) st = 0;
     if (st != cur_station) {             /* retune: new wavetable, start the loop over */
         psg_silence(); load_wave(stations[st].wave);
-        cur_station = st; mus_step = -1; mus_acc = 0; chord_tog = 0;
+        cur_station = st; mus_step = -1; mus_acc = 0; chord_tog = 0; mus_loop = 0;
     }
     const Station *S = &stations[st];
     mus_acc += S->step;
     if (mus_acc < 65536 && mus_step >= 0) return;
     mus_acc &= 0xFFFF;
     mus_step = (mus_step + 1) & 63;
-    int s = mus_step;
-    if (S->lead[s]) {
+    if (mus_step == 0) mus_loop++;
+    int s = mus_step, chorus = (mus_loop & 3) == 2;    /* verse, verse, chorus, verse */
+    const u8 *lead = chorus ? S->lead_b : S->lead, *bass = chorus ? S->bass_b : S->bass, *chords = chorus ? S->chords_b : S->chords;
+    if (lead[s]) {
         REG16(0x04000062) = S->lead_nr;
-        REG16(0x04000064) = 0x8000 | psg_sq[S->lead[s]];
+        REG16(0x04000064) = 0x8000 | psg_sq[lead[s]];
     }
     if ((S->stab_mask >> (s & 7)) & 1) {                /* chord stabs, arpeggiated */
-        int n = S->chords[(s >> 4) * 3 + chord_tog] + 12;
+        int n = chords[(s >> 4) * 3 + chord_tog] + 12;
         if (++chord_tog == 3) chord_tog = 0;
         REG16(0x04000068) = S->stab_nr;
         REG16(0x0400006C) = 0x8000 | psg_sq[n];
     }
-    if (S->bass[s]) {
+    if (bass[s]) {
         REG16(0x04000070) = 0x0080;
         REG16(0x04000072) = 0x2000;                     /* 100% */
-        REG16(0x04000074) = 0x8000 | psg_wave[S->bass[s] - 12];
+        REG16(0x04000074) = 0x8000 | psg_wave[bass[s] - 12];
     }
     int d = S->drums[s & 31];
     if (d == 1)      { REG16(0x04000078) = 0xB200; REG16(0x0400007C) = 0x8000 | 0x0071; }  /* kick */

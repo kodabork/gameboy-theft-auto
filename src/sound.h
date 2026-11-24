@@ -1,6 +1,6 @@
 #ifndef SOUND_H
 #define SOUND_H
-#define NSTATIONS 5
+#define NSTATIONS 10
 typedef struct {
     volatile int engine_rpm, engine_vol;   /* vol 0..64 */
     volatile int horn, skid;               /* horn 0/1, skid 0..48 */

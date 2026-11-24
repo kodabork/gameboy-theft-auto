@@ -319,8 +319,12 @@ static void spawn_police(void)
 }
 
 /* ------------------------------------------------------------ radio */
-static const char *const station_name[NSTATIONS] = { "HARBOR FM", "KICK 104.5", "IRON 97", "LOW END 88", "SMOOTH 101" };
-static const char *radio_label(void) { return g_snd.radio_on ? station_name[g_snd.station] : "RADIO OFF"; }
+static const char *const station_name[NSTATIONS] = { "HARBOR FM", "KICK 104.5", "IRON 97", "LOW END 88", "SMOOTH 101",
+                                                     "GULL 99.9", "NEON 106", "RIOT 94.1", "FUNK 102.7", "HERITAGE 90.5" };
+static const char *const station_label[NSTATIONS] = {   /* shown when you tune in */
+    "HARBOR FM - SYNTH-POP", "KICK 104.5 - CLUB HOUSE", "IRON 97 - ROCK", "LOW END 88 - HIP-HOP", "SMOOTH 101 - LATE-NIGHT JAZZ",
+    "GULL 99.9 - REGGAE", "NEON 106 - SYNTHWAVE", "RIOT 94.1 - PUNK", "FUNK 102.7 - DISCO FUNK", "HERITAGE 90.5 - CLASSICAL" };
+static const char *radio_label(void) { return g_snd.radio_on ? station_label[g_snd.station] : "RADIO OFF"; }
 static void radio_show(void) { g_hud.radio_name = radio_label(); g_hud.radio_t = TICKS * 5 / 2; }
 /* step through the stations and "off" (UP/DOWN in a car, or A on the pause menu) */
 static void radio_step(int d)

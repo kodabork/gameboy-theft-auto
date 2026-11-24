@@ -38,7 +38,7 @@ Nothing queued. Pick from the extras below, or ask for something new.
 - **Day/night cycle:** done with palette fades (the whole screen is one 256-colour palette), so it costs almost nothing per frame. Street lamps already exist. Light-up windows at night can come from the same palette trick.
 - **Wanted levels 1-5:** roadblocks (parked police cars), and more aggressive police at high levels. Uses the existing police car, van and box truck art.
 - **Hidden packages / collectibles** (100 across the city, rewards at milestones), **unique stunt jumps**, a **stats screen** and **in-game achievements**. All tiny.
-- **More radio:** more stations and songs (each station is a few KB of patterns), plus scrolling DJ/advert text when you tune in.
+- **More radio:** done in v0.35 (ten stations with verse/chorus songs). Still open: scrolling DJ/advert text when you tune in, a second song per station.
 - **Phone calls / pager messages** that start missions and keep the story going between cutscenes. Text only.
 - **Money sinks and progress:** buy properties that pay a little income and unlock safehouses.
 - **More car variety by recolouring:** a new paint scheme for an existing model is cheap if done as palette variants. A brand-new car model costs ROM for every angle, so only add a few of those.
