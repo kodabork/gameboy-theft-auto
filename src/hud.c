@@ -364,7 +364,16 @@ void hud_draw(u16 *fb)
         text(228, 150, ">", COL_YELLOW, 1);
         return;
     }
-    if (g_hud.mini) { mini_draw(); return; }      /* bowling / pool */
+    if (g_hud.mini) {                            /* bowling / pool, and its pause menu on top */
+        mini_draw();
+        if (g_hud.menu_n) {
+            shade_band(46, 122);
+            text_center(50, g_hud.menu_title, COL_YELLOW, 2);
+            draw_menu(72);
+            if (g_hud.menu_note) text_center(110, g_hud.menu_note, COL_WHITE, 1);
+        }
+        return;
+    }
     if (g_hud.shop) {                            /* shop interior: room, clerk, counter, then the menu */
         int t = g_hud.shop - 1, pose = g_hud.shop_pose;
         blit_img(room_img[t], 0, 0);

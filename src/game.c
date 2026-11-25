@@ -1725,7 +1725,7 @@ static const char *shop_note; static int shop_note_t;
 static const char *shop_big; static int shop_big_t;          /* a big "+$200" after a win */
 static char *num_str(char *q, int v) { char t[10]; int n = 0; do { t[n++] = (char)('0' + v % 10); v /= 10; } while (v); while (n) *q++ = t[--n]; *q = 0; return q; }
 static const char *const shop_names[6] = { "NY GUNS", "CORNER MART", "PAWN & LOAN", "MOTOR SALES", "HARBOR LANES", "EIGHT BALL CLUB" };
-static int mini_bet;
+static int mini_bet, mini_paused, mini_sel;
 enum { K_GUN, K_HEAL, K_SELL, K_CAR, K_ROB, K_PLAY };
 typedef struct { const char *label; s16 price; u8 kind, arg; u16 amt; } ShopItem;
 static const ShopItem gun_items[] = {
@@ -1739,11 +1739,13 @@ static const ShopItem car_items[] = {
     { "HATCHBACK", 1500, K_CAR, 0, CAR_HATCH_WHITE }, { "PICKUP", 3000, K_CAR, 0, CAR_PICKUP_BLUE },
     { "MUSCLE CAR", 6000, K_CAR, 0, CAR_MUSCLE_ORANGE }, { "SPORTS COUPE", 12000, K_CAR, 0, CAR_COUPE_BLACK },
     { "SUPERCAR", 25000, K_CAR, 0, CAR_SUPER_RED } };
-static const ShopItem bowl_items[] = { { "BOWL A GAME", 100, K_PLAY, MINI_BOWL, 0 }, { "HIGH STAKES GAME", 500, K_PLAY, MINI_BOWL, 0 } };
-static const ShopItem pool_items[] = { { "PLAY 8-BALL", 100, K_PLAY, MINI_POOL, 0 }, { "HIGH STAKES 8-BALL", 500, K_PLAY, MINI_POOL, 0 } };
+static const ShopItem bowl_items[] = { { "FRIENDLY GAME      FREE", 0, K_PLAY, MINI_BOWL, 0 },
+                                       { "BOWL A GAME", 100, K_PLAY, MINI_BOWL, 0 }, { "HIGH STAKES GAME", 500, K_PLAY, MINI_BOWL, 0 } };
+static const ShopItem pool_items[] = { { "FRIENDLY 8-BALL    FREE", 0, K_PLAY, MINI_POOL, 0 },
+                                       { "PLAY 8-BALL", 100, K_PLAY, MINI_POOL, 0 }, { "HIGH STAKES 8-BALL", 500, K_PLAY, MINI_POOL, 0 } };
 static const ShopItem rob_item = { "ROB THE PLACE", 0, K_ROB, 0, 0 };
 static const ShopItem *const shop_items[6] = { gun_items, store_items, pawn_items, car_items, bowl_items, pool_items };
-static const u8 shop_nitems[6] = { 5, 3, 3, 5, 2, 2 };
+static const u8 shop_nitems[6] = { 5, 3, 3, 5, 3, 3 };
 static const s16 resale[6] = { 0, 60, 180, 240, 360, 900 };
 
 static void setup_shops(void)
@@ -1815,6 +1817,7 @@ static void shop_update(u16 keys, u16 pressed, int dt)
     if (shop_big_t > 0) shop_big_t -= dt;
     g_hud.shop_big = shop_big_t > 0 ? shop_big : 0;
     g_hud.shop = 1 + h->type; g_hud.shop_name = shop_names[h->type];
+    g_hud.money = pl.money;                                  /* keep the cash on screen current while buying or betting */
     g_hud.shop_note = shop_note_t > 0 ? shop_note : 0;
     g_snd.engine_vol = 0; g_snd.skid = 0; g_snd.horn = 0; g_snd.siren = 0; g_snd.nitro = 0;
     if (shop_rob) {                                          /* the hold-up */
@@ -1871,8 +1874,8 @@ static void shop_update(u16 keys, u16 pressed, int dt)
     }
     if (it->kind == K_PLAY) {
         if (pl.money < it->price) { shop_say("YOU CAN'T COVER THE BET"); g_snd.sfx |= SFX_DRY; return; }
-        pl.money -= it->price; mini_bet = it->price;
-        gstate = GS_MINI; mini_start(it->arg); g_snd.sfx |= SFX_CASH;
+        pl.money -= it->price; mini_bet = it->price;              /* 0: a friendly game, nothing on it */
+        gstate = GS_MINI; mini_start(it->arg); mini_paused = 0; if (it->price) g_snd.sfx |= SFX_CASH;
         return;
     }
     if (it->kind == K_SELL) {
@@ -2849,23 +2852,54 @@ static void meta_update(u16 keys, u16 pressed, int dt)
     if (gstate == GS_SHOP) { shop_update(keys, pressed, dt); return; }
     if (gstate == GS_MINI) {                            /* bowling or pool; back to the counter when it ends */
         g_hud.mini = 1;
+        EWRAM_BSS static char note[40], bigt[12];
+        char *q = note; const char *a;
+        if (mini_paused) {                              /* START: resume, radio, or quit (a bet is forfeited) */
+            EWRAM_BSS static char rbuf[24];
+            { const char *x = "RADIO: ", *y = g_snd.radio_on ? station_name[g_snd.station] : "OFF"; int n = 0; while (*x) rbuf[n++] = *x++; while (*y && n < 23) rbuf[n++] = *y++; rbuf[n] = 0; }
+            g_hud.menu_item[0] = "RESUME"; g_hud.menu_item[1] = rbuf; g_hud.menu_item[2] = "QUIT GAME";
+            g_hud.menu_n = 3; g_hud.menu_title = "PAUSED";
+            EWRAM_BSS static char warn[40];
+            if (mini_bet) { q = warn; for (a = "QUITTING LOSES YOUR $"; *a; ) *q++ = *a++; q = num_str(q, mini_bet); for (a = " BET"; *a; ) *q++ = *a++; *q = 0; g_hud.menu_note = warn; }
+            else g_hud.menu_note = "FRIENDLY GAME: NOTHING TO LOSE";
+            if (up && mini_sel > 0) { mini_sel--; g_snd.step = 1; }
+            if (down && mini_sel < 2) { mini_sel++; g_snd.step = 1; }
+            g_hud.menu_sel = mini_sel;
+            int resume = (pressed & (KEY_START | KEY_B)) || ((pressed & KEY_A) && mini_sel == 0);
+            if ((pressed & KEY_A) && mini_sel == 1) { radio_step(1); g_hud.radio_t = 0; }
+            if ((pressed & KEY_A) && mini_sel == 2) {        /* quit: back to the counter, the stake stays with the house */
+                g_snd.door = 1; mini_paused = 0; g_hud.menu_n = 0; g_hud.menu_note = 0;
+                gstate = GS_SHOP; g_hud.mini = 0; menu_sel = 0;
+                q = note;
+                if (mini_bet) { for (a = "YOU QUIT. THE $"; *a; ) *q++ = *a++; q = num_str(q, mini_bet); for (a = " BET IS GONE"; *a; ) *q++ = *a++; *q = 0; }
+                else for (a = "YOU QUIT THE GAME"; (*q++ = *a++); ) ;
+                shop_note = note; shop_note_t = 4 * TICKS;
+                shop_update(0, 0, 0);                   /* the counter screen this frame: no flash of the street */
+                return;
+            }
+            if (resume) { mini_paused = 0; g_hud.menu_n = 0; g_hud.menu_note = 0; g_snd.door = 1; mini_resume(); }
+            return;
+        }
+        if (pressed & KEY_START) { mini_paused = 1; mini_sel = 0; g_snd.door = 1; return; }
+        g_hud.menu_n = 0;
         int r = mini_update(keys, pressed, dt);
         if (r) {
             gstate = GS_SHOP; g_hud.mini = 0;
-            static char note[32], bigt[12];
-            char *q = note; const char *a;
             if (r == 1) {                                /* the stake back plus the same again */
-                pl.money += mini_bet * 2; g_snd.sfx |= SFX_PASS | SFX_CASH;
                 if (shop_cur >= 0 && shops[shop_cur].type == SHOP_POOL) st.pool_wins++; else st.bowl_wins++;
-                for (a = "YOU WON! BET $"; *a; ) *q++ = *a++;
-                q = num_str(q, mini_bet); for (a = ", PAID $"; *a; ) *q++ = *a++; q = num_str(q, mini_bet * 2); *q = 0;
-                q = bigt; *q++ = '+'; *q++ = '$'; num_str(q, mini_bet * 2);
-                shop_big = bigt; shop_big_t = 3 * TICKS;
-            } else {
+                if (mini_bet) {
+                    pl.money += mini_bet * 2; g_snd.sfx |= SFX_PASS | SFX_CASH;
+                    for (a = "YOU WON! BET $"; *a; ) *q++ = *a++;
+                    q = num_str(q, mini_bet); for (a = ", PAID $"; *a; ) *q++ = *a++; q = num_str(q, mini_bet * 2); *q = 0;
+                    q = bigt; *q++ = '+'; *q++ = '$'; num_str(q, mini_bet * 2);
+                    shop_big = bigt; shop_big_t = 3 * TICKS;
+                } else { g_snd.sfx |= SFX_PASS; for (a = "YOU WON THE FRIENDLY GAME!"; (*q++ = *a++); ) ; }
+            } else if (mini_bet) {
                 for (a = "YOU LOST THE $"; *a; ) *q++ = *a++;
                 q = num_str(q, mini_bet); for (a = " BET"; *a; ) *q++ = *a++; *q = 0;
-            }
+            } else for (a = "YOU LOST. NO MONEY ON IT."; (*q++ = *a++); ) ;
             shop_note = note; shop_note_t = 4 * TICKS;
+            shop_update(0, 0, 0);                       /* the counter screen this frame: no flash of the street */
         }
         return;
     }

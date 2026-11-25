@@ -632,6 +632,7 @@ void mini_start(int kind)
     game_kind = kind; result = 0; phase_t = 0; banner = 0; banner_t = 0;
     if (kind == MINI_BOWL) bowl_start(); else pool_start();
 }
+void mini_resume(void) { input_lock = 1; }
 int mini_update(u16 keys, u16 pressed, int dt)
 {
     if (banner_t > 0) banner_t -= dt;

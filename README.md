@@ -22,6 +22,15 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.47
+- **Free games:** every bowling alley and pool hall now has a FRIENDLY GAME option that costs nothing.
+  Win or lose, no money changes hands (wins still count on the stats screen).
+- **Pause inside pool and bowling:** START opens a menu to resume, change the radio station, or quit
+  back to the counter. Quitting a game with money on it forfeits the bet (the menu warns you first).
+  The game waits for you to let go of A after resuming, so the menu press never takes a shot.
+- Fixed the cash shown in shops not updating after you bought something or placed a bet.
+- Fixed a one-frame flash of the street when a game ended and you returned to the counter.
+
 ## What's new in v0.46
 Built on v0.44, the last version that boots on real hardware (v0.45 was withdrawn).
 - **City map in the pause menu:** pause > MAP shows the whole city with every shop marked by type
