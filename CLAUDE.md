@@ -83,6 +83,18 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - Player beam: `game_beam` (game.c) projects a ground wedge (plus a wall splash when `world_point_blocked` hits within 40 m) into a window span per scanline (`beam_tab`) and a brightness per scanline (`beam_lv`). `beam_vblank` (gba_main.c, called from the VBlank IRQ in divmod.s before the flip) feeds them to WIN0H/WIN1H by HBlank DMA 0 and to BLDY by HBlank DMA 3. DMA 3 is otherwise used only by `blit_img` on the 2D screens, where the beam is off. Brightening applies to BG2 only, so HUD OBJ glyphs are untouched.
 - `gbaprof` emulates both tables in its frame dumps; the host build applies them in `dump`. Test builds: `EXTRA_CF="-DDEBUG_HOUR=23" ./build.sh` starts a new game at 23:00.
 
+## OPEN BUG: v0.45 does not boot on the owner's real GBA (v0.44 does)
+- Found after v0.45 was merged to main. Both boot in mGBA and gbaprof. The missing boot logo is not the cause, since v0.44 had none either (the owner's cart skips the check); fixrom.py now writes the logo anyway.
+- Changes between v0.44 and v0.45 to bisect:
+  1. Packed sprites (`sprpack.bin`, ROM 26.3 -> 19.7 MB).
+  2. `spans.s` assembly.
+  3. Unrolled division in `divmod.s` (`add pc, pc, ...` jump table).
+  4. `-O3` for ROM code (`ROMOPT`).
+  5. `world_collide` moved to ROM.
+  6. IWRAM `__bss_end` 0x6FD0 -> 0x7420.
+  7. `fb_lo`/`fb_hi`.
+- Plan: build v0.44 plus one change at a time and have the owner test each ROM on hardware. mGBA runs headless through libmgba (apt `libmgba-dev`; a small runner in the scratchpad, `mgrun.c`).
+
 ## Speed work rules (v0.45)
 - **Never store single bytes to VRAM.** A byte store writes the value into both pixels of the pair. Use `fb_lo` / `fb_hi` (engine.h, volatile halfword read-modify-write); plain C like `*p = (*p & 0x00FF) | (v << 8)` can be compiled into `strb`. Check with `llvm-objdump -d build/render.o | grep strb`.
 - **Prove every speed change is pixel-identical:** play the benchmark drive on the old and new ROM with `NOOBJ=1 FIXDT=819` and compare the dumped frames byte for byte (NOOBJ leaves out the hardware-sprite layer, whose minimap and FPS digits change with timing). `gbaprof` indexes the key script by game frame (one read of the game clock per main-loop pass), so runs are identical however long frames take.
