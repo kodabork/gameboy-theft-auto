@@ -64,5 +64,7 @@ typedef struct { int x, y; u16 frame; u8 player, pad; } PersonReq;
 typedef struct { s16 x, y; u16 pa; u16 frame; u8 half, dbl, hidden, player; } ObjPlace;
 int render_people(const PersonReq *req, int n, ObjPlace *out);
 void palette_build(u16 *pal);
+void palette_tod(volatile u16 *out, const u16 *day, int minute);   /* time-of-day re-tint of the day palette */
+int tod_daylight(int minute);
 
 #endif

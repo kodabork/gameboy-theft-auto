@@ -75,6 +75,9 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 ## Stats (v0.40)
 - `Stats st` in game.c: counters updated where things happen (`kill_ped`, `car_damage`, the muzzle flash in `player_fire`, `respawn_player`, `shop_leave`, the minigame payout, and once a frame for time, distance and wanted). Saved by `save_write` at SRAM offset 256 (`stats_write`, own magic and checksum), read back in `load_game` after `new_game_state`. Shown by `stats_show` (pause menu > STATS).
 
+## Day and night (v0.43)
+- `game_tod()` = 9:00 + `st.play_s` seconds as minutes (one game minute per real second, saved with the stats). `palette_tod` (world.c, ROM) re-tints the day palette into `PAL_BG` when the minute changes: channel scaling toward moonlit blue, a dusk/dawn warmth peak at 19:00 and 6:00, a navy sky gradient (entries 0-7), and warm lit windows on the light glass entries (`WPAL(MAT_GLASS, f, 1)`). HUD colours 252-255 are untouched; `game_daylight_screen()` keeps title, shop and minigame screens in daylight. Street crime runs more often at night. Host debug key `0xD00 + hour` sets the clock.
+
 ## Memory budget
 - **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
 - Put big arrays in EWRAM with `EWRAM_BSS`.

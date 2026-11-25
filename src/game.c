@@ -1049,7 +1049,7 @@ static void street_end(void)
     if (crim_police >= 0) { Car *c = &cars[crim_police]; if (c->ai == AI_POLICE && wanted == 0) c->ai = AI_NONE; }
     if (crim_car >= 0 && cars[crim_car].active && cars[crim_car].ai == AI_TRAFFIC) cars[crim_car].ai = AI_TRAFFIC;
     crim_ped = -1; crim_car = -1; crim_police = -1;
-    crime_t = (18 + (int)(rnd() % 20)) * TICKS;
+    crime_t = (tod_daylight(game_tod()) < 128 ? 12 + (int)(rnd() % 14) : 18 + (int)(rnd() % 20)) * TICKS;   /* busier after dark */
 }
 static void dispatch_police(int x, int y)
 {
@@ -2927,6 +2927,9 @@ static void meta_update(u16 keys, u16 pressed, int dt)
 }
 
 int game_title_active(void) { return gstate == GS_TITLE; }
+/* time of day in minutes (0..1439): one game minute per real second of play, starting at 9:00 */
+int game_tod(void) { return (9 * 60 + st.play_s) % 1440; }
+int game_daylight_screen(void) { return gstate == GS_TITLE || gstate == GS_SHOP || gstate == GS_MINI; }
 
 void game_update(u16 keys, int dt)
 {
@@ -3157,6 +3160,7 @@ void game_update(u16 keys, int dt)
             int dx = (cars[i].x - pl.x) >> 8, dy = (cars[i].y - pl.y) >> 8;
             if (dx * dx + dy * dy < M(3.5) * M(3.5)) g_hud.near_car = 1;
         }
+    g_hud.clock_min = game_tod();
     g_hud.hp = pl.hp; g_hud.money = pl.money; g_hud.wanted = wanted;
     g_hud.wanted_flash = wanted > 0 && wanted_cool > 4 * TICKS;
     g_hud.weapon = pl.in_car >= 0 ? 0 : pl.weapon;
@@ -3626,6 +3630,11 @@ void game_debug_mission(int m)         /* jump to mission m, standing next to it
     if (pl.in_car >= 0) { cars[pl.in_car].ai = AI_NONE; pl.in_car = -1; }
     int x = m < NACT1 ? mission_start_x[m] : M(1) * story_defs[m - NACT1].sx, y = m < NACT1 ? mission_start_y[m] : M(1) * story_defs[m - NACT1].sy;
     pl.x = Q8(x - M(5)); pl.y = Q8(y); pl.head = 0; cam_ang = 0;
+}
+void game_debug_time(int hour)          /* set the clock to hour:00 */
+{
+    int now = game_tod(), want = hour * 60;
+    st.play_s += (want - now + 1440) % 1440;
 }
 void game_debug_set(int w, int give_guns)
 {

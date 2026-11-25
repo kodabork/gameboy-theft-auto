@@ -28,7 +28,8 @@ typedef struct {
     int shop, shop_pose, shop_cash, mini;        /* mini: a minigame is on screen */
                  /* shop interior: 1 + type (0 = outside), clerk pose, hold-up cash */
     const char *shop_name, *shop_note, *shop_line, *shop_big;
-    const char *stats_line[16]; int stats_n;     /* pause menu > STATS page */
+    const char *stats_line[16]; int stats_n;
+    int clock_min;                               /* time of day for the HUD clock */     /* pause menu > STATS page */
     const char *dlg_who, *dlg_l1, *dlg_l2;       /* story dialogue page */
     int cutscene;                                /* letterbox the dialogue */
     const char *radio_name; int radio_t;         /* station name, shown briefly after a change */
@@ -46,6 +47,8 @@ extern GameHud g_hud;
 void game_init(void);
 void game_update(u16 keys, int dt);           /* keys: 1 = pressed; dt in 1/16384 s */
 int game_title_active(void);
+int game_tod(void);                           /* time of day, minutes 0..1439 */
+int game_daylight_screen(void);               /* title, shop and minigame screens keep daylight colours */
 void game_build_scene(Camera *cam, Sprite *out, int *nout);
 
 #endif

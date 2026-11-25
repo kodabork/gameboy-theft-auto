@@ -22,6 +22,16 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.43
+- **Day and night.** A full day lasts 24 minutes (one game minute per real second), with a clock under
+  your money.
+  - Golden light at sunset and sunrise, a navy sky and dark blue streets at night.
+  - Building windows light up warm after dark, with a mix of lit and dark windows.
+  - Street crime happens more often at night.
+  - Shops, pool, bowling and the title screen keep daylight colours.
+- The clock follows your play time, so a loaded game picks up at the time of day you left it.
+- It works by re-tinting the screen's colour palette once a game minute, so it costs almost nothing.
+
 ## What's new in v0.42
 - **Smoother animation for everyone:** walking and running now use 16 frames per step instead of 12.
 - **People breathe:** anyone standing still (Nick included) has a slow breathing and weight-shift loop
