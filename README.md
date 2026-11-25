@@ -22,6 +22,10 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.41
+- Smoother shading on every car and person: sprites are matched to the game's colour palette with a
+  light dither, so paint, skin and clothing gradients band less. Same speed, same ROM size.
+
 ## What's new in v0.40
 - **Women character models.** A new women's body (narrower shoulders, a defined waist and hips, slimmer
   limbs, longer hair, and skirts with bare legs) in four outfits:
