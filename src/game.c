@@ -97,7 +97,7 @@ static int cam_ang, cam_dist = M(7);
 static int impact;
 static u16 keys_prev;
 static int prev_step;
-static u32 frame_no;
+static u32 frame_no, frame_time;          /* frame_time: game clock in TICKS, for idle breathing */
 static u8 near_cars[MAX_CARS]; static int n_near;   /* active cars within ~70 m of the player */
 EWRAM_BSS GameHud g_hud;
 
@@ -2931,7 +2931,7 @@ int game_title_active(void) { return gstate == GS_TITLE; }
 void game_update(u16 keys, int dt)
 {
     if (dt > TICKS / 8) dt = TICKS / 8;
-    frame_no++;
+    frame_no++; frame_time += dt;
     u16 pressed = keys & ~keys_prev;
     keys_prev = keys;
     if (g_hud.msg_t > 0) g_hud.msg_t -= dt;
@@ -3223,15 +3223,17 @@ static void push(int x, int y, int frame) { push_h(x, y, frame, 0); }
 /* frame within a person set: idle / walk / run / aim, 18 per view direction */
 /* frame within a person set from the view-relative heading (4096 per turn): 16 directions, of which
    0..8 are stored and 9..15 drawn mirrored (bit 15); walk and run cycles have PED_CYCLE frames */
-static int ped_frame(int base, int rel, int moving, int running, int aiming, int phase)
+/* frames per view direction: PED_IDLE breathing frames, PED_CYCLE walk, PED_CYCLE run, then aim.
+   breath: which breathing frame a standing person shows (from the game clock, offset per person) */
+static int ped_frame(int base, int rel, int moving, int running, int aiming, int phase, int breath)
 {
     int d = ((rel + 128) >> 8) & 15, flip = 0;
     if (d > 8) { d = 16 - d; flip = 0x8000; }
     int cyc = ((phase & 511) * PED_CYCLE) >> 9;
-    int k = 0;
-    if (aiming) k = 1 + 2 * PED_CYCLE;
-    else if (running) k = 1 + PED_CYCLE + cyc;
-    else if (moving) k = 1 + cyc;
+    int k = breath & (PED_IDLE - 1);
+    if (aiming) k = PED_IDLE + 2 * PED_CYCLE;
+    else if (running) k = PED_IDLE + PED_CYCLE + cyc;
+    else if (moving) k = PED_IDLE + cyc;
     return (base + d * PED_DIR_FRAMES + k) | flip;
 }
 /* ragdoll in flight: 3 stored views (behind, side, front) x 8 pitch angles; the other side mirrored */
@@ -3345,7 +3347,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
                 if (d > 8) { d = 16 - d; flip = 0x8000; }
                 push(plx(), ply(), (PED_PLAYER + PED_STANCE + d * PED_NSTANCE + pl.weapon - 2) | flip);
             }
-            else push(plx(), ply(), ped_frame(PED_PLAYER, rel, pl.moving, pl.running, pl.aim_t > 0, pl.phase));
+            else push(plx(), ply(), ped_frame(PED_PLAYER, rel, pl.moving, pl.running, pl.aim_t > 0, pl.phase, (int)(frame_time >> 13)));
         }
     }
     view_lim = M(110);
@@ -3380,7 +3382,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
             push(x, y, base + PED_DOWN + dir);
         } else {
             int moving = p->state != S_IDLE && !p->aim;
-            push(x, y, ped_frame(base, rel, moving, p->run, p->aim, p->phase));
+            push(x, y, ped_frame(base, rel, moving, p->run, p->aim, p->phase, (int)(frame_time >> 13) + i));
         }
     }
     view_lim = M(40);

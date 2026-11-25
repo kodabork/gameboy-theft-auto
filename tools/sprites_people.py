@@ -53,6 +53,9 @@ OUTFITS = {
                    skin=(0.80, 0.62, 0.50), hair=(0.82, 0.70, 0.42), long=True),
     'cop':    dict(top=(0.08, 0.10, 0.22), shirt=(0.08, 0.10, 0.22), legs=(0.06, 0.07, 0.15), shoes=(0.03, 0.03, 0.03),
                    skin=(0.64, 0.46, 0.34), hair=(0.05, 0.04, 0.04), long=False, cap=True),
+    # an older man (v0.42): older=True gives a heavier middle, a slight stoop, thinning hair and a moustache
+    'bohdan': dict(top=(0.44, 0.33, 0.22), shirt=(0.74, 0.70, 0.60), legs=(0.24, 0.22, 0.20), shoes=(0.22, 0.14, 0.08),
+                   skin=(0.80, 0.62, 0.52), hair=(0.74, 0.73, 0.71), long=False, older=True),
     # women (v0.40): female=True gives the women's body; skirt=True a knee-length skirt with bare legs below
     'dee':    dict(top=(0.10, 0.13, 0.26), shirt=(0.88, 0.88, 0.86), legs=(0.12, 0.12, 0.14), shoes=(0.05, 0.04, 0.04),
                    skin=(0.36, 0.23, 0.16), hair=(0.04, 0.03, 0.03), long=False, female=True, bob=True),
@@ -83,7 +86,8 @@ GAIT = {   # hip flexion, knee flexion curves (radians) for one leg over its cyc
 class Human:
     def __init__(self, outfit, phase=0.0, moving=True, down=False, down_seed=0, mode=None, gun=False, tumble=0.0, weapon='pistol'):
         o = OUTFITS[outfit]
-        self.o = {k: np.array(v, f32) for k, v in o.items() if k not in ('long', 'cap', 'female', 'skirt', 'bob')}
+        self.o = {k: np.array(v, f32) for k, v in o.items() if k not in ('long', 'cap', 'female', 'skirt', 'bob', 'older')}
+        self.older = o.get('older', False)
         self.long = o['long']; self.cap = o.get('cap', False)
         self.fem = o.get('female', False); self.skirt = o.get('skirt', False); self.bob = o.get('bob', False)
         if mode is None: mode = 'down' if down else ('walk' if moving else 'idle')
@@ -122,9 +126,12 @@ class Human:
                 th = 0.10 * sg; kn = 0.10; push = 0.0; spread = 0.05
                 if sg < 0:  ar_fwd, ar_out, eb = 1.50, -0.12, 0.02      # right arm straight out
                 else:       ar_fwd, ar_out, eb = 1.15, -0.55, 0.45      # left hand supports
-            else:   # idle
-                th = 0.03 * sg; kn = 0.06 if sg > 0 else 0.02; push = 0.0; spread = 0.045
-                ar_fwd, ar_out, eb = 0.02, 0.11, 0.24
+            else:   # idle: a slow breath and weight shift over the cycle (phase 0 = the old still pose)
+                bs = np.sin(phase)
+                th = 0.03 * sg + 0.025 * bs; kn = (0.06 if sg > 0 else 0.02) + 0.03 * max(0.0, sg * bs); push = 0.0; spread = 0.045
+                ar_fwd, ar_out, eb = 0.02 + 0.03 * bs * sg, 0.11 + 0.02 * bs, 0.24 + 0.04 * bs
+                lean = 0.018 * bs; twist = 0.045 * bs
+            if self.older and mode not in ('down', 'tumble'): lean += 0.06 if sg > 0 else 0.0   # a slight stoop
             hip = np.array((sg * 0.098 * np.sin(twist), sg * 0.098 * np.cos(twist), -0.045), f32)
             knee = hip + np.array((np.sin(th), sg * spread, -np.cos(th)), f32) * 0.43
             sha = th - kn
@@ -269,6 +276,9 @@ class Human:
             waist = sd_ellipsoid(p, J['waist'], (0.108, 0.160, 0.13))
             chest = sd_ellipsoid(p, J['chest'], (0.128, 0.188, 0.160))
             torso = smin(smin(waist, chest, 0.07), pelvis, 0.06)
+        if self.older:                               # a comfortable middle
+            belly = sd_ellipsoid(p, J['waist'] + np.array((0.045, 0, 0.0), f32), (0.115, 0.150, 0.125))
+            torso = smin(torso, belly, 0.05)
         neck = sd_round_cone(p, J['neck0'], J['neck1'], 0.056, 0.050)
         h = J['head']
         head = sd_ellipsoid(p, h, (0.103, 0.085, 0.118))
@@ -279,6 +289,10 @@ class Human:
         face = smin(smin(head, jaw, 0.03), np.minimum(nose, ears), 0.01)
         hair = sd_ellipsoid(p, h + (-0.012, 0, 0.022), (0.102, 0.085, 0.108))
         hair = np.maximum(hair, plane(p, h + (0.055, 0, 0.012), (0.85, 0, -0.55)))
+        if self.older:                               # receding: a bare crown, grey at the sides and back, and a moustache
+            hair = np.maximum(hair, -np.maximum(sd_ellipsoid(p, h + (0.03, 0, 0.07), (0.075, 0.060, 0.06)), h[2] + 0.035 - p[..., 2]))
+            tash = sd_ellipsoid(p, h + (0.088, 0, -0.035), (0.018, 0.034, 0.011))
+            hair = np.minimum(hair, tash)
         if self.cap:
             crown = np.maximum(sd_ellipsoid(p, h + (-0.005, 0, 0.045), (0.108, 0.092, 0.085)), h[2] + 0.015 - p[..., 2])
             brim = sd_ellipsoid(p, h + (0.085, 0, 0.03), (0.075, 0.085, 0.012))
