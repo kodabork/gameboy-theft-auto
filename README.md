@@ -22,6 +22,17 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.39
+- **It's much harder to get a wanted level by accident:**
+  - Killing or running someone over only gets you a star if a cop is close enough to see it (35 m).
+    With no cop around, there's a 1-in-4 chance a passer-by calls it in (it used to be every time).
+  - Gunfire and shooting cars only count with a cop within 25 m (was 40 m).
+  - Police cars only react to a real ram, not a scrape in traffic.
+  - Stars fade faster: one drops after 9 seconds out of police sight (was 12 s, and "sight" is now
+    45 m instead of 55 m).
+  - Shooting or killing a cop still brings the heat straight away, and missions that hand you stars
+    are unchanged.
+
 ## What's new in v0.38
 - **Pool and bowling run much smoother:** bowling at about 60 fps (it was about 7), pool at 60 fps while
   you aim and 30-45 while the balls roll. The background picture is now copied by hardware DMA and the

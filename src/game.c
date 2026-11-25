@@ -508,6 +508,7 @@ static void eject_driver(Car *c);
 static void kill_ped(Ped *p, int vx, int vy, int by_player, int fling);
 static void player_hurt(int dmg);
 static void crime(int level);
+static int witnessed(int x, int y, int cop_range);
 static void msg(const char *a, const char *b, int secs);
 
 static void car_damage(Car *c, int d, int by_player)
@@ -631,7 +632,7 @@ static void collide_pair(Car *A, Car *B)
     if (pa_ || pb_) {
         int v = -vn / 4096; if (v > impact) impact = v;
         Car *o = pa_ ? B : A;
-        if (o->police && o->ai == AI_POLICE && wanted == 0) wanted = 1;
+        if (o->police && wanted == 0 && -vn / 4096 > 6) { wanted = 1; wanted_cool = 0; }   /* a real ram, not a scrape */
         Car *p = pa_ ? A : B;
         int a2 = p->head >> 8;
         p->speed = ((p->vx >> 4) * icos(a2) + (p->vy >> 4) * isin(a2)) >> 10;
@@ -728,6 +729,18 @@ static int cop_nearby(int range)
     return 0;
 }
 
+/* did anyone who matters see it? a cop close by always does; otherwise a passer-by near the spot
+   calls it in one time in four */
+static int witnessed(int x, int y, int cop_range)
+{
+    if (cop_nearby(cop_range)) return 1;
+    for (int i = 0; i < PED_CIV_END; i++) {
+        Ped *p = &peds[i];
+        if (!p->active || p->down || p->type != P_CIV) continue;
+        if (dist_approx((p->x >> 8) - x, (p->y >> 8) - y) < M(18)) return (rnd() & 3) == 0;
+    }
+    return 0;
+}
 static void crime(int level)
 {
     int nw = level;
@@ -795,7 +808,7 @@ static void kill_ped(Ped *p, int vx, int vy, int by_player, int fling_m)
     }
     if (by_player) {
         if (p->type == P_COP) crime(wanted + 2 > 2 ? wanted + 2 : 2);
-        else if (p->type == P_CIV) crime(1);
+        else if (p->type == P_CIV && witnessed(p->x >> 8, p->y >> 8, M(35))) crime(1);
     }
 }
 
@@ -1271,7 +1284,7 @@ static void update_rockets(int dt)
         r->active = 0;
         if (hc && !IS_WRECK(hc)) car_damage(hc, 1000, 1);          /* direct hit: burning, about to go up */
         explode_at(r->x >> 8, r->y >> 8, hc);
-        if (cop_nearby(M(45))) crime(2);
+        if (cop_nearby(M(35))) crime(2);
     }
 }
 
@@ -1376,7 +1389,7 @@ static void player_fire(u16 keys, u16 pressed, int dt)
             aimang = iatan2((c->y >> 8) - ply(), (c->x >> 8) - plx());
             pl.head = Q8(aimang);
             car_damage(c, car_dmg[w], 1);
-            if (c->police) crime(2); else if (c->ai == AI_TRAFFIC && cop_nearby(M(40))) crime(1);
+            if (c->police) crime(2); else if (c->ai == AI_TRAFFIC && cop_nearby(M(25))) crime(1);
             g_snd.hit = 1; g_snd.sfx |= SFX_RICOCHET;              /* bullet on sheet metal */
         } else if ((rnd() & 3) == 0) g_snd.sfx |= SFX_RICOCHET;   /* a miss whines off a wall */
     }
@@ -1384,7 +1397,7 @@ static void player_fire(u16 keys, u16 pressed, int dt)
     g_snd.shot = w; g_snd.shot_vol = 64;
     if (w == 3) g_snd.sfx |= SFX_PUMP; else if (w == 4) g_snd.sfx |= SFX_BOLT; else if (w == 1) g_snd.sfx |= SFX_SHELL;
     panic(plx(), ply(), w == 1 ? M(35) : M(50));
-    if (cop_nearby(M(40))) crime(1);
+    if (cop_nearby(M(25))) crime(1);
 }
 
 /* a carjacked driver is pulled out on the driver's side and runs (or sometimes squares up) */
@@ -2988,10 +3001,10 @@ void game_update(u16 keys, int dt)
     /* wanted level: police respond, and it cools off when no cop is around */
     if (wanted > 0) {
         if (active_police() < (wanted < 4 ? wanted : 4) && (frame_no & 31) == 0) spawn_police();
-        if (cop_nearby(M(55))) wanted_cool = 0;
+        if (cop_nearby(M(45))) wanted_cool = 0;
         else {
             wanted_cool += dt;
-            if (wanted_cool > 12 * TICKS) { wanted--; wanted_cool = 0; }
+            if (wanted_cool > 9 * TICKS) { wanted--; wanted_cool = 0; }
         }
         if (pl.arrest_t > TICKS * 6 / 5 && pl.dead_t <= 0) { pl.dead_t = 3 * TICKS; pl.dead_kind = 1; big("BUSTED", 0, 3); g_snd.sfx |= SFX_FAIL; }
     } else {
