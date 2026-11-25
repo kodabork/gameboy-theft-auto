@@ -314,6 +314,11 @@ void hud_draw(u16 *fb)
     /* money, top right */
     buf[0] = '$'; fmt_int(buf + 1, g_hud.money);
     text(236 - text_width(buf, 1), 4, buf, COL_WHITE, 1);
+    {   /* the clock, under the money */
+        int m = g_hud.clock_min;
+        buf[0] = (char)('0' + m / 600); buf[1] = (char)('0' + m / 60 % 10); buf[2] = ':'; buf[3] = (char)('0' + m % 60 / 10); buf[4] = (char)('0' + m % 10); buf[5] = 0;
+        text(236 - text_width(buf, 1), 24, buf, COL_WHITE, 1);
+    }
     /* wanted stars */
     if (g_hud.wanted > 0)
         for (int i = 0; i < 5; i++)

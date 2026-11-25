@@ -105,6 +105,9 @@ int main(void)
     palette_build(pal);
     render_init();
     for (int i = 0; i < 256; i++) PAL_BG[i] = pal[i];
+    EWRAM_BSS static u16 day_pal[256];
+    for (int i = 0; i < 256; i++) day_pal[i] = pal[i];
+    int tod_shown = -1;
     for (int i = 0; i < 128; i++) set_sprite(i, 0, 0, -1);
     make_tiles();
     game_init();
@@ -137,6 +140,10 @@ int main(void)
 
         /* game logic runs while the previous frame waits for its VBlank flip */
         game_update(keys, dt);
+        {   /* day and night: re-tint the palette whenever the minute changes (daylight on the 2D screens) */
+            int m = game_daylight_screen() ? 12 * 60 : game_tod();
+            if (m != tod_shown) { tod_shown = m; palette_tod(PAL_BG, day_pal, m); }
+        }
         Camera cam; int nobj;
         if (!g_hud.shop && !g_hud.mini) game_build_scene(&cam, sprs, &nobj); else nobj = 0;
         while (flip_req) ;

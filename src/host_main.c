@@ -29,6 +29,7 @@ int main(int argc, char **argv)
     FILE *af = fopen("../build/assets.bin", "rb"); fread(spr_pixels, 1, sizeof spr_pixels, af); fclose(af);
     FILE *tf = fopen("../build/terrain.bin", "rb"); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
     palette_build(pal);
+    static u16 day_pal[256]; for (int i = 0; i < 256; i++) day_pal[i] = pal[i];
     render_init();
     game_init();
     /* script: "frames:keys,frames:keys,...@dumpframe,..." keys hex */
@@ -49,6 +50,7 @@ int main(int argc, char **argv)
             if (keys >= 0x10000) { void game_debug_block(int, int, int); game_debug_block((keys >> 8) & 255, keys & 255, (keys >> 16) - 1); keys = 0; }
             if (keys >= 0xF10 && keys < 0xF30) { void game_debug_shop(int); game_debug_shop(keys - 0xF10); keys = 0; }
             if (keys >= 0xE00 && keys < 0xE30) { void game_debug_mission(int); game_debug_mission(keys - 0xE00); keys = 0; }
+            if (keys >= 0xD00 && keys < 0xD18) { void game_debug_time(int); game_debug_time(keys - 0xD00); keys = 0; }
             if (keys == 0xFFE) { game_debug_set(3, 1); keys = 0; }
             if (keys == 0xF00) { void game_debug_burn_self(void); game_debug_burn_self(); keys = 0; }
             if (keys == 0xF01) { void game_debug_near_cat(void); game_debug_near_cat(); keys = 0; }
@@ -58,6 +60,7 @@ int main(int argc, char **argv)
             if (keys >= 0xFE0 && keys <= 0xFE8) { void game_debug_tp_mission(int); game_debug_tp_mission(keys - 0xFE0); keys = 0; }
             if (keys >= 0xFF0 && keys <= 0xFF3) { void game_debug_tp_mission(int); game_debug_tp_mission(keys - 0xFF0); keys = 0; }
             game_update((u16)keys, 16384 / 20);
+            { int game_tod(void), game_daylight_screen(void); palette_tod(pal, day_pal, game_daylight_screen() ? 720 : game_tod()); }
             for (int k = 0; k < nd; k++) if (dumpat[k] == frame) {
                 Camera cam; int no;
                 game_build_scene(&cam, objs, &no);

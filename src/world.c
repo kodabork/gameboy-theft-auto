@@ -165,3 +165,59 @@ void palette_build(u16 *pal)
     pal[254] = 0x7FFF;          /* HUD white */
     pal[255] = 0x0000;          /* HUD black */
 }
+
+/* ------------------------------------------------------------ day and night */
+/* The whole screen is one 256-colour palette, so time of day is a palette re-tint: darker and bluer
+   at night, warm at dusk and dawn, a navy night sky, and building windows lit up warm. minute: 0..1439.
+   Entries 252..255 (HUD colours) are left alone. Runs in ROM: a few hundred entries every few frames. */
+static int clamp255(int v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
+static int smooth(int a, int b, int x)                  /* 0..256 ramp from a to b (minutes) */
+{
+    if (x <= a) return 0; if (x >= b) return 256;
+    return (x - a) * 256 / (b - a);
+}
+int tod_daylight(int m)                                  /* 256 = full day, 0 = night */
+{
+    if (m < 4 * 60 + 30 || m >= 21 * 60) return 0;
+    if (m < 7 * 60 + 30) return smooth(4 * 60 + 30, 7 * 60 + 30, m);
+    if (m < 17 * 60 + 30) return 256;
+    return 256 - smooth(17 * 60 + 30, 21 * 60, m);
+}
+static int warmth(int m)                                 /* 0..256, peaks at sunset (19:00) and sunrise (6:00) */
+{
+    int a = m - 19 * 60, b = m - 6 * 60;
+    if (a < 0) a = -a; if (b < 0) b = -b;
+    int d = a < b ? a : b;
+    return d >= 90 ? 0 : (90 - d) * 256 / 90;
+}
+__attribute__((section(".romcode"))) void palette_tod(volatile u16 *out, const u16 *day, int minute)
+{
+    int dl = tod_daylight(minute), w = warmth(minute), n = 256 - dl;
+    /* world and sprites: scale each channel; night is moonlit blue, dusk adds orange */
+    int mr = 256 - (n * 150 >> 8) + (w * 40 >> 8), mg = 256 - (n * 140 >> 8) + (w * 6 >> 8), mb = 256 - (n * 90 >> 8) - (w * 40 >> 8);
+    for (int i = 8; i < 252; i++) {
+        u16 c = day[i];
+        int r = (c & 31) << 3, g = ((c >> 5) & 31) << 3, b = ((c >> 10) & 31) << 3;
+        out[i] = rgb15(clamp255(r * mr >> 8), clamp255(g * mg >> 8), clamp255(b * mb >> 8));
+    }
+    /* lit windows: the glass in the light variant glows a warm yellow after dark */
+    for (int f = 0; f < 4; f++) {
+        int k = WPAL(MAT_GLASS, f, 1), u = n * (4 - f) * 5 / 32;    /* about 60% of the way to lamp-light, fading with distance */
+        u16 c = out[k];
+        int r = (c & 31) << 3, g = ((c >> 5) & 31) << 3, b = ((c >> 10) & 31) << 3;
+        out[k] = rgb15(r + ((214 - r) * u >> 8), g + ((168 - g) * u >> 8), b + ((96 - b) * u >> 8));
+    }
+    /* sky: day gradient, then sunset orange at the horizon, then navy night */
+    static const u8 night_top[3] = { 10, 16, 40 }, night_hor[3] = { 34, 42, 72 }, dusk_top[3] = { 90, 80, 140 }, dusk_hor[3] = { 250, 150, 80 };
+    for (int i = 0; i < 8; i++) {
+        u16 c = day[i];
+        int r = (c & 31) << 3, g = ((c >> 5) & 31) << 3, b = ((c >> 10) & 31) << 3;
+        int t = i < 6 ? i * 256 / 5 : 200;                 /* 0 top .. 256 horizon; clouds near the horizon colour */
+        int nr = night_top[0] + ((night_hor[0] - night_top[0]) * t >> 8), ng = night_top[1] + ((night_hor[1] - night_top[1]) * t >> 8), nb = night_top[2] + ((night_hor[2] - night_top[2]) * t >> 8);
+        if (i >= 6) { nr += 14; ng += 14; nb += 16; }      /* clouds catch a little city glow */
+        int dr = dusk_top[0] + ((dusk_hor[0] - dusk_top[0]) * t >> 8), dg = dusk_top[1] + ((dusk_hor[1] - dusk_top[1]) * t >> 8), db = dusk_top[2] + ((dusk_hor[2] - dusk_top[2]) * t >> 8);
+        r = r + ((dr - r) * w >> 9); g = g + ((dg - g) * w >> 9); b = b + ((db - b) * w >> 9);   /* half-strength dusk tint */
+        r = nr + ((r - nr) * dl >> 8); g = ng + ((g - ng) * dl >> 8); b = nb + ((b - nb) * dl >> 8);
+        out[i] = rgb15(clamp255(r), clamp255(g), clamp255(b));
+    }
+}
