@@ -196,12 +196,16 @@ pal_rgb = (pal_lab / np.array((1.0, 1.25, 0.8), np.float32)) ** 2
 SH_IDX = NCOL                                                # index of shadow colour (1-based)
 
 # ------------------------------------------------------------------- write
+BAYER2 = (np.array([[0, 2], [3, 1]], np.float32) + 0.5) / 4 - 0.5
+DITHER_AMP = 0.05
 blob = bytearray(); table = []
 for col, mask, smask, ox, oy, upx in frames:
     h, w = mask.shape
     lab = np.zeros((h, w), np.uint8)
     if mask.any():
-        L_ = tolab(col[mask])
+        yy, xx = np.mgrid[0:h, 0:w]                          # light 2x2 ordered dither: smoother paint and skin shading
+        cd = np.clip(col + (BAYER2[yy & 1, xx & 1] * DITHER_AMP)[..., None], 0, 1)
+        L_ = tolab(cd[mask])
         idx = np.empty(len(L_), np.int32)
         for k in range(0, len(L_), 20000):
             idx[k:k + 20000] = ((L_[k:k + 20000, None, :] - pal_lab[None, :NCOL - 1]) ** 2).sum(-1).argmin(1)
