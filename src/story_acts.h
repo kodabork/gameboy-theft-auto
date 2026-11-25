@@ -1,7 +1,7 @@
 /* Acts Two to Four of STORY.md: missions 10-40 as step lists for the mission engine in game.c.
    Included once, from game.c. Coordinates in metres; a city block is 64 m (see CLAUDE.md, Map).
    Dialogue lines are at most 35 characters. Speakers: NICK, MARTA, JINX, RUDY, BOHDAN, DEE, KANE,
-   PRYCE, MERCER. Models: Marta and Dee have their own women's models; Jinx green, Rudy white, Bohdan grey, Kane and Pryce
+   PRYCE, MERCER. Models: Marta and Dee have their own women's models; Jinx green, Rudy white, Bohdan his own older-man model, Kane and Pryce
    suit, Mercer and the Blackline guards in uniform. */
 
 #define AT(bx, by, ox, oy) (bx) * 64 + (ox), (by) * 64 + (oy)
@@ -214,7 +214,7 @@ static const Page p24[] = {
     { "NICK", "I'LL DRIVE YOU HOME TONIGHT.", 0 },
     { "BOHDAN", "GOOD. AND THEN YOU TALK TO THEM.", 0 } };
 static const Step m24[] = {
-    S_PICKUP(PED_GREY, AT(1, 6, 13, 30), 0, "PICK UP BOHDAN AT THE SHOP", 0),
+    S_PICKUP(PED_BOHDAN, AT(1, 6, 13, 30), 0, "PICK UP BOHDAN AT THE SHOP", 0),
     S_HUNT(2, 0, CAR_SEDAN_SILVER, "THEY'RE FOLLOWING YOU", "DEAL WITH THEM"),
     S_GO(F_CAR, ROADN(2, 15), 0, "DRIVE BOHDAN HOME", "IN THE HEIGHTS"),
     S_KILL(3, F_HERE, PED_SUIT, NS(2, 15), 100, "MORE WAITING AT THE APARTMENT!", 0) };
@@ -387,7 +387,7 @@ static const Page a40[] = {
     { "NICK", "I'LL STAY. SOMEONE HAS TO FIX THE", "CARS I KEEP BREAKING." },
     { "", "THE END. THANKS FOR PLAYING.", "THE CITY IS YOURS. FREE ROAM ON." } };
 static const Step m40[] = {
-    S_PICKUP(PED_GREY, AT(15, 15, 44, 13), 0, "PICK UP BOHDAN", 0),
+    S_PICKUP(PED_BOHDAN, AT(15, 15, 44, 13), 0, "PICK UP BOHDAN", 0),
     S_GO(F_CAR, SHOPPOS, 0, "DRIVE BOHDAN HOME TO THE SHOP", 0) };
 
 /* mid-mission phone calls (S_SAY) */
@@ -412,7 +412,7 @@ static const struct { const Page *pg; u8 n; } story_says[] = {
 
 static const MissionDef story_defs[NMISSIONS - NACT1] = {
     MDEF("FRONT PAGE", PED_DEE, NS(7, 4), p10, m10, 4000),
-    MDEF("EVICTION NOTICE", PED_GREY, NS(1, 5), p11, m11, 4500),
+    MDEF("EVICTION NOTICE", PED_BOHDAN, NS(1, 5), p11, m11, 4500),
     MDEF("CROWN DEBT", PED_SUIT, NS(3, 11), p12, m12, 5000),
     MDEF("CITY HALL INK", PED_DEE, NS(12, 5), p13, m13, 5000),
     MDEF("PHOTO OP", PED_DEE, NS(13, 6), p14, m14, 5500),
@@ -425,7 +425,7 @@ static const MissionDef story_defs[NMISSIONS - NACT1] = {
     MDEF("NEW MANAGEMENT", PED_WHITE, NS(7, 6), p21, m21, 7000),
     MDEF("CONTAINER 7", PED_MARTA, NS(2, 6), p22, m22, 8500),
     MDEF("THE OFFER", PED_SUIT, SS(6, 17), p23, m23, 6000),
-    MDEF("NIGHT SHIFT", PED_GREY, NS(1, 5), p24, m24, 7000),
+    MDEF("NIGHT SHIFT", PED_BOHDAN, NS(1, 5), p24, m24, 7000),
     MDEF("IRON YARD", PED_SUIT, NS(3, 12), p25, m25, 8000),
     MDEF("PAPER TRAIL", PED_DEE, NS(10, 1), p26, m26, 8000),
     MDEF("HILL CLIMB", PED_GREEN, NS(4, 13), p27, m27, 9000),
@@ -441,4 +441,4 @@ static const MissionDef story_defs[NMISSIONS - NACT1] = {
     MDEF_AFTER("HALVORSEN SAILS", PED_WHITE, NS(16, 17), p37, m37, 12000, a37),
     MDEF("COUNCILMAN", PED_DEE, NS(17, 19), p38, m38, 12000),
     MDEF_AFTER("THE LUCKY MARIE", PED_SUIT, NS(19, 18), p39, m39, 15000, a39),
-    MDEF_AFTER("HOME", PED_GREY, NS(15, 16), p40, m40, 20000, a40) };
+    MDEF_AFTER("HOME", PED_BOHDAN, NS(15, 16), p40, m40, 20000, a40) };

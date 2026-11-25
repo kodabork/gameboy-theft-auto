@@ -68,13 +68,14 @@ for name, car in CARS:
     print(name, round(time.time() - t0, 1), flush=True)
 group()
 # people: 16 view directions, of which 9 (0..180 degrees) are stored and the rest drawn mirrored.
-# Per stored direction 26 frames = idle, walk 0-11, run 0-11, aim; then 8 knocked-down frames
+# Per stored direction 37 frames = idle (breathing) 0-3, walk 0-15, run 0-15, aim; then 8 knocked-down frames
 # (8 directions) and 24 ragdoll tumble frames (3 views: from behind, side, front x 8 pitch angles).
-PED_DIRS, PED_DIR_FRAMES, PED_CYCLE = 9, 26, 12
+PED_DIRS, PED_IDLE, PED_CYCLE = 9, 4, 16
+PED_DIR_FRAMES = PED_IDLE + 2 * PED_CYCLE + 1
 def ped_block(outfit, elev, s_, w, up, dn):
     for d in range(PED_DIRS):
         yaw = d * 2 * np.pi / 16
-        add(Human(outfit, 0, mode='idle'), yaw, np.radians(elev), s_, w, up, dn)
+        for f in range(PED_IDLE): add(Human(outfit, f * 2 * np.pi / PED_IDLE, mode='idle'), yaw, np.radians(elev), s_, w, up, dn)
         for f in range(PED_CYCLE): add(Human(outfit, f * 2 * np.pi / PED_CYCLE, mode='walk'), yaw, np.radians(elev), s_, w, up, dn)
         for f in range(PED_CYCLE): add(Human(outfit, f * 2 * np.pi / PED_CYCLE, mode='run'), yaw, np.radians(elev), s_, w, up, dn)
         add(Human(outfit, 0, mode='aim'), yaw, np.radians(elev), s_, w, up, dn)
@@ -96,7 +97,7 @@ for d in range(PED_DIRS):
 print('PED_PLAYER', round(time.time() - t0, 1), flush=True)
 for name, outfit in (('PED_GREY', 'grey'), ('PED_RED', 'red'), ('PED_NAVY', 'navy'), ('PED_SUIT', 'suit'),
                      ('PED_GREEN', 'green'), ('PED_WHITE', 'white'), ('PED_COP', 'cop'),
-                     ('PED_DEE', 'dee'), ('PED_MARTA', 'marta'), ('PED_WOMAN_A', 'woman_a'), ('PED_WOMAN_B', 'woman_b')):
+                     ('PED_BOHDAN', 'bohdan'), ('PED_DEE', 'dee'), ('PED_MARTA', 'marta'), ('PED_WOMAN_A', 'woman_a'), ('PED_WOMAN_B', 'woman_b')):
     begin(name)
     ped_block(outfit, 15, 0.032, 40, 64, 6)          # near
     ped_block(outfit, 6, 0.060, 22, 34, 4)           # far (index + PED_BLOCK)
@@ -237,7 +238,7 @@ H = ['#ifndef ASSETS_H', '#define ASSETS_H',
      'extern const unsigned char spr_pixels[];', '#define SPR_NCOL %d' % NCOL, '#define SPR_PAL_BASE 103',
      'extern const unsigned char car_dims[][2];   /* half length, half width per car set (1/16 m) */',
      '#define CAR_SET_FRAMES %d' % sum(n // 2 + 1 for n in CAR_ANGLES), '#define CAR_NSETS %d' % len(car_dims),
-     '#define PED_DIR_FRAMES %d' % PED_DIR_FRAMES, '#define PED_CYCLE %d' % PED_CYCLE, '#define PED_DOWN %d' % PED_DOWN,
+     '#define PED_DIR_FRAMES %d' % PED_DIR_FRAMES, '#define PED_CYCLE %d' % PED_CYCLE, '#define PED_IDLE %d' % PED_IDLE, '#define PED_DOWN %d' % PED_DOWN,
      '#define PED_TUMBLE %d' % PED_TUMBLE, '#define PED_BLOCK %d' % PED_BLOCK,
      '#define PED_STANCE %d' % PED_BLOCK, '#define PED_NSTANCE %d' % len(STANCES)]
 for name, base in sets: H.append('#define %s %d' % (name, base))
