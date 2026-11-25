@@ -78,8 +78,20 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 ## Day and night (v0.43)
 - `game_tod()` = 9:00 + `st.play_s` seconds as minutes (one game minute per real second, saved with the stats). `palette_tod` (world.c, ROM) re-tints the day palette into `PAL_BG` when the minute changes: channel scaling toward moonlit blue, a dusk/dawn warmth peak at 19:00 and 6:00, a navy sky gradient (entries 0-7), and warm lit windows on the light glass entries (`WPAL(MAT_GLASS, f, 1)`). HUD colours 252-255 are untouched; `game_daylight_screen()` keeps title, shop and minigame screens in daylight. Street crime runs more often at night. Host debug key `0xD00 + hour` sets the clock.
 
+## Headlights (v0.44)
+- NPC dots: `game_build_scene` pushes two sprites with frame `SPR_LIGHT` (+0 headlight, +1 tail) per car that faces toward or away from the camera after dark. `lamp_dot` in render.c draws them in HUD colours 252-254, which are never night-tinted. Each dot sits at the car centre's depth, with its depth offset turned into height (`sin_e`), so it lines up with the pre-rendered sprite.
+- Player beam: `game_beam` (game.c) projects a ground wedge (plus a wall splash when `world_point_blocked` hits within 40 m) into a window span per scanline (`beam_tab`) and a brightness per scanline (`beam_lv`). `beam_vblank` (gba_main.c, called from the VBlank IRQ in divmod.s before the flip) feeds them to WIN0H/WIN1H by HBlank DMA 0 and to BLDY by HBlank DMA 3. DMA 3 is otherwise used only by `blit_img` on the 2D screens, where the beam is off. Brightening applies to BG2 only, so HUD OBJ glyphs are untouched.
+- `gbaprof` emulates both tables in its frame dumps; the host build applies them in `dump`. Test builds: `EXTRA_CF="-DDEBUG_HOUR=23" ./build.sh` starts a new game at 23:00.
+
+## Speed work rules (v0.45)
+- **Never store single bytes to VRAM.** A byte store writes the value into both pixels of the pair. Use `fb_lo` / `fb_hi` (engine.h, volatile halfword read-modify-write); plain C like `*p = (*p & 0x00FF) | (v << 8)` can be compiled into `strb`. Check with `llvm-objdump -d build/render.o | grep strb`.
+- **Prove every speed change is pixel-identical:** play the benchmark drive on the old and new ROM with `NOOBJ=1 FIXDT=819` and compare the dumped frames byte for byte (NOOBJ leaves out the hardware-sprite layer, whose minimap and FPS digits change with timing). `gbaprof` indexes the key script by game frame (one read of the game clock per main-loop pass), so runs are identical however long frames take.
+- `STACK=1` makes gbaprof print the lowest stack address reached; keep it well above `__bss_end`.
+- ROM-resident C (game.c, world.c, hud.c, ...) builds with `ROMOPT` (default `-O3`); IWRAM code stays at `-O2` for size. The division helpers in divmod.s are an unrolled table (3 cycles per quotient bit).
+- Where the time goes (v0.45, driving): walls about 22%, ground about 17%, game logic about 25%, sprites about 12%, sound 4%, radar 3%. 30 fps would need about 35% less work per frame, which cannot come from drawing the same picture; the owner chose to stop at about 19 fps.
+
 ## Memory budget
-- **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
+- **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7420 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM; v0.45: 0x7420, with `world_collide` moved to ROM). The deepest measured stack (gbaprof `STACK=1`) is 0x78C0. render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
 - Put big arrays in EWRAM with `EWRAM_BSS`.
 - Thumb code has no fast divide. Avoid `/` in hot paths (reciprocal multiplies are used throughout) and avoid 64-bit division entirely.
 
@@ -117,6 +129,7 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - Headlights: one design per vehicle class (`lk` map in `Car3.shade`). The owner is very sensitive to "droopy" lamps: keep top and bottom edges sweeping UP toward the outside (currently 7 cm over the lamp width) and stay on the flat part of the nose, because the game's raised 3/4 camera makes level lamps look like they sag. Check with a straight-on and a 3/4 render before showing anything.
 - `tools/cars3.py` builds each car from side profiles (height fields). Profile distances are scaled by `1/sqrt(1+slope^2)` (`kfac`) so steep faces (tailgates, upright rear glass) render cleanly. The box truck's cargo box is a separate rounded box (`box_x`, `box_z`); the pickup cab's back wall is a plane.
 - Preview a model quickly with `tools/frame_render.render_frame` before running the full sprite render.
+- Sprite data in the ROM is `build/sprpack.bin` (v0.45), made from `build/assets.bin` by `tools/pack_sprites.py` (build.sh re-runs it when assets.bin is newer): a u32 offset per frame, then per frame one record per source column `{u16 rel, u8 top, u8 len}` and only the run from the column's first to last opaque pixel. `blit` reads it; the inner loops are ARM assembly in `src/spans.s` (C versions in render.c for the PC build). Lossless: 20.9 MB -> 14.3 MB.
 - Sprites (cars and people) are already drawn at full horizontal resolution by `blit` (both bytes of each framebuffer word); only walls and ground are half width. Moving sprites to OBJ would not sharpen them. Since v0.41 every sprite is matched to the shared 148-colour palette with a light 2x2 ordered dither (`DITHER_AMP` in make_assets.py) for smoother shading.
 
 ## Story and missions

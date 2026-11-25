@@ -15,6 +15,11 @@ typedef unsigned char  u8;  typedef signed char  s8;
 typedef unsigned short u16; typedef signed short s16;
 typedef unsigned int   u32; typedef signed int   s32;
 
+/* Frame buffer writes that change one pixel of a pair. VRAM ignores byte stores (a byte store writes the
+   value into both pixels), so these force a halfword store: without volatile the compiler may turn
+   "(*p & 0x00FF) | (v << 8)" into a byte store of v, which breaks on hardware. */
+static inline void fb_lo(unsigned short *p, int v) { volatile unsigned short *q = p; *q = (unsigned short)((*q & 0xFF00) | v); }
+static inline void fb_hi(unsigned short *p, int v) { volatile unsigned short *q = p; *q = (unsigned short)((*q & 0x00FF) | (v << 8)); }
 #define SCR_W   120      /* logical columns (each is 2 physical pixels) */
 #define SCR_H   160
 #define HORIZON 80
@@ -43,6 +48,7 @@ typedef struct { int x, y, h, c, s, gh; } Camera;   /* h: eye height (absolute),
 
 /* A sprite to draw: world ground position + frame index into spr_frames */
 typedef struct { int x, y; u16 frame; s16 h; } Sprite;   /* h: absolute height of the sprite's base (units) */
+#define SPR_LIGHT 0x7FF0   /* frame codes for lamp dots: +0 headlight, +1 tail light (drawn, not blitted) */
 #define SPR_DECAL (-32768)   /* game side: push_h(..., SPR_DECAL) = flat on the ground */
 
 #define MAX_BUILDINGS 1600

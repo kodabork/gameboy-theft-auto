@@ -97,6 +97,39 @@ static void draw_number(int first, int x, int y, int v, int digits)
     }
 }
 
+/* headlight beam: per page, a table of window spans (fed to WIN0H/WIN1H by HBlank DMA 0) and a table of
+   brightness levels (fed to BLDY by HBlank DMA 3, which is free during 3D play) */
+EWRAM_BSS static u32 beam_tab[2][SCR_H];
+EWRAM_BSS static u16 beam_lv[2][SCR_H];
+static u8 beam_on[2];
+/* called from the VBlank IRQ before any page flip; page = frame-select bit of the page shown from now */
+void beam_vblank(int page)
+{
+    REG16(0x040000BA) = 0;                                   /* stop DMA 0 */
+    if (!beam_on[page]) {
+        if (REG_DISPCNT & 0x6000) { REG16(0x040000DE) = 0; REG_DISPCNT &= (u16)~0x6000; REG16(0x04000050) = 0; }
+        return;
+    }
+    REG16(0x040000DE) = 0;                                   /* stop DMA 3 */
+    const u32 *t = beam_tab[page];
+    const u16 *l = beam_lv[page];
+    *(volatile u32 *)0x04000040 = t[0];                      /* line 0; DMA delivers the rest after each line */
+    *(volatile u32 *)0x04000044 = 0x00A000A0;                /* WIN0V, WIN1V: whole height */
+    REG16(0x04000048) = 0x3434;                              /* inside: BG2, OBJ, effects */
+    REG16(0x0400004A) = 0x0014;                              /* outside: BG2, OBJ */
+    REG16(0x04000050) = 0x0084;                              /* brighten BG2 */
+    REG16(0x04000054) = l[0];
+    *(volatile u32 *)0x040000B0 = (u32)(t + 1);
+    *(volatile u32 *)0x040000B4 = 0x04000040;
+    REG16(0x040000B8) = 1;
+    REG16(0x040000BA) = 0xA660;                              /* HBlank, repeat, 32-bit, dest reload */
+    *(volatile u32 *)0x040000D4 = (u32)(l + 1);
+    *(volatile u32 *)0x040000D8 = 0x04000054;
+    REG16(0x040000DC) = 1;
+    REG16(0x040000DE) = 0xA260;                              /* HBlank, repeat, 16-bit, dest reload */
+    REG_DISPCNT |= 0x6000;
+}
+
 int main(void)
 {
     REG_WAITCNT = 0x4317;                     /* faster ROM access + prefetch */
@@ -148,6 +181,8 @@ int main(void)
         if (!g_hud.shop && !g_hud.mini) game_build_scene(&cam, sprs, &nobj); else nobj = 0;
         while (flip_req) ;
         u16 *back = (REG_DISPCNT & 0x0010) ? PAGE0 : PAGE1;
+        {   int pg = back == PAGE0 ? 0 : 1;              /* this page shows with frame-select = pg */
+            beam_on[pg] = (!g_hud.shop && !g_hud.mini) ? (u8)game_beam(beam_tab[pg], beam_lv[pg], &cam) : 0; }
         if (!g_hud.shop && !g_hud.mini) render_frame(back, &cam, sprs, nobj);   /* full-screen 2D screens skip the 3D view */
         hud_draw(back);
         int part = frame_n++ & 3, radar_new = part == 3;

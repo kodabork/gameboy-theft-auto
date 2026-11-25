@@ -22,6 +22,27 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.45
+- **Smaller ROM:** 26.3 MB down to 19.7 MB. Car and people pictures no longer store the empty space
+  above and below each column. This is lossless: every picture is exactly the same.
+- **A little faster** (about 2%), with the picture unchanged pixel for pixel:
+  - a faster division routine;
+  - hand-written assembly for drawing cars and people, which also skips their empty parts;
+  - better compiler settings for the game logic.
+- **Fixed a real-hardware glitch:** some car and people edges painted one stray pixel next to them on an
+  actual Game Boy (and on emulators that copy the hardware exactly).
+
+## What's new in v0.44
+- **Headlights after dark.**
+  - Your car throws a beam of light down the road ahead. It is brightest just in front of the car and fades
+    with distance.
+  - Drive up to a wall and the beam stops there, leaving a round splash of light on the wall.
+  - Other cars show two small white headlight dots when they face you and red tail lights when they drive
+    away. Your own car's tail lights glow too.
+  - The beam is drawn by the Game Boy's own window and brightness hardware, fed one screen line at a time,
+    so it costs about 1.5% of the frame rate, and only at night in a car.
+- Fixed a rare wrong window texture on very long walls.
+
 ## What's new in v0.43
 - **Day and night.** A full day lasts 24 minutes (one game minute per real second), with a clock under
   your money.

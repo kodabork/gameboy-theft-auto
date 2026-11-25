@@ -31,6 +31,7 @@ static u16 tm_reload[4], tm_ctl[4]; static u64 tm_start[4];
 static u64 frame_start;         /* cycle when current video frame started */
 static int vblank_done;
 static long flips; static u64 flip_cyc[100000];
+static u32 min_sp = 0xFFFFFFFF, min_isp = 0xFFFFFFFF;
 static u32 callee_addr; static u32 call_hist[1000000]; static long ncall_hist;
 static u32 keys_now;
 static int dump_list[256], ndump; static const char *outpre = "gp";
@@ -77,8 +78,10 @@ static void recompute_rom(void)
 
 /* ---------------------------------------------------------------- IO */
 /* FIXDT=n: timer 2 (the game clock) advances n ticks per read and the key script is indexed by
-   displayed frame instead of VBlank, so every build plays exactly the same game: pure cost comparison */
-static int fixdt; static u32 fixdt_acc;
+   game frame (one read of the game clock per main-loop pass) instead of VBlank, so every build plays
+   exactly the same game however long its frames take: pure cost comparison. (Indexing by displayed
+   frame was not enough: the VBlank key latch then saw the next frame's keys at speed-dependent times.) */
+static int fixdt; static u32 fixdt_acc; static long game_frames;
 static u32 keys_for_frame(long vf);
 static u16 timer_val(int n)
 {
@@ -96,9 +99,9 @@ static u16 io_rd16(u32 a)
     switch (a) {
     case 0x004: { u16 v = *(u16 *)&io[4] & 0xFFF8; if (line >= 160 && line < 227) v |= 1; if ((fc_ % LINE_CYC) >= 960) v |= 2; if (line == (*(u16 *)&io[4] >> 8)) v |= 4; return v; }
     case 0x006: return (u16)line;
-    case 0x108: if (fixdt) { fixdt_acc += fixdt; return (u16)fixdt_acc; } return timer_val(2);
+    case 0x108: if (fixdt) { fixdt_acc += fixdt; game_frames++; return (u16)fixdt_acc; } return timer_val(2);
     case 0x100: case 0x104: case 0x10C: return timer_val((a - 0x100) >> 2);
-    case 0x130: return (u16)(~(fixdt ? keys_for_frame(flips) : keys_now) & 0x3FF);
+    case 0x130: return (u16)(~(fixdt ? keys_for_frame(game_frames) : keys_now) & 0x3FF);
     }
     return *(u16 *)&io[a];
 }
@@ -616,9 +619,41 @@ static void dump_page(long fl)
     int page = (*(u16 *)&io[0] & 0x10) ? 0xA000 : 0;
     static u16 scr[160][240];
     for (int i = 0; i < 240 * 160; i++) scr[i / 240][i % 240] = *(u16 *)&pal[vram[page + i] * 2];
+    /* windows 0/1 with brightness increase on BG2; window spans may come from an HBlank DMA 0 table
+       (line 0 uses the registers, line y the table entry y-1) */
+    {
+        u16 dc = *(u16 *)&io[0], bc = *(u16 *)&io[0x50], d0 = *(u16 *)&io[0xBA];
+        if (getenv("WDBG")) fprintf(stderr, "dump %ld dc %04x bc %04x d0 %04x dad %08x bldy %d\n", fl, dc, bc, d0, *(u32 *)&io[0xB4], *(u16 *)&io[0x54]);
+        if ((dc & 0x6000) && ((bc >> 6) & 3) == 2 && (bc & 4)) {
+            int Y = *(u16 *)&io[0x54] & 31; if (Y > 16) Y = 16;
+            int hd = (d0 & 0x8000) && ((d0 >> 12) & 3) == 2 && *(u32 *)&io[0xB4] == 0x04000040;
+            u32 sad = *(u32 *)&io[0xB0];
+            u16 wi = *(u16 *)&io[0x48];
+            for (int y = 0; y < 160; y++) {
+                u32 w = (y == 0 || !hd) ? *(u32 *)&io[0x40] : rd32n(sad + 4 * (y - 1));
+                {   u16 d3 = *(u16 *)&io[0xDE];             /* per-line BLDY from an HBlank DMA 3 table */
+                    if ((d3 & 0x8000) && ((d3 >> 12) & 3) == 2 && *(u32 *)&io[0xD8] == 0x04000054 && y > 0) {
+                        Y = rd16n(*(u32 *)&io[0xD4] + 2 * (y - 1)) & 31; if (Y > 16) Y = 16;
+                    } else { Y = *(u16 *)&io[0x54] & 31; if (Y > 16) Y = 16; }
+                }
+                static u8 lit[240]; memset(lit, 0, sizeof lit);
+                for (int n = 0; n < 2; n++) {
+                    if (!(dc & (0x2000 << n)) || !((wi >> (8 * n)) & 0x20)) continue;
+                    u16 h = n ? (u16)(w >> 16) : (u16)w;
+                    int l = h >> 8, r = h & 255; if (r > 240) r = 240;
+                    for (int x = l; x < r; x++) lit[x] = 1;
+                }
+                for (int x = 0; x < 240; x++) if (lit[x]) {
+                    u16 c = scr[y][x]; int cr = c & 31, cg = (c >> 5) & 31, cb = (c >> 10) & 31;
+                    cr += (31 - cr) * Y / 16; cg += (31 - cg) * Y / 16; cb += (31 - cb) * Y / 16;
+                    scr[y][x] = (u16)(cr | cg << 5 | cb << 10);
+                }
+            }
+        }
+    }
     /* OBJ layer (4bpp or 8bpp, 1D mapping; affine only as plain 2x scale) */
     static const int sw[3][4] = { {8,16,32,64}, {16,32,32,64}, {8,8,16,32} }, sh_[3][4] = { {8,16,32,64}, {8,8,16,32}, {16,32,32,64} };
-    for (int o = 127; o >= 0; o--) {
+    for (int o = getenv("NOOBJ") ? -1 : 127; o >= 0; o--) {
         u16 a0 = *(u16 *)&oam[o * 8], a1 = *(u16 *)&oam[o * 8 + 2], a2 = *(u16 *)&oam[o * 8 + 4];
         int aff = (a0 >> 8) & 1, dbl = (a0 >> 9) & 1;
         if (!aff && dbl) continue;
@@ -702,6 +737,8 @@ int main(int argc, char **argv)
         }
         u32 pc = r[15];
         u64 c0 = cycles;
+        if (mode == 0x1F && r[13] < min_sp && r[13] > 0x03000000) min_sp = r[13];
+        if (mode == 0x12 && r[13] < min_isp && r[13] > 0x03000000) min_isp = r[13];
         if (callee_addr && (pc & ~1u) == callee_addr && ncall_hist < 1000000) call_hist[ncall_hist++] = r[14];
         branched = 0;
         icount++;
@@ -741,6 +778,7 @@ int main(int argc, char **argv)
         printf("%s%ld", s ? " " : "per-second: ", n);
     }
     printf("\n");
+    if (getenv("STACK")) printf("lowest stack: sys %08x irq %08x\n", min_sp, min_isp);
     if (getenv("HIST")) {      /* how many VBlanks each displayed frame took */
         /* HIST=seconds, or HIST=first_frame-last_frame (displayed-frame numbers) */
         long h[16] = {0}; double from = atof(getenv("HIST")) * 16777216.0;

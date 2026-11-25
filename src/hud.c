@@ -59,8 +59,8 @@ static inline void put_px(int x, int y, int c)
 {
     if ((unsigned)x >= 240 || (unsigned)y >= 160) return;
     u16 *p = FBH + y * SCR_W + (x >> 1);
-    if (x & 1) *p = (u16)((*p & 0x00FF) | (c << 8));
-    else *p = (u16)((*p & 0xFF00) | c);
+    if (x & 1) fb_hi(p, c);
+    else fb_lo(p, c);
 }
 
 static void rect(int x, int y, int w, int h, int c)
@@ -162,16 +162,16 @@ static void blit_img(const Img *im, int x0, int y0)     /* palette-index image, 
         const u8 *src = im->px + y * im->w - x0;     /* indexed by screen x */
         u16 *row = FBH + sy * 120;
         int sx = xs;
-        if (sx & 1) { int v = src[sx]; if (v) row[sx >> 1] = (u16)((row[sx >> 1] & 0x00FF) | (v << 8)); sx++; }
+        if (sx & 1) { int v = src[sx]; if (v) fb_hi(row + (sx >> 1), v); sx++; }
         for (; sx + 1 < xe; sx += 2) {               /* whole 2-pixel words */
             int a = src[sx], b = src[sx + 1];
             if (!(a | b)) continue;
             u16 *w = &row[sx >> 1];
             if (a && b) *w = (u16)(a | (b << 8));
-            else if (a) *w = (u16)((*w & 0xFF00) | a);
-            else *w = (u16)((*w & 0x00FF) | (b << 8));
+            else if (a) fb_lo(w, a);
+            else fb_hi(w, b);
         }
-        if (sx < xe) { int v = src[sx]; if (v) row[sx >> 1] = (u16)((row[sx >> 1] & 0xFF00) | v); }
+        if (sx < xe) { int v = src[sx]; if (v) fb_lo(row + (sx >> 1), v); }
     }
 }
 static void shade_band(int y0, int y1)          /* darken a strip of the frame (checker of black) */
