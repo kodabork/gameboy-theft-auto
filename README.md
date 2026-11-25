@@ -22,6 +22,14 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.42
+- **Smoother animation for everyone:** walking and running now use 16 frames per step instead of 12.
+- **People breathe:** anyone standing still (Nick included) has a slow breathing and weight-shift loop
+  instead of freezing like a statue. Each person is a little out of step with the others.
+- **Bohdan has his own model:** an older man with a bald crown, grey hair at the sides, a moustache, a
+  heavier middle, a slight stoop and a brown cardigan.
+- The ROM is now 26.3 MB of the 32 MB maximum. The frame rate is unchanged.
+
 ## What's new in v0.41
 - Smoother shading on every car and person: sprites are matched to the game's colour palette with a
   light dither, so paint, skin and clothing gradients band less. Same speed, same ROM size.
