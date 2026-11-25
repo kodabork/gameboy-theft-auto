@@ -78,6 +78,11 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 ## Day and night (v0.43)
 - `game_tod()` = 9:00 + `st.play_s` seconds as minutes (one game minute per real second, saved with the stats). `palette_tod` (world.c, ROM) re-tints the day palette into `PAL_BG` when the minute changes: channel scaling toward moonlit blue, a dusk/dawn warmth peak at 19:00 and 6:00, a navy sky gradient (entries 0-7), and warm lit windows on the light glass entries (`WPAL(MAT_GLASS, f, 1)`). HUD colours 252-255 are untouched; `game_daylight_screen()` keeps title, shop and minigame screens in daylight. Street crime runs more often at night. Host debug key `0xD00 + hour` sets the clock.
 
+## Headlights (v0.44)
+- NPC dots: `game_build_scene` pushes two sprites with frame `SPR_LIGHT` (+0 headlight, +1 tail) per car that faces toward or away from the camera after dark. `lamp_dot` in render.c draws them in HUD colours 252-254, which are never night-tinted. Each dot sits at the car centre's depth, with its depth offset turned into height (`sin_e`), so it lines up with the pre-rendered sprite.
+- Player beam: `game_beam` (game.c) projects a ground wedge (plus a wall splash when `world_point_blocked` hits within 40 m) into a window span per scanline (`beam_tab`) and a brightness per scanline (`beam_lv`). `beam_vblank` (gba_main.c, called from the VBlank IRQ in divmod.s before the flip) feeds them to WIN0H/WIN1H by HBlank DMA 0 and to BLDY by HBlank DMA 3. DMA 3 is otherwise used only by `blit_img` on the 2D screens, where the beam is off. Brightening applies to BG2 only, so HUD OBJ glyphs are untouched.
+- `gbaprof` emulates both tables in its frame dumps; the host build applies them in `dump`. Test builds: `EXTRA_CF="-DDEBUG_HOUR=23" ./build.sh` starts a new game at 23:00.
+
 ## Memory budget
 - **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
 - Put big arrays in EWRAM with `EWRAM_BSS`.

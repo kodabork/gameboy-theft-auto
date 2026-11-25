@@ -61,7 +61,18 @@ irq_handler:
     strh    r2, [r3]
     tst     r1, #1
     bxeq    lr
+    stmfd   sp!, {r0, lr}
     ldr     r3, =flip_req           @ page flip requested by the main loop?
+    ldrb    r1, [r3]
+    ldrh    r2, [r0]
+    mov     r0, r2, lsr #4          @ headlight windows for the page shown from now (restarted every VBlank)
+    and     r0, r0, #1
+    eor     r0, r0, r1
+    ldr     r3, =beam_vblank
+    mov     lr, pc
+    bx      r3
+    ldmfd   sp!, {r0, lr}
+    ldr     r3, =flip_req
     ldrb    r2, [r3]
     cmp     r2, #0
     beq     1f

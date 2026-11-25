@@ -2776,6 +2776,9 @@ static void save_write(void)
 static void new_game_state(void)
 {
     { u8 *z = (u8 *)&st; for (unsigned i = 0; i < sizeof st; i++) z[i] = 0; }
+#ifdef DEBUG_HOUR                              /* test builds: a new game starts at this hour */
+    st.play_s = (DEBUG_HOUR + 15) % 24 * 60;
+#endif
     if (pl.in_car >= 0) cars[pl.in_car].ai = AI_NONE;
     pl.in_car = 0; pl.hp = 100; pl.money = 0; pl.owned = 0; pl.weapon = 0; pl.dead_t = 0;
     for (int i = 0; i < 6; i++) pl.ammo[i] = 0;
@@ -3258,6 +3261,146 @@ static int elev_level(int d)
     return 3;
 }
 
+/* Headlight beams of Nick's car after dark. The lamps light a wedge of road ahead, starting as wide as the
+   car; it is projected to the screen as one span per scanline (tab[y]: WIN0H low half, WIN1H high half) with
+   a brightness per scanline (lv[y]: BLDY), bright near the car and fading with distance. The VBlank handler
+   feeds both tables to the hardware by HBlank DMA and the hardware brightens the picture inside the window,
+   so the beam costs no drawing time. Returns 1 when the beam is on. */
+__attribute__((section(".romcode"))) int game_beam(u32 *tab, u16 *lv, const Camera *cm)
+{
+    if (pl.in_car < 0 || gstate != GS_PLAY || g_hud.menu_n) return 0;
+    int dl = tod_daylight(game_tod());
+    if (dl >= 200) return 0;
+    Car *c = &cars[pl.in_car];
+    if (c->model == CAR_WRECK) return 0;
+    int hl, hw; dims_of(c->model, &hl, &hw);
+    int a = c->head >> 8, fx = icos(a), fy = isin(a);
+    int gx = c->x >> 8, gy = c->y >> 8, eye = cm->h - ground_h(gx, gy);
+    int top = (200 - dl) * 6 / 200 + 1;                        /* brightness right in front of the car */
+    for (int y = HORIZON - 40; y < SCR_H; y++) { tab[y] = 0; lv[y] = 0; }     /* rows above are never lit */
+    /* outline of Nick's car on screen: roof line, then the body widening below it (the sprite is drawn
+       at the depth of the car's centre) */
+    int car_top, car_bot, car_x, roof_w, body_w, body_r;
+    {
+        int dx = gx - cm->x, dy = gy - cm->y;
+        int cz = (dx * cm->c + dy * cm->s) >> 14, cx = (dx * cm->s - dy * cm->c) >> 14;
+        if (cz < M(2)) cz = M(2);
+        car_top = HORIZON + (eye - M(1.45)) * FY / cz;
+        body_r = M(0.5) * FY / cz;                             /* rows from the roof line to the shoulders */
+        car_bot = HORIZON + eye * FY / cz + M(1.2) * FY / cz;
+        car_x = 120 + cx * 2 * FX / cz;
+        roof_w = (hw * 3 >> 2) * 2 * FX / cz; body_w = (hw + M(0.15)) * 2 * FX / cz;
+    }
+    /* the beam stops at the first wall straight ahead and splashes on it */
+    int reach = M(40), wall = 0, wx0 = 0, wy0 = 0;
+    for (int d = M(1); d <= M(40); d += M(1)) {
+        int qx = gx + ((fx * (hl + d)) >> 14), qy = gy + ((fy * (hl + d)) >> 14);
+        if (world_point_blocked(qx, qy, 0)) { reach = d; wall = ground_mat(qx, qy) != TM_WATER; wx0 = qx; wy0 = qy; break; }
+    }
+    /* polygon on the ground: left lamp, a fan of far points, right lamp */
+    static const s16 fan[5] = { -200, -100, 0, 100, 200 };       /* about +-17 degrees */
+    enum { NP = 7 };
+    int px[NP], pz[NP];
+    for (int k = 0; k < NP; k++) {
+        int lat = k == 0 ? hw : k == NP - 1 ? -hw : 0;
+        int wx = gx + ((fx * hl - fy * lat) >> 14), wy = gy + ((fy * hl + fx * lat) >> 14);
+        if (k > 0 && k < NP - 1) {
+            int b = a + fan[k - 1], L = (k == 1 || k == 5) ? reach * 4 / 5 : reach;
+            int side = ((k - 3) * hw) >> 1;                       /* fan out from across the car's width */
+            wx += ((icos(b) * L - fy * -side) >> 14); wy += ((isin(b) * L + fx * -side) >> 14);
+        }
+        int dx = wx - cm->x, dy = wy - cm->y;
+        pz[k] = (dx * cm->c + dy * cm->s) >> 14;
+        px[k] = (dx * cm->s - dy * cm->c) >> 14;
+    }
+    int qx[NP * 2], qy[NP * 2], n = 0;                          /* clip to z >= 1 m, then project (y in 1/16 rows) */
+    const int ZN = M(1);
+    for (int k = 0; k < NP; k++) {
+        int k2 = k + 1 == NP ? 0 : k + 1;
+        int x0 = px[k], z0 = pz[k], x1 = px[k2], z1 = pz[k2];
+        if (z0 >= ZN) { qx[n] = 120 + x0 * 2 * FX / z0; qy[n] = HORIZON * 16 + eye * FY * 16 / z0; n++; }
+        if ((z0 >= ZN) != (z1 >= ZN)) {
+            int xi = x0 + (x1 - x0) * (ZN - z0) / (z1 - z0);
+            qx[n] = 120 + xi * 2 * FX / ZN; qy[n] = HORIZON * 16 + eye * FY * 16 / ZN; n++;
+        }
+    }
+    if (n >= 3) {
+        u8 xl[SCR_H], xr[SCR_H];
+        int qa = qy[0], qb = qy[0];
+        for (int k = 1; k < n; k++) { if (qy[k] < qa) qa = qy[k]; if (qy[k] > qb) qb = qy[k]; }
+        int ylo = (qa + 15) >> 4, yhi = (qb >> 4) + 1;
+        if (ylo < HORIZON + 1) ylo = HORIZON + 1;
+        if (yhi > SCR_H) yhi = SCR_H;
+        for (int y = ylo; y < yhi; y++) { xl[y] = 240; xr[y] = 0; }
+        for (int k = 0; k < n; k++) {
+            int k2 = k + 1 == n ? 0 : k + 1;
+            int x0 = qx[k], y0 = qy[k], x1 = qx[k2], y1 = qy[k2];
+            if (y0 == y1) continue;
+            if (y0 > y1) { int t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; }
+            int ya = (y0 + 15) >> 4, yb = (y1 + 15) >> 4;
+            if (ya < ylo) ya = ylo;
+            if (yb > yhi) yb = yhi;
+            if (ya >= yb) continue;
+            int slope = ((x1 - x0) << 12) / (y1 - y0);
+            int xx = (x0 << 12) + slope * ((ya << 4) - y0);
+            for (int y = ya; y < yb; y++, xx += slope << 4) {
+                int xv = xx >> 12;
+                int l = xv < 0 ? 0 : xv > 240 ? 240 : xv;
+                if (l < xl[y]) xl[y] = (u8)l;
+                if (l > xr[y]) xr[y] = (u8)l;
+            }
+        }
+        /* brightness falls off with distance: full at the car's roof line, 1 at the far end */
+        int near_y = car_top < yhi ? car_top : yhi, span = near_y - ylo;
+        int rs = span > 0 ? 4096 / span : 0;
+        for (int y = ylo; y < yhi; y++) {
+            int l = xl[y], r = xr[y];
+            if (r <= l) continue;
+            if (y >= car_top && y < car_bot) {                     /* the car hides the road behind it */
+                int w = y - car_top >= body_r ? body_w : roof_w + (body_w - roof_w) * (y - car_top) / body_r;
+                int cl = car_x - w, cr = car_x + w;
+                if (r > cl && l < cr) { if (cl - l >= r - cr) r = cl; else l = cr; }
+                if (r <= l) continue;
+            }
+            int f = y >= near_y ? 4096 : (y - ylo) * rs;            /* 0 far .. 4096 near */
+            int b = 1 + (((top - 1) * f) >> 12);
+            if (y >= car_top) b = top - ((top * (y - car_top)) >> 6);    /* beside the car: a little dimmer as it nears the camera */
+            if (b < 1) b = 1;
+            tab[y] = ((u32)l << 8) | (u32)r;
+            lv[y] = (u16)b;
+        }
+    }
+    if (wall) {                                                /* the lit patch on the wall, up to lamp-glare height */
+        int dx = wx0 - cm->x, dy = wy0 - cm->y;
+        int zw = (dx * cm->c + dy * cm->s) >> 14, xw = (dx * cm->s - dy * cm->c) >> 14;
+        if (zw > M(2)) {
+            int yg = HORIZON + eye * FY / zw + 2, yt = HORIZON + (eye - M(1.9)) * FY / zw;
+            int half = hw + M(0.5) + (reach * 5 >> 4);
+            int l = 120 + (xw - half) * 2 * FX / zw, r = 120 + (xw + half) * 2 * FX / zw;
+            if (yt < HORIZON - 40) yt = HORIZON - 40;
+            if (yg > SCR_H) yg = SCR_H;
+            static const u8 oval[17] = { 255, 254, 251, 247, 241, 234, 225, 214, 201, 187, 170, 151, 128, 102, 72, 50, 30 };   /* sqrt(1-t^2) */
+            int mid = (yt + yg) >> 1, hh = (yg - yt) >> 1, cxs = (l + r) >> 1, hx = (r - l) >> 1;
+            if (hh < 1) hh = 1;
+            int rh = 4096 / hh;
+            int wb = top - (reach >> 7); if (wb < 2) wb = 2;       /* nearer walls catch more light */
+            for (int y = yt; y < yg; y++) {
+                int t = ((y > mid ? y - mid : mid - y) * rh) >> 8; if (t > 16) t = 16;
+                int w = hx * oval[t] >> 8;
+                int a0 = cxs - w, b0 = cxs + w;
+                if (a0 < 0) a0 = 0; if (b0 > 240) b0 = 240;
+                if (y >= car_top && y < car_bot && b0 > car_x - body_w && a0 < car_x + body_w) {
+                    if (car_x - body_w - a0 >= b0 - car_x - body_w) b0 = car_x - body_w; else a0 = car_x + body_w;
+                }
+                if (b0 <= a0) continue;
+                tab[y] = ((u32)a0 << 8) | (u32)b0;
+                lv[y] = (u16)(t > 11 ? wb - 1 : wb);               /* softer rim */
+            }
+        }
+    }
+    return 1;
+}
+
 void game_build_scene(Camera *cam, Sprite *out, int *nout)
 {
     int tx, ty, camh, want;
@@ -3355,6 +3498,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         }
     }
     view_lim = M(110);
+    const int lights = tod_daylight(game_tod()) < 200;
     for (int i = 0; i < ncars; i++) {
         if (!cars[i].active) continue;
         int x = cars[i].x >> 8, y = cars[i].y >> 8;
@@ -3362,6 +3506,27 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         if (dd < 0 || dd > M(110)) continue;
         int rel = ((cars[i].head >> 8) - view) & 4095;
         push(x, y, car_frame(cars[i].model, elev_level(dd), rel));
+        if (lights && dd < M(90) && cars[i].model != CAR_WRECK && (cars[i].ai != AI_NONE || i == pl.in_car)) {
+            /* after dark: headlight dots when the car faces the camera, red tail lights when it faces away */
+            int cr = icos(rel);
+            if (iabs(cr) > 4096) {
+                int hl, hw; dims_of(cars[i].model, &hl, &hw);
+                int a = cars[i].head >> 8, fx = icos(a), fy = isin(a);
+                int back = cr > 0, fwd = back ? -(hl - 2) : hl - 1, lat = hw - (back ? 3 : 4);
+                int cx = x + ((fx * fwd) >> 14), cy = y + ((fy * fwd) >> 14);
+                int lx = (-fy * lat) >> 14, ly = (fx * lat) >> 14;
+                int f = SPR_LIGHT + back, hgt = back ? M(0.80) : M(0.62);
+                /* the car sprite is drawn at the depth of its centre, so put each dot at that depth too and
+                   turn its depth offset into height, as the pre-rendered view (elevation e) does */
+                static const s16 sin_e[4] = { 4516, 3126, 1997, 1143 };
+                int se = sin_e[elev_level(dd)];
+                for (int k = 0; k < 2; k++, lx = -lx, ly = -ly) {
+                    int ox = cx + lx - x, oy = cy + ly - y;
+                    int dz = ((ox * cm->c + oy * cm->s) >> 14) + 2;          /* just in front of the car sprite */
+                    push_h(cx + lx - ((dz * cm->c) >> 14), cy + ly - ((dz * cm->s) >> 14), f, hgt + ((dz * se) >> 14));
+                }
+            }
+        }
         if (cars[i].police && wanted > 0 && dd < M(90))
             push_h(x, y, FX_SIREN + ((frame_no >> 2) & 1), M(1.65));
     }

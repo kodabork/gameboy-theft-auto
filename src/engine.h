@@ -43,6 +43,7 @@ typedef struct { int x, y, h, c, s, gh; } Camera;   /* h: eye height (absolute),
 
 /* A sprite to draw: world ground position + frame index into spr_frames */
 typedef struct { int x, y; u16 frame; s16 h; } Sprite;   /* h: absolute height of the sprite's base (units) */
+#define SPR_LIGHT 0x7FF0   /* frame codes for lamp dots: +0 headlight, +1 tail light (drawn, not blitted) */
 #define SPR_DECAL (-32768)   /* game side: push_h(..., SPR_DECAL) = flat on the ground */
 
 #define MAX_BUILDINGS 1600

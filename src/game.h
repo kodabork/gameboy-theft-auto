@@ -50,5 +50,6 @@ int game_title_active(void);
 int game_tod(void);                           /* time of day, minutes 0..1439 */
 int game_daylight_screen(void);               /* title, shop and minigame screens keep daylight colours */
 void game_build_scene(Camera *cam, Sprite *out, int *nout);
+int game_beam(u32 *tab, u16 *lv, const Camera *cam);   /* headlight window span and brightness per scanline; 1 = on */
 
 #endif

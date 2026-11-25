@@ -616,6 +616,38 @@ static void dump_page(long fl)
     int page = (*(u16 *)&io[0] & 0x10) ? 0xA000 : 0;
     static u16 scr[160][240];
     for (int i = 0; i < 240 * 160; i++) scr[i / 240][i % 240] = *(u16 *)&pal[vram[page + i] * 2];
+    /* windows 0/1 with brightness increase on BG2; window spans may come from an HBlank DMA 0 table
+       (line 0 uses the registers, line y the table entry y-1) */
+    {
+        u16 dc = *(u16 *)&io[0], bc = *(u16 *)&io[0x50], d0 = *(u16 *)&io[0xBA];
+        if (getenv("WDBG")) fprintf(stderr, "dump %ld dc %04x bc %04x d0 %04x dad %08x bldy %d\n", fl, dc, bc, d0, *(u32 *)&io[0xB4], *(u16 *)&io[0x54]);
+        if ((dc & 0x6000) && ((bc >> 6) & 3) == 2 && (bc & 4)) {
+            int Y = *(u16 *)&io[0x54] & 31; if (Y > 16) Y = 16;
+            int hd = (d0 & 0x8000) && ((d0 >> 12) & 3) == 2 && *(u32 *)&io[0xB4] == 0x04000040;
+            u32 sad = *(u32 *)&io[0xB0];
+            u16 wi = *(u16 *)&io[0x48];
+            for (int y = 0; y < 160; y++) {
+                u32 w = (y == 0 || !hd) ? *(u32 *)&io[0x40] : rd32n(sad + 4 * (y - 1));
+                {   u16 d3 = *(u16 *)&io[0xDE];             /* per-line BLDY from an HBlank DMA 3 table */
+                    if ((d3 & 0x8000) && ((d3 >> 12) & 3) == 2 && *(u32 *)&io[0xD8] == 0x04000054 && y > 0) {
+                        Y = rd16n(*(u32 *)&io[0xD4] + 2 * (y - 1)) & 31; if (Y > 16) Y = 16;
+                    } else { Y = *(u16 *)&io[0x54] & 31; if (Y > 16) Y = 16; }
+                }
+                static u8 lit[240]; memset(lit, 0, sizeof lit);
+                for (int n = 0; n < 2; n++) {
+                    if (!(dc & (0x2000 << n)) || !((wi >> (8 * n)) & 0x20)) continue;
+                    u16 h = n ? (u16)(w >> 16) : (u16)w;
+                    int l = h >> 8, r = h & 255; if (r > 240) r = 240;
+                    for (int x = l; x < r; x++) lit[x] = 1;
+                }
+                for (int x = 0; x < 240; x++) if (lit[x]) {
+                    u16 c = scr[y][x]; int cr = c & 31, cg = (c >> 5) & 31, cb = (c >> 10) & 31;
+                    cr += (31 - cr) * Y / 16; cg += (31 - cg) * Y / 16; cb += (31 - cb) * Y / 16;
+                    scr[y][x] = (u16)(cr | cg << 5 | cb << 10);
+                }
+            }
+        }
+    }
     /* OBJ layer (4bpp or 8bpp, 1D mapping; affine only as plain 2x scale) */
     static const int sw[3][4] = { {8,16,32,64}, {16,32,32,64}, {8,8,16,32} }, sh_[3][4] = { {8,16,32,64}, {8,8,16,32}, {16,32,32,64} };
     for (int o = 127; o >= 0; o--) {

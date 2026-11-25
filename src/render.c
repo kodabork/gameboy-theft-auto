@@ -172,7 +172,7 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
         if (u < 0) u = 0;
         /* facade style: 0 brick tenement, 1 brownstone, 2 office ribbon glass, 3 modern concrete */
         const StyleDef *S = &styles[style];
-        int bq = (u * bay_rcp[style]) >> 20;            /* u / bay without a division */
+        int bq = (int)(((unsigned)u * bay_rcp[style]) >> 20);   /* u / bay without a division (unsigned: long walls) */
         int um = u - bq * S->bay;
         int edge = (u >= 16 && u <= L - 16);
         int wincol = edge && um >= S->w0 && um < S->w1;
@@ -642,6 +642,31 @@ static void blit(const SprFrame *f, int sx8, int sb8, int z, const u8 *occ, int 
     }
 }
 
+/* a lamp after dark: a small glowing dot, sized by distance, hidden behind nearer walls */
+static void lamp_dot(int sx8, int sb8, int z, int tail)
+{
+    int izs = recip_z[z];
+    int d = ((tail ? M(0.20) : M(0.28)) * izs) >> 16;
+    if (d < 1) d = 1; if (d > (tail ? 3 : 5)) d = tail ? 3 : 5;
+    int px0 = (sx8 >> 7) - (d >> 1), py0 = (sb8 >> 8) - (d >> 1);
+    for (int yy = 0; yy < d; yy++) {
+        int y = py0 + yy;
+        if ((unsigned)y >= SCR_H) continue;
+        int ey = yy == 0 || yy == d - 1;
+        for (int xx = 0; xx < d; xx++) {
+            int x = px0 + xx;
+            if ((unsigned)x >= SCR_W * 2) continue;
+            int ex = xx == 0 || xx == d - 1;
+            if (d >= 3 && ex && ey) continue;                /* round the corners */
+            int c = x >> 1;
+            if (izs < col_wiz[c] && y >= col_wtop[c]) continue;
+            int col = tail ? 252 : (d >= 4 && (ex || ey)) ? 253 : 254;   /* HUD red / yellow / white: never night-tinted */
+            u16 *p = FB + y * SCR_W + c;
+            *p = (x & 1) ? (u16)((*p & 0x00FF) | (col << 8)) : (u16)((*p & 0xFF00) | col);
+        }
+    }
+}
+
 #define IS_DECAL(f) ((unsigned)(((f) & 0x7FFF) - BLOOD_POOL) < 12u)
 static void draw_sprites(const Sprite *spr, int n)
 {
@@ -668,6 +693,7 @@ static void draw_sprites(const Sprite *spr, int n)
         /* x*FX*256/z == x*recip_z[z]/512 and dh*FY*256/z == dh*recip_z[z]/256: multiplies, no divisions */
         int sx8 = (60 << 8) + (int)(((s64)x * recip_z[z]) >> 9);
         int sb8 = (HORIZON << 8) + (int)(((s64)(C->h - s->h) * recip_z[z]) >> 8);
+        if ((s->frame & 0x7FFF) >= SPR_LIGHT) { lamp_dot(sx8, sb8, z, (s->frame & 0x7FFF) - SPR_LIGHT); continue; }
         blit(&spr_frames[s->frame & 0x7FFF], sx8, sb8, z, 0, s->frame >> 15);
     }
 }

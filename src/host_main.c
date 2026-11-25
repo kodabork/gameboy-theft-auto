@@ -10,14 +10,20 @@ static Sprite objs[MAX_SPRITES];
 unsigned char spr_pixels[1 << 25];
 unsigned char terrain_m[TMAP_W * TMAP_W], terrain_r[TMAP_W * TMAP_W], radar_map[RADAR_MAP_W * RADAR_MAP_W];
 
+static u32 beam_tab[SCR_H]; static u16 beam_lv[SCR_H]; static int beam_lvl;
 static void dump(const char *name)
 {
     FILE *f = fopen(name, "wb");
     fprintf(f, "P6\n240 160\n255\n");
-    for (int i = 0; i < SCR_W * SCR_H; i++) {
-        u16 c = pal[fb[i] & 255];
-        unsigned char px[3] = { (c & 31) << 3, ((c >> 5) & 31) << 3, ((c >> 10) & 31) << 3 };
-        fwrite(px, 3, 1, f); fwrite(px, 3, 1, f);
+    for (int i = 0; i < SCR_W * SCR_H; i++)
+    for (int h = 0; h < 2; h++) {
+        u16 c = pal[(fb[i] >> (8 * h)) & 255];
+        int r = c & 31, g = (c >> 5) & 31, b = (c >> 10) & 31, x = (i % SCR_W) * 2 + h;
+        u32 w = beam_tab[i / SCR_W];
+        int lit = beam_lvl && ((x >= (int)((w >> 8) & 255) && x < (int)(w & 255)) || (x >= (int)((w >> 24) & 255) && x < (int)((w >> 16) & 255)));
+        int Y = beam_lv[i / SCR_W]; if (lit) { r += (31 - r) * Y / 16; g += (31 - g) * Y / 16; b += (31 - b) * Y / 16; }
+        unsigned char px[3] = { r << 3, g << 3, b << 3 };
+        fwrite(px, 3, 1, f);
     }
     fclose(f);
 }
@@ -66,9 +72,11 @@ int main(int argc, char **argv)
                 game_build_scene(&cam, objs, &no);
                 memset(fb, 0xEE, sizeof fb);   /* garbage colour to catch unfilled pixels */
                 render_frame(fb, &cam, objs, no);
+                beam_lvl = game_beam(beam_tab, beam_lv, &cam);
+                if (getenv("BDBG")) { for (int y = 0; y < 160; y++) if (beam_tab[y]) printf("y%d %08x ", y, beam_tab[y]); for (int k = 0; k < no; k++) if ((objs[k].frame & 0x7fff) >= SPR_LIGHT) printf("L%d %d,%d h%d ", objs[k].frame & 15, objs[k].x, objs[k].y, objs[k].h); printf("\n"); }
                 hud_draw(fb);
                 char name[64]; sprintf(name, "../build/f%04d.ppm", frame); dump(name);
-                printf("frame %d cam %d,%d objs %d\n", frame, cam.x, cam.y, no);
+                printf("frame %d cam %d,%d objs %d beam %d\n", frame, cam.x, cam.y, no, beam_lvl);
                 { void game_debug(void); game_debug(); }
             }
         }
