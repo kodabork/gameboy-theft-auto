@@ -66,7 +66,7 @@ static int water_push(int x, int y, int *nx, int *ny)
 
 /* Push a circle (x,y,radius; units) out of buildings and the sea.
    Returns 1 if a collision happened. */
-int world_collide(int *px, int *py, int rad)
+__attribute__((section(".romcode"))) int world_collide(int *px, int *py, int rad)
 {
     int x = *px, y = *py, hit = 0;
     int bx = x >> 10, by = y >> 10;

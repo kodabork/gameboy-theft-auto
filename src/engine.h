@@ -15,6 +15,11 @@ typedef unsigned char  u8;  typedef signed char  s8;
 typedef unsigned short u16; typedef signed short s16;
 typedef unsigned int   u32; typedef signed int   s32;
 
+/* Frame buffer writes that change one pixel of a pair. VRAM ignores byte stores (a byte store writes the
+   value into both pixels), so these force a halfword store: without volatile the compiler may turn
+   "(*p & 0x00FF) | (v << 8)" into a byte store of v, which breaks on hardware. */
+static inline void fb_lo(unsigned short *p, int v) { volatile unsigned short *q = p; *q = (unsigned short)((*q & 0xFF00) | v); }
+static inline void fb_hi(unsigned short *p, int v) { volatile unsigned short *q = p; *q = (unsigned short)((*q & 0x00FF) | (v << 8)); }
 #define SCR_W   120      /* logical columns (each is 2 physical pixels) */
 #define SCR_H   160
 #define HORIZON 80

@@ -32,7 +32,7 @@ void game_debug_knock(int ahead_m, int age);
 void game_debug_set(int w, int guns);
 int main(int argc, char **argv)
 {
-    FILE *af = fopen("../build/assets.bin", "rb"); fread(spr_pixels, 1, sizeof spr_pixels, af); fclose(af);
+    FILE *af = fopen("../build/sprpack.bin", "rb"); fread(spr_pixels, 1, sizeof spr_pixels, af); fclose(af);
     FILE *tf = fopen("../build/terrain.bin", "rb"); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
     palette_build(pal);
     static u16 day_pal[256]; for (int i = 0; i < 256; i++) day_pal[i] = pal[i];

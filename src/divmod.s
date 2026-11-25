@@ -4,28 +4,137 @@
     .align 2
     .global __aeabi_idiv, __aeabi_idivmod, __aeabi_uidiv, __aeabi_uidivmod
 
-@ Fast shift-subtract division: only loops over the quotient's bits.
-@ r0 = numerator, r1 = denominator  ->  r0 = quotient, r1 = remainder
+@ Unsigned division: find how many quotient bits there are (binary search on n >> k >= d), then jump
+@ into a fully unrolled shift-subtract table, 3 instructions per quotient bit.
+@ r0 = numerator, r1 = denominator  ->  r0 = quotient, r1 = remainder   (d = 0 gives q = 0)
 __aeabi_uidiv:
 __aeabi_uidivmod:
     cmp     r1, #0
     moveq   r0, #0
     bxeq    lr
-    mov     r2, r1                  @ shifted divisor
-    mov     r3, #1                  @ current quotient bit
-1:  cmp     r2, r0, lsr #1
-    movls   r2, r2, lsl #1
-    movls   r3, r3, lsl #1
-    bls     1b
-    mov     r12, #0
-2:  cmp     r0, r2
-    subcs   r0, r0, r2
-    orrcs   r12, r12, r3
-    movs    r3, r3, lsr #1
-    movne   r2, r2, lsr #1
-    bne     2b
+    cmp     r0, r1
+    movlo   r1, r0                  @ n < d: quotient 0, remainder n
+    movlo   r0, #0
+    bxlo    lr
+    mov     r2, #0                  @ s = largest k with (d << k) <= n
+    mov     r3, r0
+    cmp     r1, r3, lsr #16
+    movls   r3, r3, lsr #16
+    addls   r2, r2, #16
+    cmp     r1, r3, lsr #8
+    movls   r3, r3, lsr #8
+    addls   r2, r2, #8
+    cmp     r1, r3, lsr #4
+    movls   r3, r3, lsr #4
+    addls   r2, r2, #4
+    cmp     r1, r3, lsr #2
+    movls   r3, r3, lsr #2
+    addls   r2, r2, #2
+    cmp     r1, r3, lsr #1
+    addls   r2, r2, #1
+    mov     r3, #0                  @ quotient
+    rsb     r2, r2, #31
+    add     r2, r2, r2, lsl #1      @ (31 - s) * 3 instructions
+    add     pc, pc, r2, lsl #2
+    nop
+    cmp     r0, r1, lsl #31
+    subcs   r0, r0, r1, lsl #31
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #30
+    subcs   r0, r0, r1, lsl #30
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #29
+    subcs   r0, r0, r1, lsl #29
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #28
+    subcs   r0, r0, r1, lsl #28
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #27
+    subcs   r0, r0, r1, lsl #27
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #26
+    subcs   r0, r0, r1, lsl #26
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #25
+    subcs   r0, r0, r1, lsl #25
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #24
+    subcs   r0, r0, r1, lsl #24
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #23
+    subcs   r0, r0, r1, lsl #23
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #22
+    subcs   r0, r0, r1, lsl #22
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #21
+    subcs   r0, r0, r1, lsl #21
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #20
+    subcs   r0, r0, r1, lsl #20
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #19
+    subcs   r0, r0, r1, lsl #19
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #18
+    subcs   r0, r0, r1, lsl #18
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #17
+    subcs   r0, r0, r1, lsl #17
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #16
+    subcs   r0, r0, r1, lsl #16
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #15
+    subcs   r0, r0, r1, lsl #15
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #14
+    subcs   r0, r0, r1, lsl #14
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #13
+    subcs   r0, r0, r1, lsl #13
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #12
+    subcs   r0, r0, r1, lsl #12
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #11
+    subcs   r0, r0, r1, lsl #11
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #10
+    subcs   r0, r0, r1, lsl #10
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #9
+    subcs   r0, r0, r1, lsl #9
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #8
+    subcs   r0, r0, r1, lsl #8
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #7
+    subcs   r0, r0, r1, lsl #7
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #6
+    subcs   r0, r0, r1, lsl #6
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #5
+    subcs   r0, r0, r1, lsl #5
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #4
+    subcs   r0, r0, r1, lsl #4
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #3
+    subcs   r0, r0, r1, lsl #3
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #2
+    subcs   r0, r0, r1, lsl #2
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #1
+    subcs   r0, r0, r1, lsl #1
+    adc     r3, r3, r3
+    cmp     r0, r1, lsl #0
+    subcs   r0, r0, r1, lsl #0
+    adc     r3, r3, r3
     mov     r1, r0                  @ remainder
-    mov     r0, r12                 @ quotient
+    mov     r0, r3                  @ quotient
     bx      lr
 
 __aeabi_idiv:
