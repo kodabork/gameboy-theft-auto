@@ -1,7 +1,7 @@
 /* Acts Two to Four of STORY.md: missions 10-40 as step lists for the mission engine in game.c.
    Included once, from game.c. Coordinates in metres; a city block is 64 m (see CLAUDE.md, Map).
    Dialogue lines are at most 35 characters. Speakers: NICK, MARTA, JINX, RUDY, BOHDAN, DEE, KANE,
-   PRYCE, MERCER. Outfits: Marta red, Jinx green, Rudy white, Bohdan grey, Dee navy, Kane and Pryce
+   PRYCE, MERCER. Models: Marta and Dee have their own women's models; Jinx green, Rudy white, Bohdan grey, Kane and Pryce
    suit, Mercer and the Blackline guards in uniform. */
 
 #define AT(bx, by, ox, oy) (bx) * 64 + (ox), (by) * 64 + (oy)
@@ -46,7 +46,7 @@ static const Page p10[] = {
     { "DEE", "I NEED PROOF. RIGHT NOW I NEED A", "RIDE. TWO CARS HAVE BEEN ON ME." },
     { "DEE", "PICK ME UP AT THE CAFE DOWNTOWN,", "ACROSS THE RIVER." } };
 static const Step m10[] = {
-    S_PICKUP(PED_NAVY, NS(11, 3), 0, "PICK UP DEE DOWNTOWN", "ACROSS THE RIVER"),
+    S_PICKUP(PED_DEE, NS(11, 3), 0, "PICK UP DEE DOWNTOWN", "ACROSS THE RIVER"),
     S_HUNT(2, F_LOSE, CAR_SEDAN_SILVER, "SHAKE THE TWO CARS", "WRECK THEM OR LOSE THEM"),
     S_GO(F_CAR, ROADN(13, 7), 0, "TAKE DEE TO THE GAZETTE", 0) };
 
@@ -166,7 +166,7 @@ static const Page p20[] = {
 static const Step m20[] = {
     S_GO(F_CAR, ROADN(13, 7), 80, "GET TO THE GAZETTE, FAST", 0),
     S_KILL(4, F_HERE, PED_SUIT, NS(13, 7), 100, "STOP THE ARSONISTS", 0),
-    S_PICKUP(PED_NAVY, NS(13, 7), 0, "GET DEE OUT", 0),
+    S_PICKUP(PED_DEE, NS(13, 7), 0, "GET DEE OUT", 0),
     S_SURVIVE(3, 45, "HALF THE CITY IS AFTER YOU", "STAY ALIVE"),
     S_HEAT(3, "NOW LOSE THEM", 0),
     S_GO(F_CAR, SAFEPOS, 0, "TAKE DEE TO THE SAFEHOUSE", "IN THE HEIGHTS"),
@@ -330,7 +330,7 @@ static const Page p35[] = {
     { "NICK", "AND IF THEY SHOOT AT THE CRANE?", 0 },
     { "DEE", "THEN IT'S A GREAT BROADCAST.", 0 } };
 static const Step m35[] = {
-    S_PICKUP(PED_NAVY, AT(15, 15, 44, 13), 0, "PICK UP DEE", 0),
+    S_PICKUP(PED_DEE, AT(15, 15, 44, 13), 0, "PICK UP DEE", 0),
     S_HUNT(2, 0, CAR_SUV_BLACK, "BLACKLINE IS COMING FOR DEE", "WRECK THEM"),
     S_GO(F_CAR, ROADN(18, 16), 0, "DRIVE DEE TO THE CRANE", 0),
     S_DEFEND(3, PED_COP, NS(18, 16), "PROTECT DEE WHILE SHE BROADCASTS", 0),
@@ -411,34 +411,34 @@ static const struct { const Page *pg; u8 n; } story_says[] = {
     { say0, NPAGES(say0) }, { say1, NPAGES(say1) }, { say2, NPAGES(say2) }, { say3, NPAGES(say3) }, { say4, NPAGES(say4) } };
 
 static const MissionDef story_defs[NMISSIONS - NACT1] = {
-    MDEF("FRONT PAGE", PED_NAVY, NS(7, 4), p10, m10, 4000),
+    MDEF("FRONT PAGE", PED_DEE, NS(7, 4), p10, m10, 4000),
     MDEF("EVICTION NOTICE", PED_GREY, NS(1, 5), p11, m11, 4500),
     MDEF("CROWN DEBT", PED_SUIT, NS(3, 11), p12, m12, 5000),
-    MDEF("CITY HALL INK", PED_NAVY, NS(12, 5), p13, m13, 5000),
-    MDEF("PHOTO OP", PED_NAVY, NS(13, 6), p14, m14, 5500),
-    MDEF("DANNY BOY", PED_RED, NS(2, 6), p15, m15, 6000),
+    MDEF("CITY HALL INK", PED_DEE, NS(12, 5), p13, m13, 5000),
+    MDEF("PHOTO OP", PED_DEE, NS(13, 6), p14, m14, 5500),
+    MDEF("DANNY BOY", PED_MARTA, NS(2, 6), p15, m15, 6000),
     MDEF("KINGS' RANSOM", PED_SUIT, NS(3, 12), p16, m16, 6500),
     MDEF("SHREDDER", PED_GREEN, NS(11, 5), p17, m17, 7000),
-    MDEF("MOTORCADE", PED_NAVY, ES(12, 6), p18, m18, 7500),
+    MDEF("MOTORCADE", PED_DEE, ES(12, 6), p18, m18, 7500),
     MDEF("MORAN'S HEIR", PED_SUIT, NS(3, 12), p19, m19, 8000),
-    MDEF("RETRACTION", PED_NAVY, NS(11, 7), p20, m20, 9000),
+    MDEF("RETRACTION", PED_DEE, NS(11, 7), p20, m20, 9000),
     MDEF("NEW MANAGEMENT", PED_WHITE, NS(7, 6), p21, m21, 7000),
-    MDEF("CONTAINER 7", PED_RED, NS(2, 6), p22, m22, 8500),
+    MDEF("CONTAINER 7", PED_MARTA, NS(2, 6), p22, m22, 8500),
     MDEF("THE OFFER", PED_SUIT, SS(6, 17), p23, m23, 6000),
     MDEF("NIGHT SHIFT", PED_GREY, NS(1, 5), p24, m24, 7000),
     MDEF("IRON YARD", PED_SUIT, NS(3, 12), p25, m25, 8000),
-    MDEF("PAPER TRAIL", PED_NAVY, NS(10, 1), p26, m26, 8000),
+    MDEF("PAPER TRAIL", PED_DEE, NS(10, 1), p26, m26, 8000),
     MDEF("HILL CLIMB", PED_GREEN, NS(4, 13), p27, m27, 9000),
-    MDEF("BURNED", PED_RED, NS(5, 12), p28, m28, 9000),
-    MDEF("MERCER", PED_RED, NS(0, 4), p29, m29, 10000),
+    MDEF("BURNED", PED_MARTA, NS(5, 12), p28, m28, 9000),
+    MDEF("MERCER", PED_MARTA, NS(0, 4), p29, m29, 10000),
     MDEF("WHAT JINX KNEW", PED_GREEN, NS(4, 8), p30, m30, 3000),
     MDEF_AFTER("DRAWBRIDGE", PED_SUIT, NS(13, 13), p31, m31, 10000, a31),
     MDEF("LANDING PARTY", PED_WHITE, NS(7, 6), p32, m32, 9000),
-    MDEF("POWER DOWN", PED_RED, NS(16, 15), p33, m33, 10000),
+    MDEF("POWER DOWN", PED_MARTA, NS(16, 15), p33, m33, 10000),
     MDEF("HARD HATS", PED_SUIT, NS(15, 16), p34, m34, 10000),
-    MDEF("LIVE FEED", PED_NAVY, NS(15, 15), p35, m35, 11000),
+    MDEF("LIVE FEED", PED_DEE, NS(15, 15), p35, m35, 11000),
     MDEF("MERCER, AGAIN", PED_COP, NS(16, 18), p36, m36, 12000),
     MDEF_AFTER("HALVORSEN SAILS", PED_WHITE, NS(16, 17), p37, m37, 12000, a37),
-    MDEF("COUNCILMAN", PED_NAVY, NS(17, 19), p38, m38, 12000),
+    MDEF("COUNCILMAN", PED_DEE, NS(17, 19), p38, m38, 12000),
     MDEF_AFTER("THE LUCKY MARIE", PED_SUIT, NS(19, 18), p39, m39, 15000, a39),
     MDEF_AFTER("HOME", PED_GREY, NS(15, 16), p40, m40, 20000, a40) };

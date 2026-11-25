@@ -22,6 +22,18 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.40
+- **Women character models.** A new women's body (narrower shoulders, a defined waist and hips, slimmer
+  limbs, longer hair, and skirts with bare legs) in four outfits:
+  - **Dee Okafor** (navy blazer, white shirt, short bob) and **Marta** (red jacket, jeans, long auburn
+    hair) now look like themselves in every cutscene and mission.
+  - **Two pedestrian looks** (mustard top and dark skirt; teal top and grey skirt) walk the streets
+    with everyone else.
+- **Stats screen:** pause > STATS shows time played, story missions done, distance driven and walked,
+  people and cops killed, vigilante takedowns, cars destroyed, shots fired, highest wanted level, times
+  wasted and busted, stores robbed (and the take), pool and bowling wins, and your cash. Stats are saved
+  with your game.
+
 ## What's new in v0.39
 - **It's much harder to get a wanted level by accident:**
   - Killing or running someone over only gets you a star if a cop is close enough to see it (35 m).

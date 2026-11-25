@@ -71,6 +71,9 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - `street_life` (game.c, "street crime" section) starts one crime at a time near the player, 18-38 s apart, never during a job or while wanted: `S_MUG` (a civilian runs at a victim, or at a traffic car for a carjacking: `tgt` = ped, or 100 + car), then flees (criminals run 4.4 m/s, cops 5.0). `dispatch_police` sends the nearest beat cop (`S_COPCHASE`) or a patrol car (`crim_police`, which `update_police` aims at the criminal while `wanted == 0`). Armed criminals (`crim == 2`) get shot. `kill_ped` turns a player kill of a criminal into a $100 reward.
 - `tools/street_test.c` stands the player in free roam for 10 game minutes and prints the counts (and fails if the player ever gets wanted).
 
+## Stats (v0.40)
+- `Stats st` in game.c: counters updated where things happen (`kill_ped`, `car_damage`, the muzzle flash in `player_fire`, `respawn_player`, `shop_leave`, the minigame payout, and once a frame for time, distance and wanted). Saved by `save_write` at SRAM offset 256 (`stats_write`, own magic and checksum), read back in `load_game` after `new_game_state`. Shown by `stats_show` (pause menu > STATS).
+
 ## Memory budget
 - **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
 - Put big arrays in EWRAM with `EWRAM_BSS`.
@@ -102,6 +105,7 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - `tools/sprites_people.py` (skeleton + gait curves). Per set: 9 stored view directions of 16 (the rest mirrored), 26 frames each (idle, walk 12, run 12, aim), 8 down frames, 24 ragdoll tumble frames (3 views x 8 pitch angles). Offsets `PED_DIR_FRAMES`, `PED_DOWN`, `PED_TUMBLE`, `PED_BLOCK` (far set) come from `assets.h`.
 - v0.25 body (owner said the old one was stiff and lanky, with odd bits on the arms): no shoulder balls (deltoid ellipsoids plus a trapezius cone from the neck), fists instead of flat hand ovals, fuller limbs. Arms swing *opposite* the same-side leg (`sh` in `GAIT` is used directly), hips and shoulders twist (`tw`), and running elbows stay bent at about 1.15-1.35 rad.
 - Weapon stances: `Human(mode='aim', weapon=...)` with 'pistol' (the normal aim frame) or 'smg', 'shotgun', 'rifle', 'rocket' (hands placed on the weapon by 2-bone IK, `GUNS`, `_gun_sdf`). These are player-only frames stored after the player block: `PED_PLAYER + PED_STANCE + dir * PED_NSTANCE + (weapon - 2)`.
+- Women (v0.40): outfits with `female=True` get the women's body (narrower shoulders, waist and hips, bust, slimmer limbs, longer hair), `skirt=True` a flared skirt with bare legs (drawn as skin), `bob=True` a chin-length bob. Sets: `PED_DEE`, `PED_MARTA` (story characters), `PED_WOMAN_A`, `PED_WOMAN_B` (pedestrians, in `civ_models`).
 - Ragdolls: `update_ragdoll` in `game.c` (velocity, gravity, bounces, wall rebounds, slide, settle); `kill_ped` launches them.
 
 ## Car models
@@ -113,7 +117,6 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 See `STORY.md`. 40 missions: Act One is the nine hand-written jobs in `start_mission` / `update_mission` (`NACT1`); missions 10-40 are step lists in `src/story_acts.h` run by the engine just above `respawn_player` in game.c (`story_update`, ops `OP_*`, flags `F_*`; `NOWHERE` coordinates mean "where the last car stopped or target fell"). To add a mission, add a `Page` intro, a `Step` list and an `MDEF` line, bump `NMISSIONS`, and run `tools/mission_test.c` (it solves every step type). Story choices are bits in `story_flags`, saved in the high byte of `SaveData.mission`. Hunter cars use `AI_RIVAL` (the police chase code without a crew). Host debug key `0xE00 + n` jumps to mission n. Cutscenes run in-engine: the giver actor stands in ped slot `PED_ACTOR`, the camera logic is in `game_build_scene`. The dialogue box is in `hud.c`. **Portraits are switched off (`SHOW_PORTRAITS 0`) at the owner's request:** five code-drawn styles (flat pixel, 3D-rendered, painted, anime, SNES) were all rejected. Don't try to generate faces in code again; if the owner supplies art, convert it. The plumbing still works: an 8bpp 64x64 OBJ at tiles 896.., colours in OBJ palette entries 96..255, OAM 127, uploaded when the speaker changes (`src/portraits.c`).
 
 ## Ideas not done yet
-- Boats (the yacht model exists; needs water driving), female ped models for Dee and Marta, an older-man model for Bohdan.
+- Boats (the yacht model exists; needs water driving), an older-man model for Bohdan.
 - More performance work: walls (`band`/`vspan`) and sprite blits are now the largest costs.
 - A finer ground texture (0.5 m texels look stair-stepped close up).
-- Female ped models for Marta and Jinx. They currently reuse outfit colours (their portraits are female).

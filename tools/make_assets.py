@@ -95,7 +95,8 @@ for d in range(PED_DIRS):
         add(Human('player', 0, mode='aim', weapon=wpn), d * 2 * np.pi / 16, np.radians(17), 0.022, 100, 96, 8)
 print('PED_PLAYER', round(time.time() - t0, 1), flush=True)
 for name, outfit in (('PED_GREY', 'grey'), ('PED_RED', 'red'), ('PED_NAVY', 'navy'), ('PED_SUIT', 'suit'),
-                     ('PED_GREEN', 'green'), ('PED_WHITE', 'white'), ('PED_COP', 'cop')):
+                     ('PED_GREEN', 'green'), ('PED_WHITE', 'white'), ('PED_COP', 'cop'),
+                     ('PED_DEE', 'dee'), ('PED_MARTA', 'marta'), ('PED_WOMAN_A', 'woman_a'), ('PED_WOMAN_B', 'woman_b')):
     begin(name)
     ped_block(outfit, 15, 0.032, 40, 64, 6)          # near
     ped_block(outfit, 6, 0.060, 22, 34, 4)           # far (index + PED_BLOCK)

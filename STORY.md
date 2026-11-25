@@ -123,7 +123,7 @@ Gull Island, the half-built *Harbor Point* casino, opens up. Everyone Pryce step
 - There are no boats yet, so the boat chases from the first plan became car chases.
 - **Cutscenes:** in-engine, with letterbox bars and a dialogue box. The mission giver stands in the street facing Nick: an establishing two-shot first, then over-the-shoulder cuts to whoever is speaking. Afterwards the giver walks away. Portraits stay off unless the owner supplies art.
 - **New people needed:**
-  - **Female ped models** for Dee and Marta (they wear the navy and red outfits for now), and an older-man model for Bohdan (grey outfit). Each new set is about 1 MB of ROM with near and far frames.
+  - Dee and Marta have their own women's models since v0.40. Still to do: an older-man model for Bohdan (grey outfit for now).
   - A Blackline guard (they use the uniformed cop model for now).
 
 ## Systems
