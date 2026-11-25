@@ -35,6 +35,9 @@ typedef struct {
     const char *radio_name; int radio_t;         /* station name, shown briefly after a change */
 #define MAX_PK_BLIPS 16
     s16 pk_x[MAX_PK_BLIPS], pk_y[MAX_PK_BLIPS]; u8 pk_t[MAX_PK_BLIPS]; int npk;   /* pickups on the radar (type: 2 = health) */
+#define MAX_MAP_ICONS 64
+    int map;                                     /* pause menu > MAP: the whole city on screen */
+    s16 map_x[MAX_MAP_ICONS], map_y[MAX_MAP_ICONS]; u8 map_t[MAX_MAP_ICONS]; int map_n;   /* 10 + shop type, 1 job */
 } GameHud;
 void hud_draw(u16 *fb);
 typedef struct { s16 x, y; u8 g, bank, scale, pad; } TxtObj;
@@ -43,6 +46,7 @@ extern TxtObj g_txt[MAX_TXT]; extern int g_ntxt;
 void hud_glyph_tile(int g, u32 *tile); int hud_nglyphs(void); void radar_init(void);
 void radar_build(u32 *tiles4bpp, int part);      /* 64x64, 4bpp, 1D tile order; part 0..3 per frame */
 extern GameHud g_hud;
+extern const u16 map_marker_rgb[6];            /* palette entries 1..6 while the city map is up */
 
 void game_init(void);
 void game_update(u16 keys, int dt);           /* keys: 1 = pressed; dt in 1/16384 s */

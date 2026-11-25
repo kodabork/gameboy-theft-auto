@@ -89,6 +89,11 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - Rules learned: never store single bytes to VRAM (a byte store writes both pixels; use a volatile halfword read-modify-write, and check `llvm-objdump -d build/render.o | grep strb`). The v0.44 sprite blitter has one such `strb` (the right-pixel-only case in `blit`), which leaves a stray pixel on some sprite edges on hardware; fixing it in isolation is safe.
 - mGBA runs headless through libmgba (apt `libmgba-dev`); a small runner lives in the scratchpad (`mgrun.c`).
 
+## Pause menu map (v0.46)
+- Pause > MAP (`map_page` in game.c) fills `g_hud.map_*` with every shop (10 + type) and the job blips, and sets `g_hud.map`. `map_draw` in hud.c copies a 160x160 day-palette copy of `radar_map` (built once into EWRAM by `map_build`, nearest palette entries) into the middle of the screen, then draws the markers and the legend.
+- Marker colours borrow sky palette entries 1..6 (`map_marker_rgb`), which gba_main loads while the map is up and restores with `palette_tod` afterwards; the map counts as a daylight screen. The 3D render, scene build, radar and beam are skipped while the map is up, and the OBJ radar is hidden (also on the stats page).
+- Minigames ignore A and B after `mini_start` until both are released (`input_lock` in minigames.c), so the menu press does not shoot.
+
 ## Memory budget
 - **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
 - Put big arrays in EWRAM with `EWRAM_BSS`.

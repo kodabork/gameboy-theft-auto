@@ -625,8 +625,10 @@ static void pool_draw(void)
 }
 
 /* =================================================================== shared */
+static int input_lock;   /* A/B ignored until released: the press that picked the game must not play it */
 void mini_start(int kind)
 {
+    input_lock = 1;
     game_kind = kind; result = 0; phase_t = 0; banner = 0; banner_t = 0;
     if (kind == MINI_BOWL) bowl_start(); else pool_start();
 }
@@ -634,6 +636,10 @@ int mini_update(u16 keys, u16 pressed, int dt)
 {
     if (banner_t > 0) banner_t -= dt;
     g_snd.engine_vol = 0; g_snd.skid = 0; g_snd.horn = 0; g_snd.siren = 0; g_snd.nitro = 0;
+    if (input_lock) {
+        if (keys & (KEY_A | KEY_B)) { keys &= (u16)~(KEY_A | KEY_B); pressed &= (u16)~(KEY_A | KEY_B); }
+        else input_lock = 0;
+    }
     return game_kind == MINI_BOWL ? bowl_update(keys, pressed, dt) : pool_update(keys, pressed, dt);
 }
 void mini_draw(void) { if (game_kind == MINI_BOWL) bowl_draw(); else pool_draw(); }

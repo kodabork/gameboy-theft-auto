@@ -22,6 +22,17 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.46
+Built on v0.44, the last version that boots on real hardware (v0.45 was withdrawn).
+- **City map in the pause menu:** pause > MAP shows the whole city with every shop marked by type
+  (bowling, pool, guns, store, pawn, car lot), the next job marker, and a blinking marker for you
+  with a line for the way you are facing.
+- **Pool and bowling no longer start with a shot:** the A press that picks the game from the menu used
+  to carry straight into the game and fire the break. The game now waits until you let go of the
+  button.
+- **The minimap is hidden on the stats screen.**
+- Fixed stray single pixels on real hardware at the edges of some sprites, shop and title pictures.
+
 ## What's new in v0.44
 - **Headlights after dark.**
   - Your car throws a beam of light down the road ahead. It is brightest just in front of the car and fades

@@ -66,7 +66,7 @@ int main(int argc, char **argv)
             if (keys >= 0xFE0 && keys <= 0xFE8) { void game_debug_tp_mission(int); game_debug_tp_mission(keys - 0xFE0); keys = 0; }
             if (keys >= 0xFF0 && keys <= 0xFF3) { void game_debug_tp_mission(int); game_debug_tp_mission(keys - 0xFF0); keys = 0; }
             game_update((u16)keys, 16384 / 20);
-            { int game_tod(void), game_daylight_screen(void); palette_tod(pal, day_pal, game_daylight_screen() ? 720 : game_tod()); }
+            { int game_tod(void), game_daylight_screen(void); palette_tod(pal, day_pal, game_daylight_screen() ? 720 : game_tod()); if (g_hud.map) for (int i = 0; i < 6; i++) pal[1 + i] = map_marker_rgb[i]; }
             for (int k = 0; k < nd; k++) if (dumpat[k] == frame) {
                 Camera cam; int no;
                 game_build_scene(&cam, objs, &no);

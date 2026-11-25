@@ -622,20 +622,20 @@ static void blit(const SprFrame *f, int sx8, int sb8, int z, const u8 *occ, int 
                 int vi = v >> 16;
                 int a = sa[vi], b = sb[vi];
                 if (a && b) *p = (u16)((a + SPR_PAL_BASE) | ((b + SPR_PAL_BASE) << 8));
-                else if (a) *p = (u16)((*p & 0xFF00) | (a + SPR_PAL_BASE));
-                else if (b) *p = (u16)((*p & 0x00FF) | ((b + SPR_PAL_BASE) << 8));
+                else if (a) { volatile u16 *q = p; *q = (u16)((*q & 0xFF00) | (a + SPR_PAL_BASE)); }   /* halfword stores only (VRAM) */
+                else if (b) { volatile u16 *q = p; *q = (u16)((*q & 0x00FF) | ((b + SPR_PAL_BASE) << 8)); }
                 p += SCR_W; v += inv;
             }
         } else if (va) {
             for (int r = rs; r < rend; r++) {
                 int vi = v >> 16;
-                int a = sa[vi]; if (a) *p = (u16)((*p & 0xFF00) | (a + SPR_PAL_BASE));
+                int a = sa[vi]; if (a) { volatile u16 *q = p; *q = (u16)((*q & 0xFF00) | (a + SPR_PAL_BASE)); }
                 p += SCR_W; v += inv;
             }
         } else {
             for (int r = rs; r < rend; r++) {
                 int vi = v >> 16;
-                int b = sb[vi]; if (b) *p = (u16)((*p & 0x00FF) | ((b + SPR_PAL_BASE) << 8));
+                int b = sb[vi]; if (b) { volatile u16 *q = p; *q = (u16)((*q & 0x00FF) | ((b + SPR_PAL_BASE) << 8)); }
                 p += SCR_W; v += inv;
             }
         }
@@ -662,7 +662,7 @@ static void lamp_dot(int sx8, int sb8, int z, int tail)
             if (izs < col_wiz[c] && y >= col_wtop[c]) continue;
             int col = tail ? 252 : (d >= 4 && (ex || ey)) ? 253 : 254;   /* HUD red / yellow / white: never night-tinted */
             u16 *p = FB + y * SCR_W + c;
-            *p = (x & 1) ? (u16)((*p & 0x00FF) | (col << 8)) : (u16)((*p & 0xFF00) | col);
+            { volatile u16 *q = p; *q = (x & 1) ? (u16)((*q & 0x00FF) | (col << 8)) : (u16)((*q & 0xFF00) | col); }
         }
     }
 }
