@@ -331,14 +331,13 @@ void hud_draw(u16 *fb)
 #endif
     char buf[32], *p;
     if (g_hud.title) {                           /* title screen: pre-drawn artwork */
-        blit_img(&img_logo, (240 - img_logo.w) / 2, 8);
-        blit_img(&img_city, (240 - img_city.w) / 2, 76);
+        blit_img(&img_logo, (240 - img_logo.w) / 2, 2);         /* the owner's logo, "New York" included */
         for (int i = 0; i < g_hud.menu_n; i++) {
             int sel = i == g_hud.menu_sel;
             const Img *im = i == 0 ? (sel ? &img_new_s : &img_new) : (sel ? &img_cont_s : &img_cont);
-            blit_img(im, (240 - im->w) / 2, 100 + i * 19);
+            blit_img(im, (240 - im->w) / 2, 101 + i * 19);
         }
-        blit_img(&img_press, (240 - img_press.w) / 2, 142);
+        blit_img(&img_press, (240 - img_press.w) / 2, 143);
         return;
     }
     if (g_hud.dlg_l1) {                          /* story dialogue: RPG-style box with the speaker's portrait */

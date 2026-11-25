@@ -31,6 +31,7 @@ Built on v0.44, the last version that boots on real hardware (v0.45 was withdraw
   to carry straight into the game and fire the break. The game now waits until you let go of the
   button.
 - **The minimap is hidden on the stats screen.**
+- **New title screen logo:** the stacked "gameboy theft auto" logo with a red "New York".
 - Fixed stray single pixels on real hardware at the edges of some sprites, shop and title pictures.
 
 ## What's new in v0.44

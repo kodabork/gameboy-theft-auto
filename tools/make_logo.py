@@ -1,4 +1,4 @@
-# Title-screen artwork: an original slanted "sunset chrome" wordmark and stylized menu labels,
+# Title-screen artwork: the owner's logo (art/title_logo.png) and stylized menu labels,
 # rendered with a free font (FreeSans Bold Oblique), mapped onto the game's existing palette.
 # Usage: make_logo.py src/assets.c src/logo.c
 import sys, re, numpy as np
@@ -79,8 +79,31 @@ def label(txt, size, color, outline_px=3):
     rgb[core] = fill[core]
     return to_idx(rgb, out)
 
+def logo_from_art(path, height):
+    """The owner's title logo (art/title_logo.png, transparent background): cropped to its opaque
+    part, shrunk with premultiplied alpha to the given height, and matched to the palette (no dither:
+    the logo is flat white, black and red)."""
+    im = np.array(Image.open(path).convert('RGBA')).astype(np.float32) / 255
+    ys, xs = np.nonzero(im[..., 3] > 0.5)
+    im = im[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    h0, w0 = im.shape[:2]
+    w = int(round(w0 * height / h0))
+    pm = im.copy(); pm[..., :3] *= pm[..., 3:4]
+    sm = np.stack([np.array(Image.fromarray(pm[..., c]).resize((w, height), Image.BOX)) for c in range(4)], -1)
+    a = sm[..., 3]
+    rgb = sm[..., :3] / np.maximum(a, 1e-6)[..., None]
+    mask = a > 0.5
+    out = np.zeros((height, w), np.uint8)
+    best = ((lab(rgb[mask])[:, None, :] - PL[None]) ** 2).sum(-1).argmin(1)
+    out[mask] = IDX[best]
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    out[mask & (r > 0.3) & (r > g + 0.2) & (r > b + 0.2)] = 252   # the red lettering: the HUD's pure red
+    return out
+
+import os
+ART = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'art', 'title_logo.png')
 imgs = [
-    ('img_logo', logo('GTA', 70)),
+    ('img_logo', logo_from_art(ART, 100) if os.path.exists(ART) else logo('GTA', 70)),
     ('img_sub', label('GAMEBOY THEFT AUTO', 13, (1.0, 1.0, 1.0))),
     ('img_city', label('NEW YORK', 11, (1.0, 0.80, 0.25))),
     ('img_new', label('NEW GAME', 15, (0.92, 0.92, 0.95))),
