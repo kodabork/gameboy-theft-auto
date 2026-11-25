@@ -2794,8 +2794,8 @@ static void new_game_state(void)
 }
 static void load_game(const SaveData *d)
 {
-    stats_read();
     new_game_state();
+    stats_read();                                  /* after the reset, which clears the stats */
     mission = d->mission & 255; story_flags = d->mission >> 8; pl.money = d->money; pl.hp = d->hp > 0 ? d->hp : 100;
     pl.owned = d->owned; pl.weapon = d->weapon;
     for (int i = 1; i < 5; i++) pl.ammo[i] = d->ammo[i];
