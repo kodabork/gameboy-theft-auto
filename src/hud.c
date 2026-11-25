@@ -335,7 +335,7 @@ void hud_draw(u16 *fb)
         for (int i = 0; i < g_hud.menu_n; i++) {
             int sel = i == g_hud.menu_sel;
             const Img *im = i == 0 ? (sel ? &img_new_s : &img_new) : (sel ? &img_cont_s : &img_cont);
-            blit_img(im, (240 - im->w) / 2, 101 + i * 19);
+            blit_img(im, (240 - im->w) / 2, img_logo.h + 3 + i * 19);   /* just under the logo */
         }
         blit_img(&img_press, (240 - img_press.w) / 2, 143);
         return;
