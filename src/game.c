@@ -72,6 +72,10 @@ typedef struct { int x, y; u8 type, avail; s16 timer; } Pickup;
 EWRAM_BSS static Car cars[MAX_CARS];
 static int ncars;
 EWRAM_BSS static Ped peds[MAX_PEDS];
+/* career stats (pause menu > STATS), saved with the game in SRAM after the save slot */
+typedef struct { u32 magic; s32 play_s, car_m, foot_m, kills, cops, vigil, cars, shots, max_wanted, wasted, busted,
+                 robs, robbed, pool_wins, bowl_wins, play_frac; u32 sum; } Stats;
+EWRAM_BSS static Stats st;
 EWRAM_BSS static Drop drops[MAX_DROPS];
 EWRAM_BSS static Flash flashes[MAX_FLASH];
 EWRAM_BSS static Pickup pickups[MAX_PICKUPS];
@@ -517,6 +521,7 @@ static void car_damage(Car *c, int d, int by_player)
     if (c - cars == SLOT_MISSION && mission == 0 && mstate == 1) d >>= 1;     /* the supercar is tougher */
     int before = c->dmg;
     c->dmg += d; if (c->dmg > 1000) c->dmg = 1000;
+    if (before < CAR_FIRE && c->dmg >= CAR_FIRE && by_player && !is_player_car(c)) st.cars++;
     if (before < CAR_FIRE && c->dmg >= CAR_FIRE) {             /* catches fire */
         c->burn = c->dmg >= 1000 ? TICKS / 2 : 5 * TICKS;
         /* your own car always gives you time to bail out: a crash alone never kills you */
@@ -762,7 +767,8 @@ static void ped_corner(const Ped *p, int k, int *x, int *y)
     }
 }
 
-static const u16 civ_models[6] = { PED_GREY, PED_RED, PED_NAVY, PED_SUIT, PED_GREEN, PED_WHITE };
+#define NCIV_MODELS 8
+static const u16 civ_models[NCIV_MODELS] = { PED_GREY, PED_WOMAN_A, PED_RED, PED_NAVY, PED_WOMAN_B, PED_SUIT, PED_GREEN, PED_WHITE };
 
 /* drop a pedestrian onto a sidewalk near the player but out of sight-range */
 static void place_ped_near(Ped *p, int min_d)
@@ -802,6 +808,7 @@ static void kill_ped(Ped *p, int vx, int vy, int by_player, int fling_m)
     p->head = Q8(iatan2(vy, vx));
     p->down = 1; p->pool = 0; p->timer = 30 * 256; p->run = 0; p->aim = 0;
     g_snd.hit = 1;
+    if (by_player) { st.kills++; if (p->type == P_COP) st.cops++; if (p->crim) st.vigil++; }
     if (by_player && p->crim) {                  /* a street criminal: the city thanks you */
         p->crim = 0; pl.money += 100; g_snd.sfx |= SFX_CASH; msg("VIGILANTE  +$100", 0, 2);
         by_player = 0;
@@ -1394,6 +1401,7 @@ static void player_fire(u16 keys, u16 pressed, int dt)
         } else if ((rnd() & 3) == 0) g_snd.sfx |= SFX_RICOCHET;   /* a miss whines off a wall */
     }
     muzzle(plx(), ply(), aimang, M(1.35));
+    st.shots++;
     g_snd.shot = w; g_snd.shot_vol = 64;
     if (w == 3) g_snd.sfx |= SFX_PUMP; else if (w == 4) g_snd.sfx |= SFX_BOLT; else if (w == 1) g_snd.sfx |= SFX_SHELL;
     panic(plx(), ply(), w == 1 ? M(35) : M(50));
@@ -1416,7 +1424,7 @@ static void eject_driver(Car *c)
     if (world_point_blocked(ex, ey, M(0.4))) { ex = (c->x >> 8) - ((isin(a) * M(1.9)) >> 14); ey = (c->y >> 8) + ((icos(a) * M(1.9)) >> 14); }
     p->x = Q8(ex); p->y = Q8(ey); p->head = Q8(a + 1024);
     p->active = 1; p->down = 0; p->hp = 100; p->cd = 0; p->rag = 0; p->crim = 0; p->tgt = -1;
-    p->type = P_CIV; p->model = civ_models[rnd() % 6];
+    p->type = P_CIV; p->model = civ_models[rnd() % NCIV_MODELS];
     p->speed = Q8(M(1.3)); p->phase = rnd() & 511;
     p->bx = ex >> 10; p->by = ey >> 10;
     p->state = S_FLEE; p->timer = 8 * 256; p->fx = plx(); p->fy = ply();
@@ -1695,7 +1703,7 @@ static const u8 mission_intro_n[] = { NPAGES(st_m0), NPAGES(st_m1), NPAGES(st_m2
 static const char *const mission_title[] = { "HOT WHEELS", "CANDY RUN", "THE BOOKKEEPER", "WRONG CORNER", "DIRTY BLUE",
                                              "SPECIAL DELIVERY", "THE LEDGER", "CASH RUN", "LAST CALL" };
 /* who gives each job, and what they wear */
-static const u16 giver_model[] = { PED_RED, PED_GREEN, PED_SUIT, PED_SUIT, PED_NAVY, PED_SUIT, PED_GREEN, PED_RED, PED_WHITE };
+static const u16 giver_model[] = { PED_MARTA, PED_GREEN, PED_SUIT, PED_SUIT, PED_NAVY, PED_SUIT, PED_GREEN, PED_MARTA, PED_WHITE };
 
 static int gstate = 0;                        /* GS_* */
 /* car: 0 = saved on foot, else car set + 1 in the low byte and heading (256 per turn) in the high byte */
@@ -1776,7 +1784,7 @@ static void shop_leave(void)
 {
     Shop *h = &shops[shop_cur];
     if (shop_rob) {
-        pl.money += shop_take;
+        pl.money += shop_take; st.robs++; st.robbed += shop_take;
         h->cd = 240 * TICKS;                    /* four minutes before it has cash again */
         int w = shop_take < 700 ? 2 : 3;
         if (w > wanted) { wanted = w; wanted_cool = 0; }
@@ -2494,6 +2502,7 @@ static void story_after(int done)
 static void respawn_player(void)
 {
     int arrested = pl.dead_kind == 1;
+    if (arrested) st.busted++; else st.wasted++;
     if (pl.in_car >= 0) { cars[pl.in_car].ai = AI_NONE; pl.in_car = -1; }
     int bx = arrested ? station_bx : hosp_bx, by = arrested ? station_by : hosp_by;
     pl.x = Q8(bx * 1024 + M(13.5)); pl.y = Q8(by * 1024 + M(36)); pl.head = Q8(0);
@@ -2688,7 +2697,7 @@ void game_init(void)
         Ped *q = &peds[i];
         place_ped_near(q, M(4));
         q->type = (i % 10 == 9) ? P_COP : P_CIV;
-        q->model = q->type == P_COP ? PED_COP : civ_models[i % 6];
+        q->model = q->type == P_COP ? PED_COP : civ_models[i % NCIV_MODELS];
         q->speed = Q8(M(1.2)) + (int)(rnd() % (u32)Q8(M(0.5)));
         q->phase = rnd() & 511;
     }
@@ -2720,6 +2729,22 @@ static u32 save_sum(const SaveData *d)
     for (unsigned i = 0; i < sizeof *d - 4; i++) h = (h ^ b[i]) * 16777619u;
     return h;
 }
+#define STATS_MAGIC 0x54415453u                /* "STAT" */
+#define STATS_AT 256                           /* SRAM offset, after the save slot */
+static u32 stats_sum(const Stats *t) { const u32 *w = (const u32 *)t; u32 s = 0x5A5A; for (unsigned i = 0; i < sizeof *t / 4 - 1; i++) s = s * 31 + w[i]; return s; }
+static void stats_write(void)
+{
+    st.magic = STATS_MAGIC; st.sum = stats_sum(&st);
+    const u8 *b = (const u8 *)&st;
+    for (unsigned i = 0; i < sizeof st; i++) SRAM_B(STATS_AT + i) = b[i];
+}
+static void stats_read(void)
+{
+    Stats t; u8 *b = (u8 *)&t;
+    for (unsigned i = 0; i < sizeof t; i++) b[i] = SRAM_B(STATS_AT + i);
+    if (t.magic == STATS_MAGIC && t.sum == stats_sum(&t)) st = t;
+    else { u8 *z = (u8 *)&st; for (unsigned i = 0; i < sizeof st; i++) z[i] = 0; }
+}
 static int save_read(SaveData *d)
 {
     u8 *b = (u8 *)d;
@@ -2744,11 +2769,13 @@ static void save_write(void)
     d.sum = save_sum(&d);
     const u8 *b = (const u8 *)&d;
     for (unsigned i = 0; i < sizeof d; i++) SRAM_B(i) = b[i];
+    stats_write();
 }
 
 /* ------------------------------------------------------------ title / pause / dialog */
 static void new_game_state(void)
 {
+    { u8 *z = (u8 *)&st; for (unsigned i = 0; i < sizeof st; i++) z[i] = 0; }
     if (pl.in_car >= 0) cars[pl.in_car].ai = AI_NONE;
     pl.in_car = 0; pl.hp = 100; pl.money = 0; pl.owned = 0; pl.weapon = 0; pl.dead_t = 0;
     for (int i = 0; i < 6; i++) pl.ammo[i] = 0;
@@ -2767,6 +2794,7 @@ static void new_game_state(void)
 }
 static void load_game(const SaveData *d)
 {
+    stats_read();
     new_game_state();
     mission = d->mission & 255; story_flags = d->mission >> 8; pl.money = d->money; pl.hp = d->hp > 0 ? d->hp : 100;
     pl.owned = d->owned; pl.weapon = d->weapon;
@@ -2783,11 +2811,36 @@ static void load_game(const SaveData *d)
     } else { pl.in_car = -1; cars[0].active = 0; }
 }
 
+static int stats_page;
+static void stats_show(void)                       /* fills g_hud.stats_line[] for the STATS page */
+{
+    EWRAM_BSS static char lines[15][32];
+    int n = 0;
+    #define LINE(label) do { char *q_ = lines[n]; const char *a_ = label; while (*a_) *q_++ = *a_++; while (q_ - lines[n] < 22) *q_++ = ' '; cur = q_; } while (0)
+    char *cur;
+    LINE("TIME PLAYED"); cur = num_str(cur, st.play_s / 3600); *cur++ = 'H'; *cur++ = ' '; cur = num_str(cur, st.play_s / 60 % 60); *cur++ = 'M'; *cur = 0; n++;
+    LINE("STORY MISSIONS"); cur = num_str(cur, mission); *cur++ = '/'; num_str(cur, NMISSIONS); n++;
+    LINE("DRIVEN"); cur = num_str(cur, st.car_m / 1000); *cur++ = '.'; cur = num_str(cur, st.car_m / 100 % 10); *cur++ = ' '; *cur++ = 'K'; *cur++ = 'M'; *cur = 0; n++;
+    LINE("WALKED"); cur = num_str(cur, st.foot_m / 1000); *cur++ = '.'; cur = num_str(cur, st.foot_m / 100 % 10); *cur++ = ' '; *cur++ = 'K'; *cur++ = 'M'; *cur = 0; n++;
+    LINE("PEOPLE KILLED"); num_str(cur, st.kills); n++;
+    LINE("COPS KILLED"); num_str(cur, st.cops); n++;
+    LINE("VIGILANTE TAKEDOWNS"); num_str(cur, st.vigil); n++;
+    LINE("CARS DESTROYED"); num_str(cur, st.cars); n++;
+    LINE("SHOTS FIRED"); num_str(cur, st.shots); n++;
+    LINE("HIGHEST WANTED"); num_str(cur, st.max_wanted); n++;
+    LINE("WASTED / BUSTED"); cur = num_str(cur, st.wasted); *cur++ = ' '; *cur++ = '/'; *cur++ = ' '; num_str(cur, st.busted); n++;
+    LINE("STORES ROBBED"); cur = num_str(cur, st.robs); *cur++ = ' '; *cur++ = '$'; num_str(cur, st.robbed); n++;
+    LINE("POOL / BOWLING WINS"); cur = num_str(cur, st.pool_wins); *cur++ = ' '; *cur++ = '/'; *cur++ = ' '; num_str(cur, st.bowl_wins); n++;
+    LINE("CASH"); *cur++ = '$'; num_str(cur, pl.money < 0 ? 0 : pl.money); n++;
+    #undef LINE
+    for (int i = 0; i < n; i++) g_hud.stats_line[i] = lines[i];
+    g_hud.stats_n = n;
+}
 static void meta_update(u16 keys, u16 pressed, int dt)
 {
     g_snd.engine_vol = 0; g_snd.skid = 0; g_snd.horn = 0; g_snd.siren = 0; g_snd.nitro = 0;
     int up = pressed & KEY_UP, down = pressed & KEY_DOWN, ok = pressed & (KEY_A | KEY_START);
-    g_hud.dlg_l1 = 0; g_hud.menu_n = 0; g_hud.title = 0; g_hud.shop = 0;
+    g_hud.dlg_l1 = 0; g_hud.menu_n = 0; g_hud.title = 0; g_hud.shop = 0; g_hud.stats_n = 0;
     g_hud.cutscene = gstate == GS_DIALOG && cut_on;
     g_hud.mini = 0;
     if (gstate == GS_SHOP) { shop_update(keys, pressed, dt); return; }
@@ -2800,6 +2853,7 @@ static void meta_update(u16 keys, u16 pressed, int dt)
             char *q = note; const char *a;
             if (r == 1) {                                /* the stake back plus the same again */
                 pl.money += mini_bet * 2; g_snd.sfx |= SFX_PASS | SFX_CASH;
+                if (shop_cur >= 0 && shops[shop_cur].type == SHOP_POOL) st.pool_wins++; else st.bowl_wins++;
                 for (a = "YOU WON! BET $"; *a; ) *q++ = *a++;
                 q = num_str(q, mini_bet); for (a = ", PAID $"; *a; ) *q++ = *a++; q = num_str(q, mini_bet * 2); *q = 0;
                 q = bigt; *q++ = '+'; *q++ = '$'; num_str(q, mini_bet * 2);
@@ -2827,20 +2881,21 @@ static void meta_update(u16 keys, u16 pressed, int dt)
             if (menu_sel == 1) {
                 SaveData d;
                 if (save_read(&d)) { load_game(&d); gstate = GS_PLAY; msg("GAME LOADED", mission < NMISSIONS ? mission_name(mission) : "FREE ROAM", 3); }
-            } else { new_game_state(); cutscene(st_intro, NPAGES(st_intro), 0, PED_RED); }
+            } else { new_game_state(); cutscene(st_intro, NPAGES(st_intro), 0, PED_MARTA); }
         }
         return;
     }
     if (gstate == GS_PAUSE) {
-        static const char *items[4] = { "RESUME", "SAVE GAME", "", "QUIT TO TITLE" };
-        for (int i = 0; i < 4; i++) g_hud.menu_item[i] = items[i];
+        if (stats_page) { stats_show(); if (pressed & (KEY_A | KEY_B | KEY_START)) { stats_page = 0; g_snd.door = 1; } return; }
+        static const char *items[5] = { "RESUME", "SAVE GAME", "", "STATS", "QUIT TO TITLE" };
+        for (int i = 0; i < 5; i++) g_hud.menu_item[i] = items[i];
         static char rbuf[24];
         { const char *a = "RADIO: ", *b = g_snd.radio_on ? station_name[g_snd.station] : "OFF"; int n = 0; while (*a) rbuf[n++] = *a++; while (*b && n < 23) rbuf[n++] = *b++; rbuf[n] = 0; }
         g_hud.menu_item[2] = rbuf;
-        g_hud.menu_n = 4; g_hud.menu_title = "PAUSED";
+        g_hud.menu_n = 5; g_hud.menu_title = "PAUSED";
         g_hud.menu_note = menu_note == 1 ? "GAME SAVED" : menu_note == 2 ? "CAN'T SAVE DURING A JOB OR CHASE" : 0;
         if (up && menu_sel > 0) { menu_sel--; g_snd.step = 1; }
-        if (down && menu_sel < 3) { menu_sel++; g_snd.step = 1; }
+        if (down && menu_sel < 4) { menu_sel++; g_snd.step = 1; }
         g_hud.menu_sel = menu_sel;
         if (pressed & KEY_START) { gstate = GS_PLAY; return; }
         if (pressed & KEY_B) { gstate = GS_PLAY; return; }
@@ -2850,7 +2905,8 @@ static void meta_update(u16 keys, u16 pressed, int dt)
             case 0: gstate = GS_PLAY; break;
             case 1: if (mstate == 1 || wanted > 0 || pl.dead_t > 0) menu_note = 2; else { save_write(); has_save = 1; menu_note = 1; } break;
             case 2: radio_step(1); g_hud.radio_t = 0; break;
-            case 3: gstate = GS_TITLE; menu_sel = has_save ? 1 : 0; g_snd.radio_on = 0; break;
+            case 3: stats_page = 1; break;
+            case 4: gstate = GS_TITLE; menu_sel = has_save ? 1 : 0; g_snd.radio_on = 0; break;
             }
         }
         return;
@@ -2889,8 +2945,19 @@ void game_update(u16 keys, int dt)
     }
     if (gstate != GS_PLAY) { meta_update(keys, pressed, dt); return; }
     if ((pressed & KEY_START) && !(keys & KEY_SELECT)) { gstate = GS_PAUSE; menu_sel = 0; menu_note = 0; return; }
-    g_hud.menu_n = 0; g_hud.dlg_l1 = 0; g_hud.title = 0; g_hud.shop = 0; g_hud.mini = 0;
+    g_hud.menu_n = 0; g_hud.dlg_l1 = 0; g_hud.title = 0; g_hud.shop = 0; g_hud.mini = 0; g_hud.stats_n = 0; stats_page = 0;
     if (pressed & KEY_R) toggle_car();
+    {   /* stats: time played, distance driven / walked, highest wanted level */
+        static int lx, ly;
+        st.play_frac += dt; while (st.play_frac >= TICKS) { st.play_frac -= TICKS; st.play_s++; }
+        int d = dist_approx(plx() - lx, ply() - ly);
+        static int acc_car, acc_foot;
+        if (d < M(30)) { if (pl.in_car >= 0) acc_car += d; else acc_foot += d; }   /* teleports (respawn, jobs) don't count */
+        while (acc_car >= M(1)) { acc_car -= M(1); st.car_m++; }
+        while (acc_foot >= M(1)) { acc_foot -= M(1); st.foot_m++; }
+        lx = plx(); ly = ply();
+        if (wanted > st.max_wanted) st.max_wanted = wanted;
+    }
     for (int i = 0; i < nshops; i++) if (shops[i].cd > 0) shops[i].cd -= dt;
     if (pl.in_car < 0 && pl.dead_t <= 0) {                 /* walk into a shop door */
         int near = -1;

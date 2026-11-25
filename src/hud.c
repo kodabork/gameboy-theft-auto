@@ -297,11 +297,17 @@ void hud_draw(u16 *fb)
         if (g_hud.shop_big) { rect(40, 40, 160, 30, COL_BLACK); text_f(120 - text_width(g_hud.shop_big, 3) / 2, 44, g_hud.shop_big, COL_YELLOW, 3); }
         return;
     }
+    if (g_hud.stats_n) {                         /* pause menu > STATS */
+        shade_band(0, 160);
+        text_center(4, "STATS", COL_YELLOW, 2);
+        for (int i = 0; i < g_hud.stats_n; i++) text(20, 22 + i * 9, g_hud.stats_line[i], i & 1 ? COL_WHITE : COL_YELLOW, 1);
+        return;
+    }
     if (g_hud.menu_n) {                          /* pause menu */
-        shade_band(40, 112);
-        text_center(46, g_hud.menu_title, COL_YELLOW, 2);
-        draw_menu(68);
-        if (g_hud.menu_note) text_center(116, g_hud.menu_note, COL_WHITE, 1);
+        shade_band(38, 136);
+        text_center(42, g_hud.menu_title, COL_YELLOW, 2);
+        draw_menu(62);
+        if (g_hud.menu_note) text_center(124, g_hud.menu_note, COL_WHITE, 1);
         return;
     }
     if (g_hud.radio_t > 0 && g_hud.radio_name) text_center(4, g_hud.radio_name, COL_YELLOW, 1);   /* radio station */
