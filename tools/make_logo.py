@@ -1,4 +1,4 @@
-# Title-screen artwork: an original slanted "sunset chrome" wordmark and stylized menu labels,
+# Title-screen artwork: the owner's logo (art/title_logo.png) and stylized menu labels,
 # rendered with a free font (FreeSans Bold Oblique), mapped onto the game's existing palette.
 # Usage: make_logo.py src/assets.c src/logo.c
 import sys, re, numpy as np
@@ -79,8 +79,72 @@ def label(txt, size, color, outline_px=3):
     rgb[core] = fill[core]
     return to_idx(rgb, out)
 
+def shrink_rgba(im, w, h):
+    """premultiplied-alpha box filter, then palette match (no dither); returns indices"""
+    pm = im.copy(); pm[..., :3] *= pm[..., 3:4]
+    sm = np.stack([np.array(Image.fromarray(pm[..., c]).resize((w, h), Image.BOX)) for c in range(4)], -1)
+    a = sm[..., 3]
+    rgb = sm[..., :3] / np.maximum(a, 1e-6)[..., None]
+    mask = a > 0.5
+    out = np.zeros((h, w), np.uint8)
+    best = ((lab(rgb[mask])[:, None, :] - PL[None]) ** 2).sum(-1).argmin(1)
+    out[mask] = IDX[best]
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    out[mask & (r > 0.3) & (r > g + 0.2) & (r > b + 0.2)] = 252   # the red lettering: the HUD's pure red
+    return out
+
+def crop_alpha(im):
+    ys, xs = np.nonzero(im[..., 3] > 0.5)
+    return im[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+
+def logo_from_art(path, words_h, ny_mode, ny_w):
+    """The owner's title logo (art/title_logo.png, transparent background). The stacked words are shrunk
+    to words_h pixels high. "New York" (the red lettering and its outline) is taken out and either
+    shrunk separately to ny_w pixels wide ('art'), or redrawn as crisp pixel lettering ('font'),
+    so it stays readable at Game Boy size. Returns palette indices."""
+    im = np.array(Image.open(path).convert('RGBA')).astype(np.float32) / 255
+    r, g, b, a = im[..., 0], im[..., 1], im[..., 2], im[..., 3]
+    red = (r > 0.6) & (g < 0.32) & (b < 0.32) & (a > 0.5)
+    ys, xs = np.nonzero(red)
+    near = np.array(Image.fromarray((red * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(31))) > 127
+    near[:ys.min() - 16] = False
+    ny = im.copy(); ny[~near] = 0
+    words = im.copy(); words[near] = 0
+    words = crop_alpha(words)
+    wh0, ww0 = words.shape[:2]
+    ww = int(round(ww0 * words_h / wh0))
+    top = shrink_rgba(words, ww, words_h)
+    if ny_mode == 'font':
+        bot = label_red('New York', 17)
+    else:
+        ny = crop_alpha(ny)
+        nh0, nw0 = ny.shape[:2]
+        bot = shrink_rgba(ny, ny_w, int(round(nh0 * ny_w / nw0)))
+    # stack: New York tucked 3 px up under the words, centred
+    H = words_h + bot.shape[0] - 3
+    W = max(ww, bot.shape[1])
+    out = np.zeros((H, W), np.uint8)
+    out[:words_h, (W - ww) // 2:(W - ww) // 2 + ww] = top
+    y0 = words_h - 3; x0 = (W - bot.shape[1]) // 2
+    sub = out[y0:y0 + bot.shape[0], x0:x0 + bot.shape[1]]
+    sub[bot > 0] = bot[bot > 0]
+    return out
+
+def label_red(txt, size):
+    """crisp bold italic lettering in HUD red with a 2-pixel black outline"""
+    pad = 4
+    core = text_layer(txt, size, pad)
+    out = dilate(core, 5)
+    res = np.zeros(core.shape, np.uint8)
+    res[out] = 255
+    res[core] = 252
+    ys, xs = np.nonzero(out)
+    return res[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+
+import os
+ART = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'art', 'title_logo.png')
 imgs = [
-    ('img_logo', logo('GTA', 70)),
+    ('img_logo', logo_from_art(ART, 80, os.environ.get('LOGO_NY', 'art'), 128) if os.path.exists(ART) else logo('GTA', 70)),
     ('img_sub', label('GAMEBOY THEFT AUTO', 13, (1.0, 1.0, 1.0))),
     ('img_city', label('NEW YORK', 11, (1.0, 0.80, 0.25))),
     ('img_new', label('NEW GAME', 15, (0.92, 0.92, 0.95))),

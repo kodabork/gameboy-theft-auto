@@ -32,7 +32,7 @@ void game_debug_knock(int ahead_m, int age);
 void game_debug_set(int w, int guns);
 int main(int argc, char **argv)
 {
-    FILE *af = fopen("../build/sprpack.bin", "rb"); fread(spr_pixels, 1, sizeof spr_pixels, af); fclose(af);
+    FILE *af = fopen("../build/assets.bin", "rb"); fread(spr_pixels, 1, sizeof spr_pixels, af); fclose(af);
     FILE *tf = fopen("../build/terrain.bin", "rb"); fread(terrain_m, 1, sizeof terrain_m, tf); fread(terrain_r, 1, sizeof terrain_r, tf); fread(radar_map, 1, sizeof radar_map, tf); fclose(tf);
     palette_build(pal);
     static u16 day_pal[256]; for (int i = 0; i < 256; i++) day_pal[i] = pal[i];
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
             if (keys >= 0xFE0 && keys <= 0xFE8) { void game_debug_tp_mission(int); game_debug_tp_mission(keys - 0xFE0); keys = 0; }
             if (keys >= 0xFF0 && keys <= 0xFF3) { void game_debug_tp_mission(int); game_debug_tp_mission(keys - 0xFF0); keys = 0; }
             game_update((u16)keys, 16384 / 20);
-            { int game_tod(void), game_daylight_screen(void); palette_tod(pal, day_pal, game_daylight_screen() ? 720 : game_tod()); }
+            { int game_tod(void), game_daylight_screen(void); palette_tod(pal, day_pal, game_daylight_screen() ? 720 : game_tod()); if (g_hud.map) for (int i = 0; i < 6; i++) pal[1 + i] = map_marker_rgb[i]; }
             for (int k = 0; k < nd; k++) if (dumpat[k] == frame) {
                 Camera cam; int no;
                 game_build_scene(&cam, objs, &no);

@@ -59,8 +59,9 @@ static inline void put_px(int x, int y, int c)
 {
     if ((unsigned)x >= 240 || (unsigned)y >= 160) return;
     u16 *p = FBH + y * SCR_W + (x >> 1);
-    if (x & 1) fb_hi(p, c);
-    else fb_lo(p, c);
+    volatile u16 *q = p;                        /* halfword stores only: a byte store to VRAM writes both pixels */
+    if (x & 1) *q = (u16)((*q & 0x00FF) | (c << 8));
+    else *q = (u16)((*q & 0xFF00) | c);
 }
 
 static void rect(int x, int y, int w, int h, int c)
@@ -162,16 +163,16 @@ static void blit_img(const Img *im, int x0, int y0)     /* palette-index image, 
         const u8 *src = im->px + y * im->w - x0;     /* indexed by screen x */
         u16 *row = FBH + sy * 120;
         int sx = xs;
-        if (sx & 1) { int v = src[sx]; if (v) fb_hi(row + (sx >> 1), v); sx++; }
+        if (sx & 1) { int v = src[sx]; if (v) { volatile u16 *q = row + (sx >> 1); *q = (u16)((*q & 0x00FF) | (v << 8)); } sx++; }
         for (; sx + 1 < xe; sx += 2) {               /* whole 2-pixel words */
             int a = src[sx], b = src[sx + 1];
             if (!(a | b)) continue;
             u16 *w = &row[sx >> 1];
             if (a && b) *w = (u16)(a | (b << 8));
-            else if (a) fb_lo(w, a);
-            else fb_hi(w, b);
+            else if (a) { volatile u16 *q = w; *q = (u16)((*q & 0xFF00) | a); }
+            else { volatile u16 *q = w; *q = (u16)((*q & 0x00FF) | (b << 8)); }
         }
-        if (sx < xe) { int v = src[sx]; if (v) fb_lo(row + (sx >> 1), v); }
+        if (sx < xe) { int v = src[sx]; if (v) { volatile u16 *q = row + (sx >> 1); *q = (u16)((*q & 0xFF00) | v); } }
     }
 }
 static void shade_band(int y0, int y1)          /* darken a strip of the frame (checker of black) */
@@ -229,6 +230,98 @@ void hud_rect(int x, int y, int w, int h, int c) { rect(x, y, w, h, c); }
 void hud_text(int x, int y, const char *s, int col, int scale) { text_f(x, y, s, col, scale); }
 void hud_px(int x, int y, int c) { put_px(x, y, c); }
 
+
+/* ------------------------------------------------------------ city map (pause menu > MAP) */
+/* The radar's 2 m map, shrunk to 160x160 pixels in the middle of the screen, north up (x right,
+   y down, as on the radar texture). Built once into EWRAM in the day palette, then copied each frame. */
+#define MAP_X0 40
+#define MAP_PX 160
+static const u16 radar_rgb[16] = { 0, 0x1484, 0x318C, 0x5145, 0x7FFF, 0x7FFF, 0x13FF, 0x13E4, 0x033F, 0x7D08, 0x2529, 0x1A46, 0x3ED8, 0x7FE4, 0x0C7F, 0x7FFF };
+static int pal_near(const u16 *pal, int r, int g, int b)    /* closest day-palette entry, 5-bit channels */
+{
+    int best = 255, bd = 1 << 30;
+    for (int i = 8; i < 256; i++) {
+        int c = pal[i], dr = (c & 31) - r, dg = ((c >> 5) & 31) - g, db = ((c >> 10) & 31) - b;
+        int d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+        if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+}
+EWRAM_BSS static u16 map_img[MAP_PX * (MAP_PX / 2)];
+/* bowling orange, pool cyan, guns red, store green, pawn gold, car lot lilac (BGR555) */
+const u16 map_marker_rgb[6] = { 0x025F, 0x7F40, 0x10DF, 0x1BE6, 0x0F7E, 0x7EBA };
+static u8 map_icol[8];          /* you, job, bowling, pool, guns, store, pawn, cars */
+static int map_ready;
+static void map_build(void)
+{
+    u16 pal[256]; palette_build(pal);
+    u8 lut[16];
+    for (int i = 0; i < 16; i++) { int c = radar_rgb[i]; lut[i] = (u8)pal_near(pal, c & 31, (c >> 5) & 31, (c >> 10) & 31); }
+    lut[0] = lut[3];                                        /* outside the map: sea */
+    /* marker colours: you white, job yellow (HUD colours), the shops in sky entries 1..6, which the map
+       screen does not use and gba_main loads with map_marker_rgb while the map is up */
+    static const u8 icol[8] = { COL_WHITE, COL_YELLOW, 1, 2, 3, 4, 5, 6 };
+    for (int i = 0; i < 8; i++) map_icol[i] = icol[i];
+    for (int y = 0; y < MAP_PX; y++) {
+        int ty = y * RADAR_MAP_W / MAP_PX;
+        for (int x = 0; x < MAP_PX; x += 2) {
+            int a = radar_map[ty * RADAR_MAP_W + x * RADAR_MAP_W / MAP_PX] & 15;
+            int b = radar_map[ty * RADAR_MAP_W + (x + 1) * RADAR_MAP_W / MAP_PX] & 15;
+            map_img[y * (MAP_PX / 2) + (x >> 1)] = (u16)(lut[a] | (lut[b] << 8));
+        }
+    }
+    map_ready = 1;
+}
+static void map_to_screen(int wx, int wy, int *sx, int *sy)
+{
+    *sx = MAP_X0 + (wx - TMAP_ORIGIN) * (MAP_PX / 32) / RADAR_MAP_W;
+    *sy = (wy - TMAP_ORIGIN) * (MAP_PX / 32) / RADAR_MAP_W;
+}
+static void map_mark(int x, int y, int r, int col)        /* square of radius r with a black rim */
+{
+    for (int j = -r - 1; j <= r + 1; j++)
+        for (int i = -r - 1; i <= r + 1; i++) {
+            int rim = j < -r || j > r || i < -r || i > r;
+            int px = x + i, py = y + j;
+            if (px < MAP_X0 || px >= MAP_X0 + MAP_PX) continue;
+            put_px(px, py, rim ? COL_BLACK : col);
+        }
+}
+static void map_draw(void)
+{
+    if (!map_ready) map_build();
+    for (int y = 0; y < 160; y++) {
+        u16 *r = FBH + y * 120;
+        for (int x = 0; x < MAP_X0 / 2; x++) { r[x] = (u16)(COL_BLACK * 0x0101); r[x + (MAP_X0 + MAP_PX) / 2] = (u16)(COL_BLACK * 0x0101); }
+        const u16 *src = map_img + y * (MAP_PX / 2);
+        for (int x = 0; x < MAP_PX / 2; x++) r[MAP_X0 / 2 + x] = src[x];
+    }
+    static const u8 shop_icon[6] = { 4, 5, 6, 7, 2, 3 };   /* SHOP_GUN, STORE, PAWN, CARS, BOWL, POOL -> colour slot */
+    static int tick; tick++;
+    int blink = (tick >> 3) & 1;
+    for (int i = 0; i < g_hud.map_n; i++) {
+        int x, y; map_to_screen(g_hud.map_x[i], g_hud.map_y[i], &x, &y);
+        int t = g_hud.map_t[i];
+        if (t >= 10) { int k = shop_icon[(t - 10) % 6]; map_mark(x, y, k <= 3 ? 2 : 1, map_icol[k]); }
+        else if (t == 1 || t == 2) { if (blink) map_mark(x, y, 2, map_icol[1]); }
+    }
+    {   /* you: a blinking marker with a short line for your heading */
+        int x, y; map_to_screen(g_hud.px, g_hud.py, &x, &y);
+        map_mark(x, y, 1, blink ? map_icol[0] : COL_RED);
+        int c = icos(g_hud.pang), s = isin(g_hud.pang);
+        for (int k = 3; k <= 6; k++) put_px(x + ((c * k) >> 14), y + ((s * k) >> 14), COL_WHITE);
+    }
+    /* legend down the two side panels */
+    static const char *names[8] = { "YOU", "JOB", "BOWL", "POOL", "GUNS", "STORE", "PAWN", "CARS" };
+    text(4, 4, "MAP", COL_YELLOW, 1);
+    for (int i = 0; i < 8; i++) {
+        int px = i < 4 ? 4 : MAP_X0 + MAP_PX + 4, py = 22 + (i & 3) * 14;
+        rect(px, py, 5, 5, i == 0 ? COL_WHITE : map_icol[i]);
+        text(px + 8, py, names[i], COL_WHITE, 1);
+    }
+    text(4, 150, "A:BACK", COL_WHITE, 1);
+}
+
 void hud_draw(u16 *fb)
 {
     FBH = fb;
@@ -238,14 +331,13 @@ void hud_draw(u16 *fb)
 #endif
     char buf[32], *p;
     if (g_hud.title) {                           /* title screen: pre-drawn artwork */
-        blit_img(&img_logo, (240 - img_logo.w) / 2, 8);
-        blit_img(&img_city, (240 - img_city.w) / 2, 76);
+        blit_img(&img_logo, (240 - img_logo.w) / 2, 2);         /* the owner's logo, "New York" included */
         for (int i = 0; i < g_hud.menu_n; i++) {
             int sel = i == g_hud.menu_sel;
             const Img *im = i == 0 ? (sel ? &img_new_s : &img_new) : (sel ? &img_cont_s : &img_cont);
-            blit_img(im, (240 - im->w) / 2, 100 + i * 19);
+            blit_img(im, (240 - im->w) / 2, img_logo.h + 3 + i * 19);   /* just under the logo */
         }
-        blit_img(&img_press, (240 - img_press.w) / 2, 142);
+        blit_img(&img_press, (240 - img_press.w) / 2, 143);
         return;
     }
     if (g_hud.dlg_l1) {                          /* story dialogue: RPG-style box with the speaker's portrait */
@@ -297,6 +389,7 @@ void hud_draw(u16 *fb)
         if (g_hud.shop_big) { rect(40, 40, 160, 30, COL_BLACK); text_f(120 - text_width(g_hud.shop_big, 3) / 2, 44, g_hud.shop_big, COL_YELLOW, 3); }
         return;
     }
+    if (g_hud.map) { map_draw(); return; }
     if (g_hud.stats_n) {                         /* pause menu > STATS */
         shade_band(0, 160);
         text_center(4, "STATS", COL_YELLOW, 2);
@@ -304,10 +397,10 @@ void hud_draw(u16 *fb)
         return;
     }
     if (g_hud.menu_n) {                          /* pause menu */
-        shade_band(38, 136);
-        text_center(42, g_hud.menu_title, COL_YELLOW, 2);
-        draw_menu(62);
-        if (g_hud.menu_note) text_center(124, g_hud.menu_note, COL_WHITE, 1);
+        shade_band(32, 142);
+        text_center(36, g_hud.menu_title, COL_YELLOW, 2);
+        draw_menu(56);
+        if (g_hud.menu_note) text_center(128, g_hud.menu_note, COL_WHITE, 1);
         return;
     }
     if (g_hud.radio_t > 0 && g_hud.radio_name) text_center(4, g_hud.radio_name, COL_YELLOW, 1);   /* radio station */

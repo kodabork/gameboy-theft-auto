@@ -176,23 +176,26 @@ int main(void)
         {   /* day and night: re-tint the palette whenever the minute changes (daylight on the 2D screens) */
             int m = game_daylight_screen() ? 12 * 60 : game_tod();
             if (m != tod_shown) { tod_shown = m; palette_tod(PAL_BG, day_pal, m); }
+            static int map_pal;                  /* the city map borrows sky entries 1..6 for its markers */
+            if (g_hud.map) { for (int i = 0; i < 6; i++) PAL_BG[1 + i] = map_marker_rgb[i]; map_pal = 1; }
+            else if (map_pal) { map_pal = 0; palette_tod(PAL_BG, day_pal, m); }
         }
         Camera cam; int nobj;
-        if (!g_hud.shop && !g_hud.mini) game_build_scene(&cam, sprs, &nobj); else nobj = 0;
+        if (!g_hud.shop && !g_hud.mini && !g_hud.map) game_build_scene(&cam, sprs, &nobj); else nobj = 0;
         while (flip_req) ;
         u16 *back = (REG_DISPCNT & 0x0010) ? PAGE0 : PAGE1;
         {   int pg = back == PAGE0 ? 0 : 1;              /* this page shows with frame-select = pg */
-            beam_on[pg] = (!g_hud.shop && !g_hud.mini) ? (u8)game_beam(beam_tab[pg], beam_lv[pg], &cam) : 0; }
-        if (!g_hud.shop && !g_hud.mini) render_frame(back, &cam, sprs, nobj);   /* full-screen 2D screens skip the 3D view */
+            beam_on[pg] = (!g_hud.shop && !g_hud.mini && !g_hud.map) ? (u8)game_beam(beam_tab[pg], beam_lv[pg], &cam) : 0; }
+        if (!g_hud.shop && !g_hud.mini && !g_hud.map) render_frame(back, &cam, sprs, nobj);   /* full-screen 2D screens skip the 3D view */
         hud_draw(back);
         int part = frame_n++ & 3, radar_new = part == 3;
-        if (!g_hud.shop && !g_hud.mini) radar_build(radar_buf, part);   /* hidden on the 2D screens */
+        if (!g_hud.shop && !g_hud.mini && !g_hud.map) radar_build(radar_buf, part);   /* hidden on the 2D screens */
 
         flip_req = 1;                             /* the VBlank interrupt flips the page */
         /* HUD */
-        if (show_fps && !g_hud.title && !g_hud.mini) { set_sprite(0, 4, 4, 11); draw_number(1, 12, 4, fps, 2); }
+        if (show_fps && !g_hud.title && !g_hud.mini && !g_hud.map) { set_sprite(0, 4, 4, 11); draw_number(1, 12, 4, fps, 2); }
         else for (int i = 0; i < 3; i++) set_sprite(i, 0, 0, -1);
-        int hide = g_hud.title || g_hud.dlg_l1 || g_hud.menu_n || g_hud.shop || g_hud.mini;
+        int hide = g_hud.title || g_hud.dlg_l1 || g_hud.menu_n || g_hud.shop || g_hud.mini || g_hud.stats_n || g_hud.map;
         if (g_hud.in_car && !hide) draw_number(4, 212, 148, g_hud.speed_mph, 3);
         else for (int i = 4; i < 7; i++) set_sprite(i, 0, 0, -1);
         set_sprite(7, 116, 120, g_hud.near_car && !hide ? 10 : -1);

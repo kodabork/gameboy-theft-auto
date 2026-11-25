@@ -563,43 +563,9 @@ typedef struct { s16 idx; s16 pad; s32 z; s32 x; } SprEnt;
 static u32 skey[MAX_SPRITES]; EWRAM_BSS static s16 sprx[MAX_SPRITES];   /* depth sort keys (IWRAM: hot) */
 
 /* Sprites are stored at full horizontal resolution (240 px). Each logical column
-   covers two physical pixels, which are merged into one halfword write.
-   Pixels come packed (tools/pack_sprites.py): a table of frame offsets, then per frame one record per
-   source column { u16 rel, u8 top, u8 len } and only the run from the column's first to its last
-   non-transparent pixel, so the empty top and bottom of a column are never read or stepped over. */
-#ifdef HOST
-static __attribute__((noinline)) void span_a(u16 *p, int n, int v, int inv, const u8 *sa)
+   covers two physical pixels, which are merged into one halfword write. */
+static void blit(const SprFrame *f, int sx8, int sb8, int z, const u8 *occ, int flip)
 {
-    for (; n > 0; n--) { int a = sa[v >> 16]; if (a) fb_lo(p, a + SPR_PAL_BASE); p += SCR_W; v += inv; }
-}
-static __attribute__((noinline)) void span_b(u16 *p, int n, int v, int inv, const u8 *sb)
-{
-    for (; n > 0; n--) { int b = sb[v >> 16]; if (b) fb_hi(p, b + SPR_PAL_BASE); p += SCR_W; v += inv; }
-}
-static __attribute__((noinline)) void span_ab(u16 *p, int n, int v, int inv, const u8 *sa, const u8 *sb)
-{
-    for (; n > 0; n--) {
-        int vi = v >> 16;
-        int a = sa[vi], b = sb[vi];
-        if (a && b) *p = (u16)((a + SPR_PAL_BASE) | ((b + SPR_PAL_BASE) << 8));
-        else if (a) fb_lo(p, a + SPR_PAL_BASE);
-        else if (b) fb_hi(p, b + SPR_PAL_BASE);
-        p += SCR_W; v += inv;
-    }
-}
-static __attribute__((noinline)) void span_mag(u16 *p, int n, int v, int inv, const u8 *s)
-{
-    for (; n > 0; n--) { int a = s[v >> 16]; if (a) *p = (u16)((a + SPR_PAL_BASE) * 0x0101); p += SCR_W; v += inv; }
-}
-#else   /* GBA: hand-written ARM in spans.s */
-void span_a(u16 *p, int n, int v, int inv, const u8 *sa);
-void span_b(u16 *p, int n, int v, int inv, const u8 *sb);
-void span_ab(u16 *p, int n, int v, int inv, const u8 *sa, const u8 *sb);
-void span_mag(u16 *p, int n, int v, int inv, const u8 *s);
-#endif
-static void blit(int fi, int sx8, int sb8, int z, const u8 *occ, int flip)
-{
-    const SprFrame *f = &spr_frames[fi];
     int izs = recip_z[z > 4095 ? 4095 : z];
     int inv = ((z << 16) / f->upx) * 64 / 43;          /* source px per screen px, 16.16 */
     if (inv < 4096) inv = 4096;
@@ -619,8 +585,7 @@ static void blit(int fi, int sx8, int sb8, int z, const u8 *occ, int flip)
     if (ce > SCR_W) ce = SCR_W;
     int rs = r0 < 0 ? 0 : r0, re = r1 > SCR_H ? SCR_H : r1;
     if (cs >= ce || rs >= re) return;
-    const u8 *fr = spr_pixels + ((const u32 *)spr_pixels)[fi];
-    const u32 *rec = (const u32 *)fr;
+    const u8 *pix = spr_pixels + f->off;
     int h = f->h, w = f->w;
     int v0 = (((rs << 8) + 128 - yt) * i4) >> 4;
     while (v0 < 0 && rs < re) { v0 += inv; rs++; }              /* rows above the image */
@@ -630,10 +595,6 @@ static void blit(int fi, int sx8, int sb8, int z, const u8 *occ, int flip)
         int rows = (left + inv - 1) / inv;
         if (rs + rows < re) re = rs + rows;
     }
-    const int rq = ri >> 2;                            /* ~ 2^32 / inv */
-    /* first screen row (counted from rs) whose source row is >= t */
-    #define ROW_OF(t, k) do { int vt_ = (t) << 16; k = vt_ <= v0 ? 0 : (int)(((s64)(vt_ - v0) * rq) >> 32); \
-        while (v0 + k * inv < vt_) k++; while (k > 0 && v0 + (k - 1) * inv >= vt_) k--; } while (0)
     for (int c = cs; c < ce; c++) {
         int pa = c << 1, pb = pa + 1;
         int ua = ((((pa << 8) + 128 - xl) * i4) >> 4) >> 16;
@@ -646,43 +607,39 @@ static void blit(int fi, int sx8, int sb8, int z, const u8 *occ, int flip)
         if (izs < col_wiz[c] && col_wtop[c] < rend) rend = col_wtop[c];
         if (occ && occ[c] < rend) rend = occ[c];
         if (rs >= rend) continue;
-        int nrow = rend - rs;
-        /* screen row ranges [a0,a1) and [b0,b1) (from rs) of each source column's run */
-        int a0 = 0, a1 = 0, b0 = 0, b1 = 0;
-        const u8 *sa = 0, *sb = 0;
-        if (va) {
-            u32 r = rec[ua]; int top = (r >> 16) & 255, len = r >> 24;
-            if (len) { ROW_OF(top, a0); ROW_OF(top + len, a1); if (a1 > nrow) a1 = nrow; sa = fr + (r & 0xFFFF) - top; }
-        }
-        if (vb) {
-            if (va && ub == ua) { b0 = a0; b1 = a1; sb = sa; }
-            else {
-                u32 r = rec[ub]; int top = (r >> 16) & 255, len = r >> 24;
-                if (len) { ROW_OF(top, b0); ROW_OF(top + len, b1); if (b1 > nrow) b1 = nrow; sb = fr + (r & 0xFFFF) - top; }
+        const u8 *sa = pix + (va ? ua : ub) * h;
+        const u8 *sb = pix + (vb ? ub : ua) * h;
+        u16 *p = FB + rs * SCR_W + c;
+        int v = v0;
+        if (va && vb && sa == sb) {                    /* magnified: both pixels of the pair share a source column */
+            for (int r = rs; r < rend; r++) {
+                int a = sa[v >> 16];
+                if (a) *p = (u16)((a + SPR_PAL_BASE) * 0x0101);
+                p += SCR_W; v += inv;
+            }
+        } else if (va && vb) {
+            for (int r = rs; r < rend; r++) {
+                int vi = v >> 16;
+                int a = sa[vi], b = sb[vi];
+                if (a && b) *p = (u16)((a + SPR_PAL_BASE) | ((b + SPR_PAL_BASE) << 8));
+                else if (a) { volatile u16 *q = p; *q = (u16)((*q & 0xFF00) | (a + SPR_PAL_BASE)); }   /* halfword stores only (VRAM) */
+                else if (b) { volatile u16 *q = p; *q = (u16)((*q & 0x00FF) | ((b + SPR_PAL_BASE) << 8)); }
+                p += SCR_W; v += inv;
+            }
+        } else if (va) {
+            for (int r = rs; r < rend; r++) {
+                int vi = v >> 16;
+                int a = sa[vi]; if (a) { volatile u16 *q = p; *q = (u16)((*q & 0xFF00) | (a + SPR_PAL_BASE)); }
+                p += SCR_W; v += inv;
+            }
+        } else {
+            for (int r = rs; r < rend; r++) {
+                int vi = v >> 16;
+                int b = sb[vi]; if (b) { volatile u16 *q = p; *q = (u16)((*q & 0x00FF) | ((b + SPR_PAL_BASE) << 8)); }
+                p += SCR_W; v += inv;
             }
         }
-        u16 *col = FB + rs * SCR_W + c;
-        if (sa && va && vb && ua == ub) {              /* magnified: both pixels of the pair share a source column */
-            span_mag(col + a0 * SCR_W, a1 - a0, v0 + a0 * inv, inv, sa);
-            continue;
-        }
-        if (a1 <= a0) a0 = a1 = 0;
-        if (b1 <= b0) b0 = b1 = 0;
-        if (a0 == a1) { if (b1 > b0) span_b(col + b0 * SCR_W, b1 - b0, v0 + b0 * inv, inv, sb); continue; }
-        if (b0 == b1) { span_a(col + a0 * SCR_W, a1 - a0, v0 + a0 * inv, inv, sa); continue; }
-        /* both: up to three pieces (one column alone, both, the other alone) */
-        int lo = a0 < b0 ? a0 : b0, hi = a1 > b1 ? a1 : b1;
-        int m0 = a0 > b0 ? a0 : b0, m1 = a1 < b1 ? a1 : b1;    /* overlap */
-        if (m1 <= m0) {                                /* no overlap */
-            span_a(col + a0 * SCR_W, a1 - a0, v0 + a0 * inv, inv, sa);
-            span_b(col + b0 * SCR_W, b1 - b0, v0 + b0 * inv, inv, sb);
-            continue;
-        }
-        if (lo < m0) { if (a0 < b0) span_a(col + lo * SCR_W, m0 - lo, v0 + lo * inv, inv, sa); else span_b(col + lo * SCR_W, m0 - lo, v0 + lo * inv, inv, sb); }
-        span_ab(col + m0 * SCR_W, m1 - m0, v0 + m0 * inv, inv, sa, sb);
-        if (m1 < hi) { if (a1 > b1) span_a(col + m1 * SCR_W, hi - m1, v0 + m1 * inv, inv, sa); else span_b(col + m1 * SCR_W, hi - m1, v0 + m1 * inv, inv, sb); }
     }
-    #undef ROW_OF
 }
 
 /* a lamp after dark: a small glowing dot, sized by distance, hidden behind nearer walls */
@@ -705,7 +662,7 @@ static void lamp_dot(int sx8, int sb8, int z, int tail)
             if (izs < col_wiz[c] && y >= col_wtop[c]) continue;
             int col = tail ? 252 : (d >= 4 && (ex || ey)) ? 253 : 254;   /* HUD red / yellow / white: never night-tinted */
             u16 *p = FB + y * SCR_W + c;
-            if (x & 1) fb_hi(p, col); else fb_lo(p, col);
+            { volatile u16 *q = p; *q = (x & 1) ? (u16)((*q & 0x00FF) | (col << 8)) : (u16)((*q & 0xFF00) | col); }
         }
     }
 }
@@ -737,7 +694,7 @@ static void draw_sprites(const Sprite *spr, int n)
         int sx8 = (60 << 8) + (int)(((s64)x * recip_z[z]) >> 9);
         int sb8 = (HORIZON << 8) + (int)(((s64)(C->h - s->h) * recip_z[z]) >> 8);
         if ((s->frame & 0x7FFF) >= SPR_LIGHT) { lamp_dot(sx8, sb8, z, (s->frame & 0x7FFF) - SPR_LIGHT); continue; }
-        blit(s->frame & 0x7FFF, sx8, sb8, z, 0, s->frame >> 15);
+        blit(&spr_frames[s->frame & 0x7FFF], sx8, sb8, z, 0, s->frame >> 15);
     }
 }
 

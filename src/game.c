@@ -2814,7 +2814,7 @@ static void load_game(const SaveData *d)
     } else { pl.in_car = -1; cars[0].active = 0; }
 }
 
-static int stats_page;
+static int stats_page, map_page;
 static void stats_show(void)                       /* fills g_hud.stats_line[] for the STATS page */
 {
     EWRAM_BSS static char lines[15][32];
@@ -2890,15 +2890,24 @@ static void meta_update(u16 keys, u16 pressed, int dt)
     }
     if (gstate == GS_PAUSE) {
         if (stats_page) { stats_show(); if (pressed & (KEY_A | KEY_B | KEY_START)) { stats_page = 0; g_snd.door = 1; } return; }
-        static const char *items[5] = { "RESUME", "SAVE GAME", "", "STATS", "QUIT TO TITLE" };
-        for (int i = 0; i < 5; i++) g_hud.menu_item[i] = items[i];
+        if (map_page) {                           /* the whole city: every shop and the next job marker */
+            int n = 0;
+            for (int i = 0; i < nshops && n < MAX_MAP_ICONS; i++) { g_hud.map_x[n] = shops[i].x; g_hud.map_y[n] = shops[i].y; g_hud.map_t[n++] = (u8)(10 + shops[i].type); }
+            for (int i = 0; i < nmb && n < MAX_MAP_ICONS; i++) { g_hud.map_x[n] = (s16)mb_x[i]; g_hud.map_y[n] = (s16)mb_y[i]; g_hud.map_t[n++] = (u8)mb_c[i]; }
+            g_hud.map_n = n; g_hud.map = 1; g_hud.menu_n = 0;
+            g_hud.px = plx(); g_hud.py = ply(); g_hud.pang = cam_ang >> 8;
+            if (pressed & (KEY_A | KEY_B | KEY_START)) { map_page = 0; g_hud.map = 0; g_snd.door = 1; }
+            return;
+        }
+        static const char *items[6] = { "RESUME", "MAP", "SAVE GAME", "", "STATS", "QUIT TO TITLE" };
+        for (int i = 0; i < 6; i++) g_hud.menu_item[i] = items[i];
         static char rbuf[24];
         { const char *a = "RADIO: ", *b = g_snd.radio_on ? station_name[g_snd.station] : "OFF"; int n = 0; while (*a) rbuf[n++] = *a++; while (*b && n < 23) rbuf[n++] = *b++; rbuf[n] = 0; }
-        g_hud.menu_item[2] = rbuf;
-        g_hud.menu_n = 5; g_hud.menu_title = "PAUSED";
+        g_hud.menu_item[3] = rbuf;
+        g_hud.menu_n = 6; g_hud.menu_title = "PAUSED";
         g_hud.menu_note = menu_note == 1 ? "GAME SAVED" : menu_note == 2 ? "CAN'T SAVE DURING A JOB OR CHASE" : 0;
         if (up && menu_sel > 0) { menu_sel--; g_snd.step = 1; }
-        if (down && menu_sel < 4) { menu_sel++; g_snd.step = 1; }
+        if (down && menu_sel < 5) { menu_sel++; g_snd.step = 1; }
         g_hud.menu_sel = menu_sel;
         if (pressed & KEY_START) { gstate = GS_PLAY; return; }
         if (pressed & KEY_B) { gstate = GS_PLAY; return; }
@@ -2906,10 +2915,11 @@ static void meta_update(u16 keys, u16 pressed, int dt)
             g_snd.door = 1;
             switch (menu_sel) {
             case 0: gstate = GS_PLAY; break;
-            case 1: if (mstate == 1 || wanted > 0 || pl.dead_t > 0) menu_note = 2; else { save_write(); has_save = 1; menu_note = 1; } break;
-            case 2: radio_step(1); g_hud.radio_t = 0; break;
-            case 3: stats_page = 1; break;
-            case 4: gstate = GS_TITLE; menu_sel = has_save ? 1 : 0; g_snd.radio_on = 0; break;
+            case 1: map_page = 1; break;
+            case 2: if (mstate == 1 || wanted > 0 || pl.dead_t > 0) menu_note = 2; else { save_write(); has_save = 1; menu_note = 1; } break;
+            case 3: radio_step(1); g_hud.radio_t = 0; break;
+            case 4: stats_page = 1; break;
+            case 5: gstate = GS_TITLE; menu_sel = has_save ? 1 : 0; g_snd.radio_on = 0; break;
             }
         }
         return;
@@ -2932,7 +2942,7 @@ static void meta_update(u16 keys, u16 pressed, int dt)
 int game_title_active(void) { return gstate == GS_TITLE; }
 /* time of day in minutes (0..1439): one game minute per real second of play, starting at 9:00 */
 int game_tod(void) { return (9 * 60 + st.play_s) % 1440; }
-int game_daylight_screen(void) { return gstate == GS_TITLE || gstate == GS_SHOP || gstate == GS_MINI; }
+int game_daylight_screen(void) { return gstate == GS_TITLE || gstate == GS_SHOP || gstate == GS_MINI || (gstate == GS_PAUSE && map_page); }
 
 void game_update(u16 keys, int dt)
 {
@@ -2951,7 +2961,7 @@ void game_update(u16 keys, int dt)
     }
     if (gstate != GS_PLAY) { meta_update(keys, pressed, dt); return; }
     if ((pressed & KEY_START) && !(keys & KEY_SELECT)) { gstate = GS_PAUSE; menu_sel = 0; menu_note = 0; return; }
-    g_hud.menu_n = 0; g_hud.dlg_l1 = 0; g_hud.title = 0; g_hud.shop = 0; g_hud.mini = 0; g_hud.stats_n = 0; stats_page = 0;
+    g_hud.menu_n = 0; g_hud.dlg_l1 = 0; g_hud.title = 0; g_hud.shop = 0; g_hud.mini = 0; g_hud.stats_n = 0; stats_page = 0; map_page = 0; g_hud.map = 0;
     if (pressed & KEY_R) toggle_car();
     {   /* stats: time played, distance driven / walked, highest wanted level */
         static int lx, ly;

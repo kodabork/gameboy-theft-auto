@@ -6,7 +6,7 @@ Original open-city game for the Game Boy Advance in the style of GTA: a pseudo-3
 - **Never commit ROMs** (`*.gba`) or any commercial ROM. `.gitignore` already excludes `build/`, `*.gba`, `*.elf`, `*.o`.
 - **Keep the repo private.** It uses GTA and Game Boy trademarks.
 - **Cars are original look-alike archetypes** (Driv3r GBA style). Never replicate real licensed car designs.
-- **Keep the title logo original.** It must not imitate the official GTA logo.
+- **Title logo:** since v0.46 the title screen shows the owner's own logo, `art/title_logo.png` (stacked "gameboy theft auto" with a red "New York"; the owner chose it knowing it resembles the GTA style). `tools/make_logo.py` shrinks the stacked words to 80 px high and, separately, the red "New York" (cut out around the red pixels) to 128 px wide so it stays readable, matched to the palette with the red snapped to HUD red 252 (`LOGO_NY=font` redraws "New York" in a font instead; the owner preferred the art). Don't redesign it unless asked.
 - **A crash alone must never kill the player.** Since v0.21 (the owner's request) staying inside a car until it explodes is fatal, so a burning player car always gets at least 4 s and can be bailed out of at any speed.
 - **Frame rate goal: 30 fps without losing any visual fidelity** (the owner's standing request). Speed must come from drawing the same picture faster, never from shorter draw distance, lower detail, fewer people, cars or props, or lower resolution.
 - Commit messages end with a `Co-Authored-By` trailer for the model in use.
@@ -83,15 +83,19 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - Player beam: `game_beam` (game.c) projects a ground wedge (plus a wall splash when `world_point_blocked` hits within 40 m) into a window span per scanline (`beam_tab`) and a brightness per scanline (`beam_lv`). `beam_vblank` (gba_main.c, called from the VBlank IRQ in divmod.s before the flip) feeds them to WIN0H/WIN1H by HBlank DMA 0 and to BLDY by HBlank DMA 3. DMA 3 is otherwise used only by `blit_img` on the 2D screens, where the beam is off. Brightening applies to BG2 only, so HUD OBJ glyphs are untouched.
 - `gbaprof` emulates both tables in its frame dumps; the host build applies them in `dump`. Test builds: `EXTRA_CF="-DDEBUG_HOUR=23" ./build.sh` starts a new game at 23:00.
 
-## Speed work rules (v0.45)
-- **Never store single bytes to VRAM.** A byte store writes the value into both pixels of the pair. Use `fb_lo` / `fb_hi` (engine.h, volatile halfword read-modify-write); plain C like `*p = (*p & 0x00FF) | (v << 8)` can be compiled into `strb`. Check with `llvm-objdump -d build/render.o | grep strb`.
-- **Prove every speed change is pixel-identical:** play the benchmark drive on the old and new ROM with `NOOBJ=1 FIXDT=819` and compare the dumped frames byte for byte (NOOBJ leaves out the hardware-sprite layer, whose minimap and FPS digits change with timing). `gbaprof` indexes the key script by game frame (one read of the game clock per main-loop pass), so runs are identical however long frames take.
-- `STACK=1` makes gbaprof print the lowest stack address reached; keep it well above `__bss_end`.
-- ROM-resident C (game.c, world.c, hud.c, ...) builds with `ROMOPT` (default `-O3`); IWRAM code stays at `-O2` for size. The division helpers in divmod.s are an unrolled table (3 cycles per quotient bit).
-- Where the time goes (v0.45, driving): walls about 22%, ground about 17%, game logic about 25%, sprites about 12%, sound 4%, radar 3%. 30 fps would need about 35% less work per frame, which cannot come from drawing the same picture; the owner chose to stop at about 19 fps.
+## v0.45 was rolled back (did not boot on the owner's real GBA)
+- v0.45 (packed sprites `sprpack.bin` + `spans.s`, unrolled division in divmod.s, `-O3` for ROM code, `world_collide` in ROM, IWRAM up to 0x7420) booted in mGBA and gbaprof but not on the owner's Game Boy; v0.44 does. The owner chose to continue from v0.44 (v0.46 = v0.44 + new features). The v0.45 code is in git history (commit 0f19c22) if the speed work is ever retried; bisect it on hardware first.
+- Kept from that work: `tools/gbaprof.c` (FIXDT key script indexed by game frame so runs are identical at any speed; `NOOBJ=1` dumps without the OBJ layer; `STACK=1` prints the lowest stack address) and the boot logo in `tools/fixrom.py`.
+- Rules learned: never store single bytes to VRAM (a byte store writes both pixels; use a volatile halfword read-modify-write, and check `llvm-objdump -d build/render.o | grep strb`). The v0.44 sprite blitter has one such `strb` (the right-pixel-only case in `blit`), which leaves a stray pixel on some sprite edges on hardware; fixing it in isolation is safe.
+- mGBA runs headless through libmgba (apt `libmgba-dev`); a small runner lives in the scratchpad (`mgrun.c`).
+
+## Pause menu map (v0.46)
+- Pause > MAP (`map_page` in game.c) fills `g_hud.map_*` with every shop (10 + type) and the job blips, and sets `g_hud.map`. `map_draw` in hud.c copies a 160x160 day-palette copy of `radar_map` (built once into EWRAM by `map_build`, nearest palette entries) into the middle of the screen, then draws the markers and the legend.
+- Marker colours borrow sky palette entries 1..6 (`map_marker_rgb`), which gba_main loads while the map is up and restores with `palette_tod` afterwards; the map counts as a daylight screen. The 3D render, scene build, radar and beam are skipped while the map is up, and the OBJ radar is hidden (also on the stats page).
+- Minigames ignore A and B after `mini_start` until both are released (`input_lock` in minigames.c), so the menu press does not shoot.
 
 ## Memory budget
-- **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7420 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM; v0.45: 0x7420, with `world_collide` moved to ROM). The deepest measured stack (gbaprof `STACK=1`) is 0x78C0. render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
+- **IWRAM:** the stack sits at 0x7E00. Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
 - Put big arrays in EWRAM with `EWRAM_BSS`.
 - Thumb code has no fast divide. Avoid `/` in hot paths (reciprocal multiplies are used throughout) and avoid 64-bit division entirely.
 
@@ -129,7 +133,6 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
 - Headlights: one design per vehicle class (`lk` map in `Car3.shade`). The owner is very sensitive to "droopy" lamps: keep top and bottom edges sweeping UP toward the outside (currently 7 cm over the lamp width) and stay on the flat part of the nose, because the game's raised 3/4 camera makes level lamps look like they sag. Check with a straight-on and a 3/4 render before showing anything.
 - `tools/cars3.py` builds each car from side profiles (height fields). Profile distances are scaled by `1/sqrt(1+slope^2)` (`kfac`) so steep faces (tailgates, upright rear glass) render cleanly. The box truck's cargo box is a separate rounded box (`box_x`, `box_z`); the pickup cab's back wall is a plane.
 - Preview a model quickly with `tools/frame_render.render_frame` before running the full sprite render.
-- Sprite data in the ROM is `build/sprpack.bin` (v0.45), made from `build/assets.bin` by `tools/pack_sprites.py` (build.sh re-runs it when assets.bin is newer): a u32 offset per frame, then per frame one record per source column `{u16 rel, u8 top, u8 len}` and only the run from the column's first to last opaque pixel. `blit` reads it; the inner loops are ARM assembly in `src/spans.s` (C versions in render.c for the PC build). Lossless: 20.9 MB -> 14.3 MB.
 - Sprites (cars and people) are already drawn at full horizontal resolution by `blit` (both bytes of each framebuffer word); only walls and ground are half width. Moving sprites to OBJ would not sharpen them. Since v0.41 every sprite is matched to the shared 148-colour palette with a light 2x2 ordered dither (`DITHER_AMP` in make_assets.py) for smoother shading.
 
 ## Story and missions
