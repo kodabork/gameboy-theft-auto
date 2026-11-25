@@ -51,15 +51,20 @@ static u8 fog_iz[128];
 static u8 col_ang[SCR_W];          /* view angle of each column, 256 per turn */                 /* fog16 indexed by iz >> 8 (only near-ish values matter) */
 static inline int fog_from_iz(int iz) { return iz >= (127 << 8) ? 0 : fog_iz[iz >> 8]; }
 
+void vfill(u16 *dst, int rows, u16 c0, u16 c1);
 /* fill rows [r0, r1] of one column with a 2-colour vertical dither */
 static inline void vspan(u16 *col, int r0, int r1, u16 c0, u16 c1)
 {
     if (r0 > r1) return;
     u16 *p = col + r0 * SCR_W;
     if (r0 & 1) { u16 t = c0; c0 = c1; c1 = t; }
+#ifdef HOST
     int n = r1 - r0 + 1;
     while (n >= 2) { p[0] = c0; p[SCR_W] = c1; p += 2 * SCR_W; n -= 2; }
     if (n) *p = c0;
+#else
+    vfill(p, r1 - r0 + 1, c0, c1);         /* hand-written ARM: 8 rows a pass, one instruction per pixel */
+#endif
 }
 /* fill from row cr down to (but not including) row 'until' (clipped to re); returns next row */
 static inline int band(u16 *col, int cr, int re, int until, u16 c0, u16 c1)
@@ -394,7 +399,7 @@ static __attribute__((noinline)) void grid_span2(u32 *dst, int n, int gu, int gv
 static void draw_ground(void)
 {
     const int c = C->c, s = C->s, camh = C->h;
-    for (int i = 0; i < LOTW * LOTW; i++) lot_base[i] = (u8)(8 + g_world.lotmat[i] * 8);
+    if (!lot_base[0]) for (int i = 0; i < LOTW * LOTW; i++) lot_base[i] = (u8)(8 + g_world.lotmat[i] * 8);   /* the lots never change: build once */
     const int gu0 = C->x << 13, gv0 = C->y << 13;            /* texel 16.16 */
     const int du0 = (c << 2) + ((s * col_k[0]) >> 14), dv0 = (s << 2) - ((c * col_k[0]) >> 14);   /* units 16.16 per z */
     const int kst = col_k[1] - col_k[0];
