@@ -242,14 +242,16 @@ int main(void)
         }
         Camera cam; int nobj;
         if (!g_hud.shop && !g_hud.mini && !g_hud.map) game_build_scene(&cam, sprs, &nobj); else nobj = 0;
+        /* the radar picture goes to its own buffer, so it is built while the last frame may still be
+           waiting for its flip (time that would otherwise be spent idle) */
+        int part = frame_n++ & 3, radar_new = part == 3;
+        if (!g_hud.shop && !g_hud.mini && !g_hud.map) radar_build(radar_buf, part);   /* hidden on the 2D screens */
         while (flip_req) ;
         u16 *back = (REG_DISPCNT & 0x0010) ? PAGE0 : PAGE1;
         {   int pg = back == PAGE0 ? 0 : 1;              /* this page shows with frame-select = pg */
             beam_on[pg] = (!g_hud.shop && !g_hud.mini && !g_hud.map) ? (u8)game_beam(beam_tab[pg], beam_lv[pg], &cam) : 0; }
         if (!g_hud.shop && !g_hud.mini && !g_hud.map) render_frame(back, &cam, sprs, nobj);   /* full-screen 2D screens skip the 3D view */
         hud_draw(back);
-        int part = frame_n++ & 3, radar_new = part == 3;
-        if (!g_hud.shop && !g_hud.mini && !g_hud.map) radar_build(radar_buf, part);   /* hidden on the 2D screens */
 
         flip_req = 1;                             /* the VBlank interrupt flips the page */
         /* HUD */
