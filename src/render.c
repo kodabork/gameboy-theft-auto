@@ -309,8 +309,8 @@ static const u8 tile_base[11] = {
     8 + MAT_ASPHALT * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_CONCRETE * 8, 0xFE,
     8 + MAT_TRIM * 8 + 1, 8 + MAT_GRASS * 8
 };
-static u8 lot_base[LOTW * LOTW];                /* palette base (no light) of each block's lot */
-EWRAM_BSS static u8 tile_pal[128 * 128];            /* tile_base[ground_tile[i]], resolved once at start-up */
+u8 lot_base[LOTW * LOTW];                /* palette base (no light) of each block's lot */
+EWRAM_BSS u8 tile_pal[128 * 128];            /* tile_base[ground_tile[i]], resolved once at start-up */
 #define GRID_TX (GRID_LIM >> 3)
 
 /* on-grid ground texel -> palette base (lots resolved per block) */
@@ -452,6 +452,7 @@ static __attribute__((noinline)) int ground_base(int gu, int gv, int lanes)
 }
 /* Tight span loops, kept out of draw_ground so every variable stays in a register:
    n column pairs of on-grid ground, one texture sample per column. */
+#ifdef HOST
 static __attribute__((noinline)) void grid_span(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp)
 {
     const u8 *tp = tile_pal; const u8 *lb = lot_base;
@@ -475,6 +476,10 @@ static __attribute__((noinline)) void grid_span2(u32 *dst, int n, int gu, int gv
         *dst++ = bb + pp0;
     } while (dst < end);
 }
+#else
+void grid_span(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp);              /* vfill.s */
+void grid_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1);
+#endif
 
 /* flat ground, floor-cast row by row into every pixel that is not covered by a wall */
 static void draw_ground(void)
