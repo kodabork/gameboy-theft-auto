@@ -529,6 +529,13 @@ void grid_span(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp);        
 void grid_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1);
 #endif
 
+/* index of the single set bit of x (de Bruijn) */
+static inline int ctz32(u32 x)
+{
+    static const u8 tab[32] = { 0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+                                31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9 };
+    return tab[(x * 0x077CB531u) >> 27];
+}
 /* flat ground, floor-cast row by row into every pixel that is not covered by a wall */
 static void draw_ground(void)
 {
@@ -549,12 +556,21 @@ static void draw_ground(void)
     }
     int gsmax = 0;
     static u8 gmx[SCR_W / 2], gmn[SCR_W / 2];      /* per column pair: rows where ground starts in both / either */
+    /* Column pairs that show ground, as bit masks (pairs 0..31 in word 0, 32..59 in word 1) kept per row:
+       mA: ground starts in either column (gmn <= y), mF: in both (gmx <= y). Bits are added as the rows
+       pass each pair's first ground row, so a row only visits the pairs that show ground. */
+    EWRAM_BSS static u32 addA[SCR_H + 1][2], addF[SCR_H + 1][2];
+    for (int y = HORIZON + 1; y <= SCR_H; y++) addA[y][0] = addA[y][1] = addF[y][0] = addF[y][1] = 0;
     for (int i = 0; i < SCR_W / 2; i++) {
         int a = gs[2 * i], b = gs[2 * i + 1];
         gmx[i] = (u8)(a > b ? a : b); gmn[i] = (u8)(a < b ? a : b);
         if (gmx[i] > gsmax) gsmax = gmx[i];
+        addA[gmn[i]][i >> 5] |= 1u << (i & 31); addF[gmx[i]][i >> 5] |= 1u << (i & 31);
     }
+    u32 mA0 = 0, mA1 = 0, mF0 = 0, mF1 = 0;
+    #define MASK_ROW(yy) do { mA0 |= addA[yy][0]; mA1 |= addA[yy][1]; mF0 |= addF[yy][0]; mF1 |= addF[yy][1]; } while (0)
     for (int y = HORIZON + 1; y < SCR_H; y++) {
+        MASK_ROW(y);
         int z = (camh * row_k[y]) >> 16;
         if (z > 4095) z = 4095;
         int gu = gu0 + ((z * du0) >> 3), gv = gv0 + ((z * dv0) >> 3);
@@ -574,34 +590,47 @@ static void draw_ground(void)
             const u32 pp0 = (u32)(fe * 0x0101) | ((u32)(fo * 0x0101) << 16), pp1 = (u32)(fe1 * 0x0101) | ((u32)(fo1 * 0x0101) << 16);
             u32 *r0 = (u32 *)row, *r1 = (u32 *)(row + SCR_W);
             const int gur = gu, gvr = gv;
+            const u32 f0 = mF0, f1 = mF1;              /* ground in both rows of the pair (row y) */
+            MASK_ROW(y1);                              /* either row (row y + 1) */
             if (y >= gsmax) {                          /* below every wall: the whole row pair is ground */
                 if (ingrid) grid_span2(r0, SCR_W / 2, gur, gvr, su, sv, pp0, pp1);
                 else gen_span2(r0, SCR_W / 2, gur, gvr, su, sv, pp0, pp1, lanes);
                 y++;
                 continue;
             }
-            for (int i = 0; i < SCR_W / 2; ) {
-                if (y >= gmx[i]) {                     /* a run of column pairs that are ground in both rows */
-                    int j = i + 1;
-                    while (j < SCR_W / 2 && y >= gmx[j]) j++;
+            u32 w1x = f1;                              /* word 1, less any run carried over from word 0 */
+            for (int wd = 0; wd < 2; wd++) {           /* runs of pairs that are ground in both rows */
+                u32 w = wd ? w1x : f0;
+                while (w) {
+                    u32 lb = w & -w, t = w | (lb - 1), nb = (t + 1) & ~t;
+                    int i = (wd << 5) + ctz32(lb), j = nb ? (wd << 5) + ctz32(nb) : (wd << 5) + 32;
+                    if (!wd && !nb && (w1x & 1)) {     /* the run goes on past pair 31: one span */
+                        u32 t1 = w1x, nb1 = (t1 + 1) & ~t1;
+                        j = nb1 ? 32 + ctz32(nb1) : 64;
+                        w1x &= ~(nb1 - 1);
+                    }
                     if (ingrid) grid_span2(r0 + i, j - i, gur + su * 2 * i, gvr + sv * 2 * i, su, sv, pp0, pp1);
                     else gen_span2(r0 + i, j - i, gur + su * 2 * i, gvr + sv * 2 * i, su, sv, pp0, pp1, lanes);
-                    i = j; continue;
+                    w &= ~(nb - lb);
                 }
-                if (y1 < gmn[i]) { i++; continue; }
-                gu = gur + su * 2 * i; gv = gvr + sv * 2 * i;
-                int b0, b1;
-                PAIR_BASE(b0); gu += su; gv += sv;
-                PAIR_BASE(b1);
-                u32 bb = (u32)b0 * 0x0101u | ((u32)b1 * 0x0101u << 16), p0 = bb + pp0, p1 = bb + pp1;
-                if (y >= gmx[i]) { r0[i] = p0; r1[i] = p1; i++; continue; }
-                int x = i * 2, ga = gs[x], gb = gs[x + 1];
-                u16 *q0 = row + x, *q1 = q0 + SCR_W;
-                if (y >= ga) q0[0] = (u16)p0;
-                if (y >= gb) q0[1] = (u16)(p0 >> 16);
-                if (y1 >= ga) q1[0] = (u16)p1;
-                if (y1 >= gb) q1[1] = (u16)(p1 >> 16);
-                i++;
+            }
+            for (int wd = 0; wd < 2; wd++) {           /* pairs that are ground in only some of their four pixels */
+                u32 w = wd ? (mA1 & ~f1) : (mA0 & ~f0);
+                while (w) {
+                    u32 lb = w & -w; w &= w - 1;
+                    int i = (wd << 5) + ctz32(lb);
+                    gu = gur + su * 2 * i; gv = gvr + sv * 2 * i;
+                    int b0, b1;
+                    PAIR_BASE(b0); gu += su; gv += sv;
+                    PAIR_BASE(b1);
+                    u32 bb = (u32)b0 * 0x0101u | ((u32)b1 * 0x0101u << 16), p0 = bb + pp0, p1 = bb + pp1;
+                    int x = i * 2, ga = gs[x], gb = gs[x + 1];
+                    u16 *q0 = row + x, *q1 = q0 + SCR_W;
+                    if (y >= ga) q0[0] = (u16)p0;
+                    if (y >= gb) q0[1] = (u16)(p0 >> 16);
+                    if (y1 >= ga) q1[0] = (u16)p1;
+                    if (y1 >= gb) q1[1] = (u16)(p1 >> 16);
+                }
             }
             y++;
             continue;
@@ -623,27 +652,40 @@ static void draw_ground(void)
                 const u32 pp = (u32)pe | ((u32)po << 16);
                 u32 *rw = (u32 *)row;
                 if (y >= gsmax) { grid_span(rw, SCR_W / 2, gu, gv, su, sv, pp); continue; }   /* below every wall */
-                for (int i = 0; i < SCR_W / 2; ) {
-                    if (y >= gmx[i]) {
-                        int j = i + 1;
-                        while (j < SCR_W / 2 && y >= gmx[j]) j++;
+                for (int wd = 0; wd < 2; wd++) {
+                    u32 w = wd ? mF1 : mF0;
+                    while (w) {                        /* runs of pairs that are all ground */
+                        u32 lb = w & -w, t = w | (lb - 1), nb = (t + 1) & ~t;
+                        int i = (wd << 5) + ctz32(lb), j = nb ? (wd << 5) + ctz32(nb) : (wd << 5) + 32;
                         grid_span(rw + i, j - i, gu + su * 2 * i, gv + sv * 2 * i, su, sv, pp);
-                        i = j; continue;
+                        w &= ~(nb - lb);
                     }
-                    if (y >= gmn[i]) {                 /* only one column of the pair shows ground */
+                    w = wd ? (mA1 & ~mF1) : (mA0 & ~mF0);
+                    while (w) {                        /* only one column of the pair shows ground */
+                        u32 lb = w & -w; w &= w - 1;
+                        int i = (wd << 5) + ctz32(lb);
                         int x = y >= gs[2 * i] ? 2 * i : 2 * i + 1;
                         int b = grid_px(gu + su * x, gv + sv * x, tile_pal, lot_base);
                         row[x] = (u16)(b * 0x0101 + ((x & 1) ? po : pe));
                     }
-                    i++;
                 }
             } else {
-                for (int x = 0; x < SCR_W; ) {
-                    if (y < gs[x]) { x++; continue; }
-                    int x1 = x + 1;
-                    while (x1 < SCR_W && y >= gs[x1]) x1++;
-                    gen_span(row, x, x1, gu + su * x, gv + sv * x, su, sv, fe, fo, lanes);
-                    x = x1;
+                if (y >= gsmax) gen_span(row, 0, SCR_W, gu, gv, su, sv, fe, fo, lanes);   /* below every wall */
+                else for (int wd = 0; wd < 2; wd++) {
+                    u32 w = wd ? mF1 : mF0;
+                    while (w) {                        /* runs of pairs that are all ground */
+                        u32 lb = w & -w, t = w | (lb - 1), nb = (t + 1) & ~t;
+                        int i = (wd << 5) + ctz32(lb), j = nb ? (wd << 5) + ctz32(nb) : (wd << 5) + 32;
+                        gen_span(row, 2 * i, 2 * j, gu + su * 2 * i, gv + sv * 2 * i, su, sv, fe, fo, lanes);
+                        w &= ~(nb - lb);
+                    }
+                    w = wd ? (mA1 & ~mF1) : (mA0 & ~mF0);
+                    while (w) {                        /* only one column of the pair shows ground */
+                        u32 lb = w & -w; w &= w - 1;
+                        int i = (wd << 5) + ctz32(lb);
+                        int x = y >= gs[2 * i] ? 2 * i : 2 * i + 1;
+                        gen_span(row, x, x + 1, gu + su * x, gv + sv * x, su, sv, fe, fo, lanes);
+                    }
                 }
             }
         }
