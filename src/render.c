@@ -564,6 +564,12 @@ static void draw_ground(void)
             const u32 pp0 = (u32)(fe * 0x0101) | ((u32)(fo * 0x0101) << 16), pp1 = (u32)(fe1 * 0x0101) | ((u32)(fo1 * 0x0101) << 16);
             u32 *r0 = (u32 *)row, *r1 = (u32 *)(row + SCR_W);
             const int gur = gu, gvr = gv;
+            if (y >= gsmax) {                          /* below every wall: the whole row pair is ground */
+                if (ingrid) grid_span2(r0, SCR_W / 2, gur, gvr, su, sv, pp0, pp1);
+                else gen_span2(r0, SCR_W / 2, gur, gvr, su, sv, pp0, pp1, lanes);
+                y++;
+                continue;
+            }
             for (int i = 0; i < SCR_W / 2; ) {
                 if (y >= gmx[i]) {                     /* a run of column pairs that are ground in both rows */
                     int j = i + 1;
@@ -606,6 +612,7 @@ static void draw_ground(void)
                 const u16 pe = (u16)(fe * 0x0101), po = (u16)(fo * 0x0101);
                 const u32 pp = (u32)pe | ((u32)po << 16);
                 u32 *rw = (u32 *)row;
+                if (y >= gsmax) { grid_span(rw, SCR_W / 2, gu, gv, su, sv, pp); continue; }   /* below every wall */
                 for (int i = 0; i < SCR_W / 2; ) {
                     if (y >= gmx[i]) {
                         int j = i + 1;
