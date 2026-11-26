@@ -411,6 +411,28 @@ __attribute__((section(".romcode"))) static void sfx_tick(void)
 }
 
 
+/* the engine alone (or silence): mix and clip in one pass, four samples per word written; the same
+   samples as the general path below */
+static __attribute__((noinline)) void mix_engine_only(s8 *out, u32 estep)
+{
+    u32 ph = eng_phase; const int ve = eng_vol_s;
+    u32 *o4 = (u32 *)out;
+    #pragma clang loop unroll(disable)
+    for (int i = 0; i < SAMPLES; i += 4) {
+        u32 w = 0;
+        #pragma clang loop unroll(disable)
+        for (int j = 0; j < 32; j += 8) {
+            int v = 0;
+            if (ve) { ph += estep; v = (s16)((engine_wave[(ph >> 16) & 255] * ve) >> 6); }
+            if (v > 96) v = 96 + ((v - 96) >> 2);
+            else if (v < -96) v = -96 + ((v + 96) >> 2);
+            if (v > 127) v = 127; else if (v < -128) v = -128;
+            w |= (u32)(u8)v << j;
+        }
+        *o4++ = w;
+    }
+    if (ve) eng_phase = ph;
+}
 static void mix(s8 *out)
 {
     int ev = g_snd.engine_vol;
@@ -425,6 +447,12 @@ static void mix(s8 *out)
     if (g_snd.shot) { int vol = g_snd.shot_vol ? g_snd.shot_vol : 64; gun_trigger(g_snd.shot > 6 ? 1 : g_snd.shot, vol); g_snd.shot = 0; g_snd.shot_vol = 0; }
     siren_vol += (g_snd.siren - siren_vol) / 4;
     int i;
+
+    /* only the engine (or silence)? then mix and clip in one pass, four samples per word written */
+    int others = horn | skid | (crash_env > 0) | (step_env > 0) | (siren_vol > 0) | nit | (hit_env > 0) | (door_env > 0);
+    for (int k = 0; k < 2 && !others; k++) others = (gv[k].ec | gv[k].eb | gv[k].ebo | gv[k].et) >= 256;
+    for (int k = 0; k < NSV && !others; k++) others = sv[k].env >= 256;
+    if (!others) { mix_engine_only(out, estep); return; }
 
     /* engine (always present as the bed of the mix) */
     if (eng_vol_s) {
