@@ -43,7 +43,8 @@ typedef struct {
     u16 model; u8 ai, dir, road, cross; s16 wait;
     int tx, ty;      /* AI target (units) */
     int vx, vy;      /* player physics velocity */
-    u8 active, police, crew, cp;
+    u8 active, police, crew;
+    u16 cp;          /* coast-road traffic: next waypoint (0..NCOAST_WP-1, more than a byte holds) */
     s16 stuck, rev;
     int kx, ky;      /* knock-back velocity from collisions (q8 units/s) */
     int spin;        /* yaw rate from collisions (q8 angle units/s) */
@@ -1094,7 +1095,8 @@ static void street_mug(Ped *p, int i, int dt)
         street_say(cx, cy, "CARJACKING!", "SOMEBODY CALL THE COPS");
         int hit_msg = g_hud.msg_t; eject_driver(c); g_hud.msg_t = hit_msg;   /* the driver runs; keep our line */
         c->ai = AI_TRAFFIC; c->wait = 1; c->speed = Q8(M(6));
-        lane_point(c->dir, c->road, c->cross, &c->tx, &c->ty);
+        if (c->road == ROAD_COAST) coast_target(c);   /* a coast-road car carries on along the coast */
+        else lane_point(c->dir, c->road, c->cross, &c->tx, &c->ty);
         crim_car = p->tgt - 100; crim_ped = -1; crim_age = 0; st_carjacks++;
         place_ped_near(p, M(50));                    /* he's in the car now */
         panic(cx, cy, M(14));
