@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 mkdir -p build
 python3 tools/gen_tables.py src/tables.c
 [ -f build/terrain.bin ] && [ build/terrain.bin -nt tools/gen_terrain.py ] || python3 tools/gen_terrain.py build/terrain.bin src/terrain.c src/terrain.h
-[ -f build/lanez.bin ] && [ build/lanez.bin -nt build/terrain.bin ] && [ build/lanez.bin -nt tools/gen_lanez.py ] || python3 tools/gen_lanez.py build/terrain.bin build/lanez.bin
+[ -f build/laneside.bin ] && [ build/laneside.bin -nt build/terrain.bin ] && [ build/laneside.bin -nt tools/gen_lanez.py ] || python3 tools/gen_lanez.py build/terrain.bin build/lanering.bin build/laneside.bin
 if [ -n "$REGEN_ASSETS" ] || [ ! -f build/assets.bin ]; then
     python3 tools/make_assets.py src/assets.c build/assets.bin
     python3 tools/append_props.py src/assets.c src/assets.h build/assets.bin

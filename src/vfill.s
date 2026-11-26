@@ -235,24 +235,80 @@ gmiss:
     ldr     r10, [r10]
     cmp     r10, #0
     beq     2f
-    @ lane lines (lane_px in render.c): the 2x2 road samples around the pixel, cached per sample
-    @ block in lane_blk { rk, ok, zone, a0, da, b0, db }
-    stmfd   sp!, {r4-r6}
+    @ lane lines (lane_px in render.c), from the precomputed ring tables (tools/gen_lanez.py)
+    stmfd   sp!, {r4-r7}
+    mov     r7, #8                      @ reuse size (>> 16): half a cell
     sub     r10, r2, #0x80000           @ su = u - (8 << 16)
     sub     lr, r3, #0x80000            @ sv
-    mov     r4, lr, asr #20
-    ldr     r5, =1424
-    mul     r6, r4, r5
-    add     r6, r6, r10, asr #20        @ rk
-    ldr     r5, =2027776                @ TMAP_W * TMAP_W: inside the table?
-    cmp     r6, r5
+    mov     r4, r10, asr #20            @ block x
+    mov     r5, lr, asr #20             @ block y
+    ldr     r6, =1423
+    cmp     r4, r6
+    cmplo   r5, r6                      @ (unsigned: negative = out)
     bhs     14f
-    ldr     r5, =lane_zones             @ precomputed: one zone for the block, plain terrain, or varies
-    ldrb    r5, [r5, r6]
-    cmp     r5, #0xFE
-    blo     10f
+    cmp     r5, #64
+    blo     20f
+    ldr     r6, =1358
+    cmp     r5, r6
+    bhs     21f
+    cmp     r4, #64
+    blo     22f
+    cmp     r4, r6
+    blo     14f                         @ not in the ring (cannot happen off the grid)
+    sub     r4, r4, r6                  @ right strip: x - 1358 + 64
+    add     r4, r4, #64
+22: sub     r5, r5, #64                 @ middle rows: 64 * 1424 + (y - 64) * 130 + x'
+    mov     r6, #130
+    mul     r6, r5, r6
+    add     r4, r4, r6
+    ldr     r6, =91136
+    add     r4, r4, r6
+    b       23f
+21: sub     r5, r5, r6                  @ bottom rows: 259356 + (y - 1358) * 1424 + x
+    ldr     r6, =1424
+    mul     r6, r5, r6
+    add     r4, r4, r6
+    ldr     r6, =259356
+    add     r4, r4, r6
+    b       23f
+20: ldr     r6, =1424                   @ top rows: y * 1424 + x
+    mla     r4, r5, r6, r4
+23: ldr     r6, =lane_ring
+    add     r6, r6, r4, lsl #1
+    ldrh    r5, [r6]
+    ldr     r6, =0xFFF0
+    cmp     r5, r6
+    blo     24f
+    sub     r5, r5, r6                  @ 0..8: one zone for the block; 14: plain terrain; 13: per pixel
+    cmp     r5, #14
     beq     8f
-14: ldr     r4, =lane_blk
+    cmp     r5, #13
+    bne     10f
+    b       14f
+24: mov     r6, #68                     @ texel map: zone of this 1/16 m texel
+    mul     r6, r5, r6
+    ldr     r4, =lane_side
+    add     r4, r4, r6                  @ entry: palette[4], codes[16][4]
+    mov     r5, lr, lsr #16
+    and     r5, r5, #15                 @ fy
+    add     r6, r4, r5, lsl #2
+    mov     r5, r10, lsr #16
+    and     r5, r5, #15                 @ fx
+    add     r6, r6, r5, lsr #2
+    ldrb    r6, [r6, #4]
+    and     r5, r5, #3
+    mov     r5, r5, lsl #1
+    mov     r6, r6, lsr r5
+    and     r6, r6, #3
+    ldrb    r5, [r4, r6]                @ zone
+    mov     r7, #1                      @ reuse over the 1/16 m texel
+    b       10f
+14: ldr     r4, =1424                   @ worked out from the samples (lane_blk cache, lane_block)
+    mov     r5, lr, asr #20
+    mul     r6, r5, r4
+    mov     r5, r10, asr #20
+    add     r6, r6, r5                  @ rk
+    ldr     r4, =lane_blk
     ldr     r5, [r4]
     cmp     r5, r6
     bne     6f
@@ -301,8 +357,10 @@ gmiss:
     and     r5, r12, #127
     ldrb    r10, [r6, r5]
     add     r10, r10, r12, lsr #7
-13: ldmfd   sp!, {r4-r6}
-    PACK    8                           @ reuse over the half-cell (when r8 = u)
+13: mov     r10, r10, lsl #16           @ reuse over r7 (half-cell or 1/16 m texel) when r8 = u
+    orr     r10, r10, r10, lsl #8
+    orr     r10, r10, r7
+    ldmfd   sp!, {r4-r7}
     ldmfd   sp!, {pc}
 6:  stmfd   sp!, {r0-r3, r12, lr}       @ a new sample block (lr holds sv)
     mov     r0, r6
