@@ -323,64 +323,68 @@ static inline __attribute__((always_inline)) int grid_px(int gu, int gv, const u
    the same cell reuses the last result: the per-pixel work is two adds and a compare. Lane
    lines are worked out per pixel, with the four road samples cached per sample block. The
    result is exactly gen_base's. u, v: terrain-map units (cell = 1 << 20). */
-static struct { u32 cu, cv; int cb; int rk, rr, lanes, rz; u32 lu, lv; int lb; } gc = { 0, 0, 0, 0x7FFFFFFF, -1, 0, -1, 0x80000000u, 0x80000000u, 0 };
+static struct { u32 cu, cv; int lanes; } gc;
 #define GRID_U0 ((u32)(-TMAP_ORIGIN) << 16)          /* u of street-grid texel 0 */
-/* lane-line zones of the interpolated road coordinate t (1/64 m + 512 at the centre line):
-   0 concrete, 1 asphalt, 2 sidewalk-coloured edge line, 3 asphalt, 4 centre line, 5 asphalt,
-   6 edge line, 7 asphalt, 8 concrete */
+/* Lane lines: t, the road coordinate (1/64 m, 512 at the centre line) bilinearly interpolated from the
+   four road samples around the pixel (terrain_r, every metre, offset by half a cell), picks the colour:
+   zone 0 concrete, 1 asphalt, 2 edge line, 3 asphalt, 4 centre line (dashed cells only), 5 asphalt,
+   6 edge line, 7 asphalt, 8 concrete. */
 static inline int lane_zone(int t)
 {
     return (t >= 218) + (t >= 230) + (t >= 262) + (t >= 499) + (t >= 526) + (t >= 763) + (t >= 795) + (t >= 807);
 }
-/* an off-grid texel (callers handle the street grid); sets the reuse cell gc.cu, gc.cv. Lane-line
-   pixels also set gc.lu, gc.lv, gc.lb when the whole half-cell they lie in has one colour. */
+EWRAM_BSS static u8 zone_of_t[128 * 8];          /* lane_zone(t) for every t the samples can give */
+static const u8 zone_base[9] = { 0, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_ASPHALT * 8 + 1,
+                                 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 0 };
+/* the sample block (2x2 road samples) of the last lane pixel, as interpolation coefficients:
+   la = a0 + fx * da, lb = b0 + fx * db, t = (16 la + fy (lb - la)) >> 5. zone >= 0: the block has
+   one zone throughout; ok = 0: not every sample is on a road (plain terrain colour). */
+typedef struct { int rk, ok, zone, a0, da, b0, db; } LaneBlock;
+static LaneBlock lk = { 0x7FFFFFFF, 0, 0, 0, 0, 0, 0 };
+static __attribute__((noinline)) void lane_block(int rk)
+{
+    LaneBlock *L = &lk;
+    const u8 *r = terrain_r + rk;
+    int r0 = r[0], r1 = r[1], r2 = r[TMAP_W], r3 = r[TMAP_W + 1];
+    L->rk = rk; L->ok = r0 && r1 && r2 && r3;
+    r0 &= 127; r1 &= 127; r2 &= 127; r3 &= 127;
+    L->a0 = r0 << 4; L->da = r1 - r0; L->b0 = r2 << 4; L->db = r3 - r2;
+    int lo = r0, hi = r0;
+    if (r1 < lo) lo = r1; if (r1 > hi) hi = r1;
+    if (r2 < lo) lo = r2; if (r2 > hi) hi = r2;
+    if (r3 < lo) lo = r3; if (r3 > hi) hi = r3;
+    int z = zone_of_t[lo * 8];                     /* the interpolated t always lies in [8 lo, 8 hi] */
+    L->zone = z == zone_of_t[hi * 8] ? z : -1;
+}
+/* a road pixel close enough for lane lines: u, v map units, idx its cell, m the cell's terrain_m */
+static inline __attribute__((always_inline)) int lane_px(u32 u, u32 v, int idx, int m)
+{
+    u32 su = u - (8u << 16), sv = v - (8u << 16);   /* sample-block coordinates */
+    int rk = ((int)sv >> 20) * TMAP_W + ((int)su >> 20);
+    const LaneBlock *L = &lk;
+    if (rk != L->rk) lane_block(rk);
+    if (!L->ok) return tm_b8[m & 127] + (m >> 7);
+    int z = L->zone;
+    if (z < 0) {                                   /* lines cross this block: per pixel */
+        int fx = (su >> 16) & 15, fy = (sv >> 16) & 15;
+        int la = L->a0 + fx * L->da, lb = L->b0 + fx * L->db;
+        z = zone_of_t[((la << 4) + fy * (lb - la)) >> 5];
+    }
+    if (z == 0 || z == 8) return 8 + MAT_CONCRETE * 8 + (m >> 7);
+    if (z == 4 && (terrain_r[idx] >> 7)) return 8 + MAT_YELLOW * 8 + 1;
+    return zone_base[z];
+}
+/* an off-grid texel (callers handle the street grid); sets the reuse cell gc.cu, gc.cv */
 static __attribute__((noinline)) int gen_slow(u32 u, u32 v, int lanes)
 {
     const u32 lim = (TMAP_W - 2) << 20;
     gc.cu = u; gc.cv = v;
-    if (u >= lim || v >= lim) return gc.cb = 8 + MAT_WATER * 8 + (((u ^ v) >> 21) & 1);
+    if (u >= lim || v >= lim) return 8 + MAT_WATER * 8 + (((u ^ v) >> 21) & 1);
     int idx = (v >> 20) * TMAP_W + (u >> 20);
     int m = terrain_m[idx], mt = m & 127;
-    if (!(lanes && mt >= TM_ROAD && mt != TM_PATH)) return gc.cb = tm_b8[mt] + (m >> 7);
+    if (!(lanes && mt >= TM_ROAD && mt != TM_PATH)) return tm_b8[mt] + (m >> 7);
     gc.cu = ~u;                                        /* lane lines: per pixel */
-    int uu = (int)(u >> 16) - 8, vv = (int)(v >> 16) - 8;
-    int rk = (vv >> 4) * TMAP_W + (uu >> 4);
-    if (rk != gc.rk) {
-        const u8 *r = terrain_r + rk;
-        int r0 = r[0], r1 = r[1], r2 = r[TMAP_W], r3 = r[TMAP_W + 1];
-        gc.rk = rk;
-        if (r0 && r1 && r2 && r3) {
-            r0 &= 127; r1 &= 127; r2 &= 127; r3 &= 127;
-            gc.rr = (int)(r0 | (r1 << 8) | (r2 << 16) | ((u32)r3 << 24));
-            int lo = r0, hi = r0;
-            if (r1 < lo) lo = r1; if (r1 > hi) hi = r1;
-            if (r2 < lo) lo = r2; if (r2 > hi) hi = r2;
-            if (r3 < lo) lo = r3; if (r3 > hi) hi = r3;
-            int z = lane_zone(lo * 8);                 /* the interpolated t always lies in [8 lo, 8 hi] */
-            gc.rz = z == lane_zone(hi * 8) ? z : -1;
-        } else { gc.rr = -1; gc.rz = -1; }
-    }
-    int rr = gc.rr, b;
-    static const u8 zone_base[9] = { 0, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_ASPHALT * 8 + 1,
-                                     8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 0 };
-    if (rr == -1) b = tm_b8[mt] + (m >> 7);
-    else if (gc.rz >= 0) {                             /* one colour for this whole sample block */
-        int z = gc.rz;
-        if (z == 0 || z == 8) b = 8 + MAT_CONCRETE * 8 + (m >> 7);
-        else if (z == 4 && (terrain_r[idx] >> 7)) b = 8 + MAT_YELLOW * 8 + 1;
-        else b = zone_base[z];
-    } else {
-        int fx = uu & 15, fy = vv & 15;
-        int la = (rr & 127) * (16 - fx) + ((rr >> 8) & 127) * fx;
-        int lb = ((rr >> 16) & 127) * (16 - fx) + ((u32)rr >> 24) * fx;
-        int d = ((la * (16 - fy) + lb * fy) >> 5) - 512;      /* 1/64 m */
-        if (d < 0) d = -d;
-        if (d <= 13 && (terrain_r[idx] >> 7)) return 8 + MAT_YELLOW * 8 + 1;
-        if (d <= 294) return (d > 250 && d <= 282) ? 8 + MAT_SIDEWALK * 8 + 1 : 8 + MAT_ASPHALT * 8 + 1;
-        return 8 + MAT_CONCRETE * 8 + (m >> 7);
-    }
-    gc.lu = u; gc.lv = v; gc.lb = b;                   /* the half-cell is one terrain cell and one sample block */
-    return b;
+    return lane_px(u, v, idx, m);
 }
 /* grid texel (the street grid's texels are smaller than a terrain cell, so no reuse) */
 static inline __attribute__((always_inline)) int grid_uv(u32 g, u32 h)
@@ -399,11 +403,11 @@ static inline __attribute__((always_inline)) u32 gen_miss(u32 u, u32 v, u32 *cu,
     const u32 lim = (TMAP_W - 2) << 20;
     *cu = u; *cv = v;
     if (u >= lim || v >= lim) return 8 + MAT_WATER * 8 + (((u ^ v) >> 21) & 1);
-    int m = terrain_m[(v >> 20) * TMAP_W + (u >> 20)], mt = m & 127;
+    int idx = (v >> 20) * TMAP_W + (u >> 20);
+    int m = terrain_m[idx], mt = m & 127;
     if (mt < TM_ROAD || mt == TM_PATH || !gc.lanes) return (u32)(tm_b8[mt] + (m >> 7));
     *cu = ~u;                                          /* lane lines: no whole-cell reuse */
-    if (((u ^ gc.lu) | (v ^ gc.lv)) < (1u << 19)) return (u32)gc.lb;   /* same one-colour half-cell as before */
-    return (u32)gen_slow(u, v, 1);
+    return (u32)lane_px(u, v, idx, m);
 }
 /* off-grid ground: logical pixels p..e-1 of one row (pp: fog offsets of this pixel and the next) */
 static __attribute__((noinline)) void gen_run(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp)
@@ -775,6 +779,7 @@ static void draw_sprites(const Sprite *spr, int n)
 
 __attribute__((section(".romcode"))) void render_init(void)   /* runs once: lives in ROM, not IWRAM */
 {
+    for (int t = 0; t < 128 * 8; t++) zone_of_t[t] = (u8)lane_zone(t);
     for (int i = 0; i < 128 * 128; i++) tile_pal[i] = tile_base[ground_tile[i]];
     for (int x = 0; x < SCR_W; x++) {
         col_ang[x] = (u8)(-(iatan2(2 * x + 1 - SCR_W, 2 * FX) >> 4));
