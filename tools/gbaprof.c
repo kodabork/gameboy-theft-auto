@@ -31,7 +31,7 @@ static u16 tm_reload[4], tm_ctl[4]; static u64 tm_start[4];
 static u64 frame_start;         /* cycle when current video frame started */
 static int vblank_done;
 static long flips; static u64 flip_cyc[100000];
-static u32 min_sp = 0xFFFFFFFF, min_isp = 0xFFFFFFFF;
+static u32 min_sp = 0xFFFFFFFF, min_isp = 0xFFFFFFFF, min_sp_pc, min_sp_lr; static u8 min_stack[0x800];
 static u32 callee_addr; static u32 call_hist[1000000]; static long ncall_hist;
 static u32 keys_now;
 static int dump_list[256], ndump; static const char *outpre = "gp";
@@ -737,7 +737,7 @@ int main(int argc, char **argv)
         }
         u32 pc = r[15];
         u64 c0 = cycles;
-        if (mode == 0x1F && r[13] < min_sp && r[13] > 0x03000000) min_sp = r[13];
+        if (mode == 0x1F && r[13] < min_sp && r[13] > 0x03000000) { min_sp = r[13]; min_sp_pc = pc; min_sp_lr = r[14]; memcpy(min_stack, &iwram[0x7E00 - 0x800], 0x800); }
         if (mode == 0x12 && r[13] < min_isp && r[13] > 0x03000000) min_isp = r[13];
         if (callee_addr && (pc & ~1u) == callee_addr && ncall_hist < 1000000) call_hist[ncall_hist++] = r[14];
         branched = 0;
@@ -778,7 +778,8 @@ int main(int argc, char **argv)
         printf("%s%ld", s ? " " : "per-second: ", n);
     }
     printf("\n");
-    if (getenv("STACK")) printf("lowest stack: sys %08x irq %08x\n", min_sp, min_isp);
+    if (getenv("STACK")) printf("lowest stack: sys %08x irq %08x (at pc %08x lr %08x)\n", min_sp, min_isp, min_sp_pc, min_sp_lr);
+    if (getenv("STACK")) { FILE *sf = fopen("stackdump.bin", "wb"); fwrite(min_stack, 1, 0x800, sf); fclose(sf); }
     if (getenv("HIST")) {      /* how many VBlanks each displayed frame took */
         /* HIST=seconds, or HIST=first_frame-last_frame (displayed-frame numbers) */
         long h[16] = {0}; double from = atof(getenv("HIST")) * 16777216.0;
