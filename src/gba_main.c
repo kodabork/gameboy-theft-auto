@@ -130,9 +130,55 @@ void beam_vblank(int page)
     REG_DISPCNT |= 0x6000;
 }
 
+#ifdef DIV_TEST
+/* test build: checks the division helpers against a slow reference; result in SRAM bytes 0..7 */
+extern unsigned long long udm(unsigned, unsigned) __asm__("__aeabi_uidivmod");   /* r0 = q, r1 = r */
+extern unsigned long long sdm(int, int) __asm__("__aeabi_idivmod");
+typedef struct { unsigned q, r; } UQR;
+static UQR ref_udiv(unsigned n, unsigned d)
+{
+    UQR o = { 0, 0 };
+    for (int b = 31; b >= 0; b--) { o.r = (o.r << 1) | ((n >> b) & 1); if (o.r >= d) { o.r -= d; o.q |= 1u << b; } }
+    return o;
+}
+static void div_test(void)
+{
+    volatile unsigned char *sr = (volatile unsigned char *)0x0E000000;
+    unsigned fails = 0, x = 12345;
+    for (unsigned i = 0; i < 60000; i++) {
+        x = x * 1664525u + 1013904223u; unsigned n = x;
+        x = x * 1664525u + 1013904223u; unsigned d = x >> (x & 31);
+        if (i % 7 == 0) d = (x >> 8) & 0xFF; else if (i % 7 == 1) n >>= (x & 31); else if (i % 7 == 2) d = n - (x & 3);
+        if (i < 64) { n = 0xFFFFFFFFu - i; d = i + 1; }
+        if (d == 0) d = 1;
+        UQR rf = ref_udiv(n, d);
+        unsigned long long qr = udm(n, d);
+        if ((unsigned)qr != rf.q || (unsigned)(qr >> 32) != rf.r) fails++;
+        int sn = (int)n, sd = (int)d | 1; if (sd == -1) sd = 3;
+        unsigned long long sq = sdm(sn, sd);
+        /* reference for signed: truncate toward zero, remainder has the dividend's sign */
+        unsigned an = sn < 0 ? 0u - (unsigned)sn : (unsigned)sn, ad = sd < 0 ? 0u - (unsigned)sd : (unsigned)sd;
+        UQR ra = ref_udiv(an, ad);
+        int eq = ((sn < 0) != (sd < 0)) ? -(int)ra.q : (int)ra.q, er = sn < 0 ? -(int)ra.r : (int)ra.r;
+        if ((int)sq != eq || (int)(sq >> 32) != er) fails++;
+    }
+    for (int k = 0; k < 4; k++) sr[k] = (unsigned char)(fails >> (8 * k));
+    sr[4] = 'D'; sr[5] = 'O'; sr[6] = 'N'; sr[7] = 'E';
+    for (;;) ;
+}
+#endif
 int main(void)
 {
-    REG_WAITCNT = 0x4317;                     /* faster ROM access + prefetch */
+#ifdef DIV_TEST
+    div_test();
+#endif
+#ifndef WAITCNT_VAL
+#define WAITCNT_VAL 0x431B                    /* ROM wait states 2/1 (first/sequential access), prefetch on; the owner's EZ-Flash Omega handles it */
+#endif
+    REG_WAITCNT = WAITCNT_VAL;
+#ifdef EWRAM_FAST                             /* test builds: EWRAM 1 wait state (GBA / GBA SP only) */
+    *(volatile u32 *)0x04000800 = 0x0E000020;
+#endif
     REG_DISPCNT = 0x0080;                     /* forced blank during setup */
     u16 pal[256];
     palette_build(pal);
@@ -160,9 +206,21 @@ int main(void)
     static const u16 radar_pal[16] = { 0, 0x1484, 0x318C, 0x5145, 0x7FFF, 0x7FFF, 0x13FF, 0x13E4, 0x033F, 0x7D08, 0x2529, 0x1A46, 0x3ED8, 0x7FE4, 0x0C7F, 0x7FFF };
     for (int i = 0; i < 16; i++) PAL_OBJ[16 + i] = radar_pal[i];
     REG_DISPCNT = 0x0004 | 0x0400 | 0x1000 | 0x0040;   /* mode 4, BG2, OBJ, 1D */
+#if defined(BENCH) || defined(DEBUG_SWEEP)
+    /* benchmark build: drives a fixed route with a fixed game clock (the same game on any hardware),
+       times displayed frames BENCH_F0..BENCH_F1 with the real timer, then shows fps x 10 top left */
+    static const short bench_n[] = { BENCH_N };
+    static const short bench_k[] = { BENCH_K };
+    u32 bench_acc = 0; int bench_res = -1;
+#endif
     for (;;) {
         u16 keys = (u16)((~REG_KEYINPUT & 0x03FF) | key_seen);
         key_seen = 0;
+#if defined(BENCH) || defined(DEBUG_SWEEP)
+        {   int f = (int)frame_n, acc = 0; keys = 0;
+            for (unsigned i = 0; i < sizeof bench_n / sizeof bench_n[0]; i++) { acc += bench_n[i]; if (f < acc) { keys = (u16)bench_k[i]; break; } }
+        }
+#endif
         if (((keys & ~prev) & KEY_START) && (keys & KEY_SELECT)) show_fps ^= 1;
         prev = keys;
         u16 now = REG_TM2D;
@@ -171,6 +229,34 @@ int main(void)
         fps_acc += dt; fps_frames++;
         if (fps_acc >= 16384) { fps = fps_frames * 16384 / fps_acc; fps_acc = 0; fps_frames = 0; }
 
+#ifdef BENCH
+        if ((int)frame_n > BENCH_F0 && (int)frame_n <= BENCH_F1) bench_acc += (u32)dt;
+        if ((int)frame_n == BENCH_F1 + 1) bench_res = (int)((u32)(BENCH_F1 - BENCH_F0) * 163840u / bench_acc);
+        dt = 819;                                   /* fixed game clock */
+#endif
+#ifdef DEBUG_SWEEP
+        {   /* sweep build: 8 frames per sample, frames 4..7 timed; ticks / 4 per sample into SRAM (u16) */
+            int game_sweep_place(int s);
+            static int ss = -1, sf, sacc;
+            volatile u8 *sr = (volatile u8 *)0x0E000000;
+            int f = (int)frame_n;
+            keys = f < 313 ? keys : 0;
+            if (f >= 330) {
+#ifdef SWEEP_ONLY
+                if (ss < 0) { ss = SWEEP_ONLY; game_sweep_place(ss); sf = 0; }
+                else if (0)
+#endif
+                if (ss < 0 || sf == 8) {
+                    if (ss >= 0) { int v = sacc / 4; sr[2 * ss] = (u8)v; sr[2 * ss + 1] = (u8)(v >> 8); }
+                    ss++; sf = 0; sacc = 0;
+                    if (!game_sweep_place(ss)) { sr[0x7FF0] = 'D'; sr[0x7FF1] = 'O'; sr[0x7FF2] = 'N'; sr[0x7FF3] = 'E'; for (;;) ; }
+                }
+                if (sf >= 4) sacc += dt;
+                sf++;
+            }
+            dt = 819;
+        }
+#endif
         /* game logic runs while the previous frame waits for its VBlank flip */
         game_update(keys, dt);
         {   /* day and night: re-tint the palette whenever the minute changes (daylight on the 2D screens) */
@@ -182,17 +268,22 @@ int main(void)
         }
         Camera cam; int nobj;
         if (!g_hud.shop && !g_hud.mini && !g_hud.map) game_build_scene(&cam, sprs, &nobj); else nobj = 0;
+        /* the radar picture goes to its own buffer, so it is built while the last frame may still be
+           waiting for its flip (time that would otherwise be spent idle) */
+        int part = frame_n++ & 3, radar_new = part == 3;
+        if (!g_hud.shop && !g_hud.mini && !g_hud.map) radar_build(radar_buf, part);   /* hidden on the 2D screens */
         while (flip_req) ;
         u16 *back = (REG_DISPCNT & 0x0010) ? PAGE0 : PAGE1;
         {   int pg = back == PAGE0 ? 0 : 1;              /* this page shows with frame-select = pg */
             beam_on[pg] = (!g_hud.shop && !g_hud.mini && !g_hud.map) ? (u8)game_beam(beam_tab[pg], beam_lv[pg], &cam) : 0; }
         if (!g_hud.shop && !g_hud.mini && !g_hud.map) render_frame(back, &cam, sprs, nobj);   /* full-screen 2D screens skip the 3D view */
         hud_draw(back);
-        int part = frame_n++ & 3, radar_new = part == 3;
-        if (!g_hud.shop && !g_hud.mini && !g_hud.map) radar_build(radar_buf, part);   /* hidden on the 2D screens */
 
         flip_req = 1;                             /* the VBlank interrupt flips the page */
         /* HUD */
+#ifdef BENCH
+        if (bench_res >= 0) { set_sprite(0, 4, 4, 11); draw_number(1, 12, 4, bench_res, 3); } else
+#endif
         if (show_fps && !g_hud.title && !g_hud.mini && !g_hud.map) { set_sprite(0, 4, 4, 11); draw_number(1, 12, 4, fps, 2); }
         else for (int i = 0; i < 3; i++) set_sprite(i, 0, 0, -1);
         int hide = g_hud.title || g_hud.dlg_l1 || g_hud.menu_n || g_hud.shop || g_hud.mini || g_hud.stats_n || g_hud.map;

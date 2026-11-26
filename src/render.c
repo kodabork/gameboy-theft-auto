@@ -21,6 +21,7 @@ static const Camera *C;
 static u16 *FB;
 
 #define PIX2(i) ((u16)((i) | ((i) << 8)))
+#define ROR16(x) (((x) >> 16) | ((x) << 16))
 
 static const u8 bayer[4] = { 2, 10, 14, 6 };   /* index (x&1) | (y&1)<<1 */
 
@@ -66,6 +67,21 @@ static inline void vspan(u16 *col, int r0, int r1, u16 c0, u16 c1)
     vfill(p, r1 - r0 + 1, c0, c1);         /* hand-written ARM: 8 rows a pass, one instruction per pixel */
 #endif
 }
+#ifdef HOST
+static u16 *vfill2(u16 *p, int n, u32 c)
+{
+    for (int i = 0; i < n; i++, p += SCR_W) *p = (u16)((i & 1) ? c >> 16 : c);
+    return p;
+}
+#else
+u16 *vfill2(u16 *p, int n, u32 c);     /* vfill.s: n rows from p, colours alternating low/high half of c */
+#endif
+/* the facade's bands, top to bottom: fill the rows from cr down to (not including) 'until', clipped to
+   the last row re1 - 1; p points at row cr. Even rows take c0, odd rows c1 (a vertical dither). */
+#define BAND(until, c0, c1) do { int u_ = (until); if (u_ > re1) u_ = re1; \
+    if (u_ > cr) { u32 e_ = (u32)(c0) | ((u32)(c1) << 16); p = vfill2(p, u_ - cr, (cr & 1) ? ROR16(e_) : e_); cr = u_; } } while (0)
+#define BANDP(until, cc) do { int u_ = (until); if (u_ > re1) u_ = re1; \
+    if (u_ > cr) { u32 e_ = (cc); p = vfill2(p, u_ - cr, (cr & 1) ? ROR16(e_) : e_); cr = u_; } } while (0)
 /* fill from row cr down to (but not including) row 'until' (clipped to re); returns next row */
 static inline int band(u16 *col, int cr, int re, int until, u16 c0, u16 c1)
 {
@@ -178,55 +194,80 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
         int wincol = edge && um >= S->w0 && um < S->w1;
         int mullion = (style == 2) && (um % 16) < 2;
         int shopcol = edge && (u % 48) >= 4 && (u % 48) < 44;
-        u16 cs0 = PIX2(WPAL(MAT_SILVER, fe, light)), cs1 = PIX2(WPAL(MAT_SILVER, fo, light));
+        /* colour pairs (even row | odd row << 16) */
+        #define PAIR(m, l) ((u32)PIX2(WPAL(m, fe, l)) | ((u32)PIX2(WPAL(m, fo, l)) << 16))
+        const u32 cw = (u32)cw0 | ((u32)cw1 << 16), ct = (u32)ct0 | ((u32)ct1 << 16), cs = PAIR(MAT_SILVER, light);
         /* the facade is a stack of horizontal bands; each maps to a run of rows */
         #define ROW(hh) (HORIZON - (((hh) - camh) * izc >> 16))
-        int cr = rs;
-        cr = band(col, cr, re, ROW(H - 16), ct0, ct1);                 /* cornice */
+        int cr = rs, re1 = re + 1;
+        u16 *p = col + rs * SCR_W;
+        BANDP(ROW(H - 16), ct);                     /* cornice */
         if (cr <= re) {
             int SH = S->storey;
-            cr = band(col, cr, re, ROW(hb), cw0, cw1);
+            BANDP(ROW(hb), cw);
             int bay = bq + seed;
-            for (int fl = nfl - 1; fl >= 0 && cr <= re; fl--) {
-                int base = 64 + fl * SH;
-                if (wincol) {
-                    int hsh = (bay * 7 + fl * 13) * 2654435761u >> 29;
-                    int gl = hsh < 3;
-                    u16 g0 = PIX2(WPAL(wmat, fe, gl)), g1 = PIX2(WPAL(wmat, fo, gl));
-                    if (mullion) { g0 = ct0; g1 = ct1; }
-                    if (S->lintel) {
-                        cr = band(col, cr, re, ROW(base + S->v1 + 3), cw0, cw1);
-                        cr = band(col, cr, re, ROW(base + S->v1), cs0, cs1);       /* stone lintel */
-                    } else cr = band(col, cr, re, ROW(base + S->v1), cw0, cw1);
-                    cr = band(col, cr, re, ROW(base + S->v0), g0, g1);
-                    if (S->sill) cr = band(col, cr, re, ROW(base + S->v0 - 2), S->sill == 2 ? cs0 : ct0, S->sill == 2 ? cs1 : ct1);
-                } else if (style == 2) {
-                    /* spandrel line between ribbon windows */
-                    cr = band(col, cr, re, ROW(base + S->v1), cw0, cw1);
-                    cr = band(col, cr, re, ROW(base + S->v0), ct0, ct1);
+            /* storeys, top down. v = (floor base - eye height) * izc, so a band edge at height base + o
+               is on row HORIZON - ((v + o * izc) >> 16), exactly ROW(base + o) */
+            int fl = nfl - 1;
+            const int dv = SH * izc;
+            int v = (64 + fl * SH - camh) * izc;
+            const int K = HORIZON - cr;
+            while (fl >= 0 && (v >> 16) >= K) { fl--; v -= dv; }   /* floors wholly above the rows still to fill draw nothing */
+            #define ROWV(o) (HORIZON - ((v + (o)) >> 16))
+            if (wincol) {
+                const u32 glit = PAIR(wmat, 1), gdark = PAIR(wmat, 0);
+                const int o1 = S->v1 * izc, o0 = S->v0 * izc;
+                if (S->lintel) {
+                    const int o13 = o1 + 3 * izc, o02 = o0 - 2 * izc;
+                    const u32 sc = S->sill == 2 ? cs : ct;
+                    for (; fl >= 0 && cr <= re; fl--, v -= dv) {
+                        u32 g = mullion ? ct : ((((u32)(bay * 7 + fl * 13) * 2654435761u) >> 29) < 3 ? glit : gdark);
+                        BANDP(ROWV(o13), cw);
+                        BANDP(ROWV(o1), cs);                /* stone lintel */
+                        BANDP(ROWV(o0), g);
+                        if (S->sill) BANDP(ROWV(o02), sc);
+                        BANDP(ROWV(0), cw);
+                    }
+                } else {
+                    const int o02 = o0 - 2 * izc;
+                    const u32 sc = S->sill == 2 ? cs : ct;
+                    for (; fl >= 0 && cr <= re; fl--, v -= dv) {
+                        u32 g = mullion ? ct : ((((u32)(bay * 7 + fl * 13) * 2654435761u) >> 29) < 3 ? glit : gdark);
+                        BANDP(ROWV(o1), cw);
+                        BANDP(ROWV(o0), g);
+                        if (S->sill) BANDP(ROWV(o02), sc);
+                        BANDP(ROWV(0), cw);
+                    }
                 }
-                cr = band(col, cr, re, ROW(base), cw0, cw1);
+            } else if (style == 2) {
+                const int o1 = S->v1 * izc, o0 = S->v0 * izc;
+                for (; fl >= 0 && cr <= re; fl--, v -= dv) {   /* spandrel line between ribbon windows */
+                    BANDP(ROWV(o1), cw);
+                    BANDP(ROWV(o0), ct);
+                    BANDP(ROWV(0), cw);
+                }
+            } else {
+                for (; fl >= 0 && cr <= re; fl--, v -= dv) BANDP(ROWV(0), cw);
             }
+            #undef ROWV
             /* storefront level: optional striped awning, band, shop glass, plinth */
             int awning = (style < 2) && ((seed >> 3) & 1) && edge;
             if (awning) {
                 static const u8 awn_mat[3] = { MAT_BRICK, MAT_GRASS, MAT_GLASS };
                 int am = awn_mat[(seed >> 4) % 3];
                 int stripe = (u / 6) & 1;
-                u16 a0 = stripe ? cs0 : PIX2(WPAL(am, fe, 1)), a1 = stripe ? cs1 : PIX2(WPAL(am, fo, 1));
-                cr = band(col, cr, re, ROW(58), ct0, ct1);
-                cr = band(col, cr, re, ROW(48), a0, a1);
-                cr = band(col, cr, re, ROW(46), PIX2(WPAL(MAT_TRIM, fe, 0)), PIX2(WPAL(MAT_TRIM, fo, 0)));   /* shade under it */
-            } else cr = band(col, cr, re, ROW(56), ct0, ct1);
+                BANDP(ROW(58), ct);
+                BANDP(ROW(48), stripe ? cs : PAIR(am, 1));
+                BANDP(ROW(46), PAIR(MAT_TRIM, 0));          /* shade under it */
+            } else BANDP(ROW(56), ct);
             if (shopcol) {
-                int gl = (seed >> 1) & 1;
-                u16 g0 = PIX2(WPAL(wmat, fe, gl)), g1 = PIX2(WPAL(wmat, fo, gl));
-                if (!awning) cr = band(col, cr, re, ROW(48), cw0, cw1);
-                cr = band(col, cr, re, ROW(6), g0, g1);
+                if (!awning) BANDP(ROW(48), cw);
+                BANDP(ROW(6), PAIR(wmat, (seed >> 1) & 1));
             }
-            cr = band(col, cr, re, ROW(4), cw0, cw1);
-            vspan(col, cr, re, ct0, ct1);                                  /* dark plinth at street level */
+            BANDP(ROW(4), cw);
+            BANDP(re1, ct);                                 /* dark plinth at street level */
         }
+        #undef PAIR
         #undef ROW
     }
 }
@@ -298,28 +339,8 @@ EWRAM_BSS static u8 fogpair[128][2][2];                  /* palette fog offsets 
 #define LOTW (NB + 1)
 
 /* palette base (8 + mat*8, no light) per terrain material code */
-static const u8 tm_b8[10] = { 8 + MAT_GRASS * 8, 8 + MAT_WATER * 8, 8 + MAT_SAND * 8, 8 + MAT_GRASS * 8, 8 + MAT_BROWN * 8,
+const u8 tm_b8[10] = { 8 + MAT_GRASS * 8, 8 + MAT_WATER * 8, 8 + MAT_SAND * 8, 8 + MAT_GRASS * 8, 8 + MAT_BROWN * 8,
                               8 + MAT_ASPHALT * 8, 8 + MAT_YELLOW * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_CONCRETE * 8 };
-
-/* road cell seen close up: lane lines from the interpolated lateral road coordinate, crisp at any
-   angle. u,v: 16.16 units from the map origin; idx, m: the terrain cell. Returns a palette base. */
-static __attribute__((noinline)) int lane_base(u32 u, u32 v, int idx, int m)
-{
-    int uu = (int)(u >> 16) - 8, vv = (int)(v >> 16) - 8;
-    int fx = uu & 15, fy = vv & 15;
-    const u8 *r = terrain_r + (vv >> 4) * TMAP_W + (uu >> 4);
-    int r0 = r[0], r1 = r[1], r2 = r[TMAP_W], r3 = r[TMAP_W + 1];
-    if (r0 && r1 && r2 && r3) {
-        int la = (r0 & 127) * (16 - fx) + (r1 & 127) * fx;
-        int lb = (r2 & 127) * (16 - fx) + (r3 & 127) * fx;
-        int d = ((la * (16 - fy) + lb * fy) >> 5) - 512;      /* 1/64 m */
-        if (d < 0) d = -d;
-        if (d <= 13 && (terrain_r[idx] >> 7)) return 8 + MAT_YELLOW * 8 + 1;
-        if (d <= 294) return (d > 250 && d <= 282) ? 8 + MAT_SIDEWALK * 8 + 1 : 8 + MAT_ASPHALT * 8 + 1;
-        return 8 + MAT_CONCRETE * 8 + (m >> 7);
-    }
-    return tm_b8[m & 127] + (m >> 7);
-}
 
 /* palette base (8 + mat*8 + light) per street tile code; 0xFF/0xFE = the block's lot surface */
 static const u8 tile_base[11] = {
@@ -327,8 +348,8 @@ static const u8 tile_base[11] = {
     8 + MAT_ASPHALT * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_CONCRETE * 8, 0xFE,
     8 + MAT_TRIM * 8 + 1, 8 + MAT_GRASS * 8
 };
-static u8 lot_base[LOTW * LOTW];                /* palette base (no light) of each block's lot */
-EWRAM_BSS static u8 tile_pal[128 * 128];            /* tile_base[ground_tile[i]], resolved once at start-up */
+EWRAM_BSS u8 lot_base[LOTW * LOTW];      /* palette base (no light) of each block's lot (EWRAM: read only for lot texels) */
+EWRAM_BSS u8 tile_pal[128 * 128];            /* tile_base[ground_tile[i]], resolved once at start-up */
 #define GRID_TX (GRID_LIM >> 3)
 
 /* on-grid ground texel -> palette base (lots resolved per block) */
@@ -338,39 +359,148 @@ static inline __attribute__((always_inline)) int grid_px(int gu, int gv, const u
     if (b >= 0xFE) b = lb[(gv >> 23) * LOTW + (gu >> 23)] + (b & 1);
     return b;
 }
-/* any ground texel: street grid, island terrain map or open sea (16.16 texels; texel = 0.5 m) */
-static inline __attribute__((always_inline)) int gen_base(int gu, int gv, int lanes)
+/* Off-grid ground spans. Everything except the lane lines is constant inside one terrain cell
+   (1 m; the street grid's edges and the map's edges fall on cell edges), so a run of pixels in
+   the same cell reuses the last result: the per-pixel work is two adds and a compare. Lane
+   lines are worked out per pixel, with the four road samples cached per sample block. The
+   result is exactly gen_base's. u, v: terrain-map units (cell = 1 << 20). */
+static struct { u32 cu, cv; } gc;
+int gen_lanes;                                     /* lane lines on for the current row (read by vfill.s too) */
+#define GRID_U0 ((u32)(-TMAP_ORIGIN) << 16)          /* u of street-grid texel 0 */
+/* Lane lines: t, the road coordinate (1/64 m, 512 at the centre line) bilinearly interpolated from the
+   four road samples around the pixel (terrain_r, every metre, offset by half a cell), picks the colour:
+   zone 0 concrete, 1 asphalt, 2 edge line, 3 asphalt, 4 centre line (dashed cells only), 5 asphalt,
+   6 edge line, 7 asphalt, 8 concrete. */
+static inline int lane_zone(int t)
 {
-    if ((unsigned)(gu >> 16) < GRID_TX && (unsigned)(gv >> 16) < GRID_TX) return grid_px(gu, gv, tile_pal, lot_base);
-    u32 u = (u32)(gu << 3) - ((u32)TMAP_ORIGIN << 16), v = (u32)(gv << 3) - ((u32)TMAP_ORIGIN << 16);
+    return (t >= 218) + (t >= 230) + (t >= 262) + (t >= 499) + (t >= 526) + (t >= 763) + (t >= 795) + (t >= 807);
+}
+EWRAM_BSS u8 zone_of_t[128 * 8];          /* lane_zone(t) for every t the samples can give */
+const u8 zone_base[9] = { 0, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_ASPHALT * 8 + 1,
+                                 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 0 };
+/* the sample block (2x2 road samples) of the last lane pixel, as interpolation coefficients:
+   la = a0 + fx * da, lb = b0 + fx * db, t = (16 la + fy (lb - la)) >> 5. zone >= 0: the block has
+   one zone throughout; ok = 0: not every sample is on a road (plain terrain colour). */
+typedef struct { int rk, ok, zone, a0, da, b0, db; } LaneBlock;
+LaneBlock lane_blk = { 0x7FFFFFFF, 0, 0, 0, 0, 0, 0 };
+#define lk lane_blk
+__attribute__((noinline, section(".romcode"))) void lane_block(int rk)   /* ROM: a new block of road samples is rare */
+{
+    LaneBlock *L = &lk;
+    const u8 *r = terrain_r + rk;
+    int r0 = r[0], r1 = r[1], r2 = r[TMAP_W], r3 = r[TMAP_W + 1];
+    L->rk = rk; L->ok = r0 && r1 && r2 && r3;
+    r0 &= 127; r1 &= 127; r2 &= 127; r3 &= 127;
+    L->a0 = r0 << 4; L->da = r1 - r0; L->b0 = r2 << 4; L->db = r3 - r2;
+    int lo = r0, hi = r0;
+    if (r1 < lo) lo = r1; if (r1 > hi) hi = r1;
+    if (r2 < lo) lo = r2; if (r2 > hi) hi = r2;
+    if (r3 < lo) lo = r3; if (r3 > hi) hi = r3;
+    int z = zone_of_t[lo * 8];                     /* the interpolated t always lies in [8 lo, 8 hi] */
+    L->zone = z == zone_of_t[hi * 8] ? z : -1;
+}
+/* a road pixel close enough for lane lines: u, v map units, idx its cell, m the cell's terrain_m */
+static inline __attribute__((always_inline)) int lane_px(u32 u, u32 v, int idx, int m)
+{
+    u32 su = u - (8u << 16), sv = v - (8u << 16);   /* sample-block coordinates */
+    int rk = ((int)sv >> 20) * TMAP_W + ((int)su >> 20);
+    const LaneBlock *L = &lk;
+    if (rk != L->rk) lane_block(rk);
+    if (!L->ok) return tm_b8[m & 127] + (m >> 7);
+    int z = L->zone;
+    if (z < 0) {                                   /* lines cross this block: per pixel */
+        int fx = (su >> 16) & 15, fy = (sv >> 16) & 15;
+        int la = L->a0 + fx * L->da, lb = L->b0 + fx * L->db;
+        z = zone_of_t[((la << 4) + fy * (lb - la)) >> 5];
+    }
+    if (z == 0 || z == 8) return 8 + MAT_CONCRETE * 8 + (m >> 7);
+    if (z == 4 && (terrain_r[idx] >> 7)) return 8 + MAT_YELLOW * 8 + 1;
+    return zone_base[z];
+}
+/* an off-grid texel (callers handle the street grid); sets the reuse cell gc.cu, gc.cv */
+static __attribute__((noinline)) int gen_slow(u32 u, u32 v, int lanes)
+{
     const u32 lim = (TMAP_W - 2) << 20;
+    gc.cu = u; gc.cv = v;
     if (u >= lim || v >= lim) return 8 + MAT_WATER * 8 + (((u ^ v) >> 21) & 1);
     int idx = (v >> 20) * TMAP_W + (u >> 20);
     int m = terrain_m[idx], mt = m & 127;
-    if (lanes && mt >= TM_ROAD && mt != TM_PATH) return lane_base(u, v, idx, m);
-    return tm_b8[mt] + (m >> 7);
+    if (!(lanes && mt >= TM_ROAD && mt != TM_PATH)) return tm_b8[mt] + (m >> 7);
+    gc.cu = ~u;                                        /* lane lines: per pixel */
+    return lane_px(u, v, idx, m);
 }
-#define ground_base gen_base
-/* off-grid ground, columns x..x1-1 of one row */
-static __attribute__((noinline)) void gen_span(u16 *row, int x, int x1, int gu, int gv, int su, int sv, int fe, int fo, int lanes)
+/* grid texel (the street grid's texels are smaller than a terrain cell, so no reuse) */
+static inline __attribute__((always_inline)) int grid_uv(u32 g, u32 h)
 {
-    for (; x < x1; x++, gu += su, gv += sv) {
-        int b = gen_base(gu, gv, lanes);
-        row[x] = (u16)((b + ((x & 1) ? fo : fe)) * 0x0101);
+    int b = tile_pal[((h >> 12) & (127 << 7)) | ((g >> 19) & 127)];
+    if (b >= 0xFE) b = lot_base[(h >> 26) * LOTW + (g >> 26)] + (b & 1);
+    return b;
+}
+/* one texel that is not in the current reuse cell: street grid, open sea, plain terrain, or a lane-line
+   pixel (gen_slow). Updates the reuse cell (*cu, *cv) and returns the palette base. */
+static inline __attribute__((always_inline)) u32 gen_miss(u32 u, u32 v, u32 *cu, u32 *cv)
+{
+    u32 g = u - GRID_U0, h = v - GRID_U0;
+    if (g < ((u32)GRID_TX << 19) && h < ((u32)GRID_TX << 19)) { *cu = ~u; return (u32)grid_uv(g, h); }
+    const u32 lim = (TMAP_W - 2) << 20;
+    *cu = u; *cv = v;
+    if (u >= lim || v >= lim) return 8 + MAT_WATER * 8 + (((u ^ v) >> 21) & 1);
+    int idx = (v >> 20) * TMAP_W + (u >> 20);
+    int m = terrain_m[idx], mt = m & 127;
+    if (mt < TM_ROAD || mt == TM_PATH || !gen_lanes) return (u32)(tm_b8[mt] + (m >> 7));
+    *cu = ~u;                                          /* lane lines: no whole-cell reuse */
+    return (u32)lane_px(u, v, idx, m);
+}
+_Static_assert(8 + MAT_YELLOW * 8 + 1 == 25 && 8 + MAT_CONCRETE * 8 == 56 && sizeof(LaneBlock) == 28, "vfill.s lane constants");
+_Static_assert(GRID_TX == 2590 && TMAP_W == 1424 && TMAP_ORIGIN == -1024 && 8 + MAT_WATER * 8 == 80 &&
+               TM_ROAD == 5 && TM_PATH == 8 && TM_ROADE == 7, "vfill.s gen_run constants");
+#ifdef HOST
+/* off-grid ground: logical pixels p..e-1 of one row (pp: fog offsets of this pixel and the next) */
+static __attribute__((noinline)) void gen_run(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp)
+{
+    u32 cu = ~u, cv = v, cb = 0;
+    for (; p < e; p++, u += su8, v += sv8, pp = ROR16(pp)) {
+        if (((u ^ cu) | (v ^ cv)) >= (1u << 20)) cb = gen_miss(u, v, &cu, &cv) * 0x0101;
+        *p = (u16)(cb + pp);
     }
+}
+/* the same into two rows (pp0, pp1: fog offsets of the two rows) */
+static __attribute__((noinline)) void gen_run2(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp0, u32 pp1)
+{
+    u32 cu = ~u, cv = v, cb = 0;
+    for (; p < e; p++, u += su8, v += sv8, pp0 = ROR16(pp0), pp1 = ROR16(pp1)) {
+        if (((u ^ cu) | (v ^ cv)) >= (1u << 20)) cb = gen_miss(u, v, &cu, &cv) * 0x0101;
+        p[SCR_W] = (u16)(cb + pp1);
+        p[0] = (u16)(cb + pp0);
+    }
+}
+#else
+void gen_run(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp);               /* vfill.s */
+void gen_run2(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp0, u32 pp1);
+#endif
+/* off-grid ground, columns x..x1-1 of one row */
+static void gen_span(u16 *row, int x, int x1, int gu, int gv, int su, int sv, int fe, int fo, int lanes)
+{
+    gen_lanes = lanes;
+    u32 pe = (u32)fe * 0x0101, po = (u32)fo * 0x0101;
+    u32 pp = (x & 1) ? po | (pe << 16) : pe | (po << 16);
+    gen_run(row + x, row + x1, (u32)(gu << 3) + GRID_U0, (u32)(gv << 3) + GRID_U0, (u32)su << 3, (u32)sv << 3, pp);
 }
 /* off-grid ground, n column pairs into rows y and y+1 (one sample per column, both rows) */
-static __attribute__((noinline)) void gen_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1, int lanes)
+static void gen_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1, int lanes)
 {
-    u16 *d = (u16 *)dst, *end = d + 2 * n;
-    for (int k = 0; d < end; d++, k ^= 16, gu += su, gv += sv) {
-        int b = gen_base(gu, gv, lanes) * 0x0101;
-        d[SCR_W] = (u16)(b + (pp1 >> k));
-        d[0] = (u16)(b + (pp0 >> k));
-    }
+    gen_lanes = lanes;
+    gen_run2((u16 *)dst, (u16 *)dst + 2 * n, (u32)(gu << 3) + GRID_U0, (u32)(gv << 3) + GRID_U0, (u32)su << 3, (u32)sv << 3, pp0, pp1);
+}
+/* any ground texel (16.16 texels), for the odd single pixels */
+static __attribute__((noinline)) int ground_base(int gu, int gv, int lanes)
+{
+    if ((unsigned)(gu >> 16) < GRID_TX && (unsigned)(gv >> 16) < GRID_TX) return grid_px(gu, gv, tile_pal, lot_base);
+    return gen_slow((u32)(gu << 3) + GRID_U0, (u32)(gv << 3) + GRID_U0, lanes);
 }
 /* Tight span loops, kept out of draw_ground so every variable stays in a register:
    n column pairs of on-grid ground, one texture sample per column. */
+#ifdef HOST
 static __attribute__((noinline)) void grid_span(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp)
 {
     const u8 *tp = tile_pal; const u8 *lb = lot_base;
@@ -394,7 +524,18 @@ static __attribute__((noinline)) void grid_span2(u32 *dst, int n, int gu, int gv
         *dst++ = bb + pp0;
     } while (dst < end);
 }
+#else
+void grid_span(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp);              /* vfill.s */
+void grid_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1);
+#endif
 
+/* index of the single set bit of x (de Bruijn) */
+static inline int ctz32(u32 x)
+{
+    static const u8 tab[32] = { 0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+                                31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9 };
+    return tab[(x * 0x077CB531u) >> 27];
+}
 /* flat ground, floor-cast row by row into every pixel that is not covered by a wall */
 static void draw_ground(void)
 {
@@ -415,12 +556,21 @@ static void draw_ground(void)
     }
     int gsmax = 0;
     static u8 gmx[SCR_W / 2], gmn[SCR_W / 2];      /* per column pair: rows where ground starts in both / either */
+    /* Column pairs that show ground, as bit masks (pairs 0..31 in word 0, 32..59 in word 1) kept per row:
+       mA: ground starts in either column (gmn <= y), mF: in both (gmx <= y). Bits are added as the rows
+       pass each pair's first ground row, so a row only visits the pairs that show ground. */
+    EWRAM_BSS static u32 addA[SCR_H + 1][2], addF[SCR_H + 1][2];
+    for (int y = HORIZON + 1; y <= SCR_H; y++) addA[y][0] = addA[y][1] = addF[y][0] = addF[y][1] = 0;
     for (int i = 0; i < SCR_W / 2; i++) {
         int a = gs[2 * i], b = gs[2 * i + 1];
         gmx[i] = (u8)(a > b ? a : b); gmn[i] = (u8)(a < b ? a : b);
         if (gmx[i] > gsmax) gsmax = gmx[i];
+        addA[gmn[i]][i >> 5] |= 1u << (i & 31); addF[gmx[i]][i >> 5] |= 1u << (i & 31);
     }
+    u32 mA0 = 0, mA1 = 0, mF0 = 0, mF1 = 0;
+    #define MASK_ROW(yy) do { mA0 |= addA[yy][0]; mA1 |= addA[yy][1]; mF0 |= addF[yy][0]; mF1 |= addF[yy][1]; } while (0)
     for (int y = HORIZON + 1; y < SCR_H; y++) {
+        MASK_ROW(y);
         int z = (camh * row_k[y]) >> 16;
         if (z > 4095) z = 4095;
         int gu = gu0 + ((z * du0) >> 3), gv = gv0 + ((z * dv0) >> 3);
@@ -438,30 +588,49 @@ static void draw_ground(void)
             const int y1 = y + 1;
             const int fe1 = fogpair[z >> 5][0][y1 & 1], fo1 = fogpair[z >> 5][1][y1 & 1];
             const u32 pp0 = (u32)(fe * 0x0101) | ((u32)(fo * 0x0101) << 16), pp1 = (u32)(fe1 * 0x0101) | ((u32)(fo1 * 0x0101) << 16);
-            u32 *r0 = (u32 *)row, *r1 = (u32 *)(row + SCR_W);
+            u32 *r0 = (u32 *)row;
             const int gur = gu, gvr = gv;
-            for (int i = 0; i < SCR_W / 2; ) {
-                if (y >= gmx[i]) {                     /* a run of column pairs that are ground in both rows */
-                    int j = i + 1;
-                    while (j < SCR_W / 2 && y >= gmx[j]) j++;
+            const u32 f0 = mF0, f1 = mF1;              /* ground in both rows of the pair (row y) */
+            MASK_ROW(y1);                              /* either row (row y + 1) */
+            if (y >= gsmax) {                          /* below every wall: the whole row pair is ground */
+                if (ingrid) grid_span2(r0, SCR_W / 2, gur, gvr, su, sv, pp0, pp1);
+                else gen_span2(r0, SCR_W / 2, gur, gvr, su, sv, pp0, pp1, lanes);
+                y++;
+                continue;
+            }
+            u32 w1x = f1;                              /* word 1, less any run carried over from word 0 */
+            for (int wd = 0; wd < 2; wd++) {           /* runs of pairs that are ground in both rows */
+                u32 w = wd ? w1x : f0;
+                while (w) {
+                    u32 lb = w & -w, t = w | (lb - 1), nb = (t + 1) & ~t;
+                    int i = (wd << 5) + ctz32(lb), j = nb ? (wd << 5) + ctz32(nb) : (wd << 5) + 32;
+                    if (!wd && !nb && (w1x & 1)) {     /* the run goes on past pair 31: one span */
+                        u32 t1 = w1x, nb1 = (t1 + 1) & ~t1;
+                        j = nb1 ? 32 + ctz32(nb1) : 64;
+                        w1x &= ~(nb1 - 1);
+                    }
                     if (ingrid) grid_span2(r0 + i, j - i, gur + su * 2 * i, gvr + sv * 2 * i, su, sv, pp0, pp1);
                     else gen_span2(r0 + i, j - i, gur + su * 2 * i, gvr + sv * 2 * i, su, sv, pp0, pp1, lanes);
-                    i = j; continue;
+                    w &= ~(nb - lb);
                 }
-                if (y1 < gmn[i]) { i++; continue; }
-                gu = gur + su * 2 * i; gv = gvr + sv * 2 * i;
-                int b0, b1;
-                PAIR_BASE(b0); gu += su; gv += sv;
-                PAIR_BASE(b1);
-                u32 bb = (u32)b0 * 0x0101u | ((u32)b1 * 0x0101u << 16), p0 = bb + pp0, p1 = bb + pp1;
-                if (y >= gmx[i]) { r0[i] = p0; r1[i] = p1; i++; continue; }
-                int x = i * 2, ga = gs[x], gb = gs[x + 1];
-                u16 *q0 = row + x, *q1 = q0 + SCR_W;
-                if (y >= ga) q0[0] = (u16)p0;
-                if (y >= gb) q0[1] = (u16)(p0 >> 16);
-                if (y1 >= ga) q1[0] = (u16)p1;
-                if (y1 >= gb) q1[1] = (u16)(p1 >> 16);
-                i++;
+            }
+            for (int wd = 0; wd < 2; wd++) {           /* pairs that are ground in only some of their four pixels */
+                u32 w = wd ? (mA1 & ~f1) : (mA0 & ~f0);
+                while (w) {
+                    u32 lb = w & -w; w &= w - 1;
+                    int i = (wd << 5) + ctz32(lb);
+                    gu = gur + su * 2 * i; gv = gvr + sv * 2 * i;
+                    int b0, b1;
+                    PAIR_BASE(b0); gu += su; gv += sv;
+                    PAIR_BASE(b1);
+                    u32 bb = (u32)b0 * 0x0101u | ((u32)b1 * 0x0101u << 16), p0 = bb + pp0, p1 = bb + pp1;
+                    int x = i * 2, ga = gs[x], gb = gs[x + 1];
+                    u16 *q0 = row + x, *q1 = q0 + SCR_W;
+                    if (y >= ga) q0[0] = (u16)p0;
+                    if (y >= gb) q0[1] = (u16)(p0 >> 16);
+                    if (y1 >= ga) q1[0] = (u16)p1;
+                    if (y1 >= gb) q1[1] = (u16)(p1 >> 16);
+                }
             }
             y++;
             continue;
@@ -482,27 +651,41 @@ static void draw_ground(void)
                 const u16 pe = (u16)(fe * 0x0101), po = (u16)(fo * 0x0101);
                 const u32 pp = (u32)pe | ((u32)po << 16);
                 u32 *rw = (u32 *)row;
-                for (int i = 0; i < SCR_W / 2; ) {
-                    if (y >= gmx[i]) {
-                        int j = i + 1;
-                        while (j < SCR_W / 2 && y >= gmx[j]) j++;
+                if (y >= gsmax) { grid_span(rw, SCR_W / 2, gu, gv, su, sv, pp); continue; }   /* below every wall */
+                for (int wd = 0; wd < 2; wd++) {
+                    u32 w = wd ? mF1 : mF0;
+                    while (w) {                        /* runs of pairs that are all ground */
+                        u32 lb = w & -w, t = w | (lb - 1), nb = (t + 1) & ~t;
+                        int i = (wd << 5) + ctz32(lb), j = nb ? (wd << 5) + ctz32(nb) : (wd << 5) + 32;
                         grid_span(rw + i, j - i, gu + su * 2 * i, gv + sv * 2 * i, su, sv, pp);
-                        i = j; continue;
+                        w &= ~(nb - lb);
                     }
-                    if (y >= gmn[i]) {                 /* only one column of the pair shows ground */
+                    w = wd ? (mA1 & ~mF1) : (mA0 & ~mF0);
+                    while (w) {                        /* only one column of the pair shows ground */
+                        u32 lb = w & -w; w &= w - 1;
+                        int i = (wd << 5) + ctz32(lb);
                         int x = y >= gs[2 * i] ? 2 * i : 2 * i + 1;
                         int b = grid_px(gu + su * x, gv + sv * x, tile_pal, lot_base);
                         row[x] = (u16)(b * 0x0101 + ((x & 1) ? po : pe));
                     }
-                    i++;
                 }
             } else {
-                for (int x = 0; x < SCR_W; ) {
-                    if (y < gs[x]) { x++; continue; }
-                    int x1 = x + 1;
-                    while (x1 < SCR_W && y >= gs[x1]) x1++;
-                    gen_span(row, x, x1, gu + su * x, gv + sv * x, su, sv, fe, fo, lanes);
-                    x = x1;
+                if (y >= gsmax) gen_span(row, 0, SCR_W, gu, gv, su, sv, fe, fo, lanes);   /* below every wall */
+                else for (int wd = 0; wd < 2; wd++) {
+                    u32 w = wd ? mF1 : mF0;
+                    while (w) {                        /* runs of pairs that are all ground */
+                        u32 lb = w & -w, t = w | (lb - 1), nb = (t + 1) & ~t;
+                        int i = (wd << 5) + ctz32(lb), j = nb ? (wd << 5) + ctz32(nb) : (wd << 5) + 32;
+                        gen_span(row, 2 * i, 2 * j, gu + su * 2 * i, gv + sv * 2 * i, su, sv, fe, fo, lanes);
+                        w &= ~(nb - lb);
+                    }
+                    w = wd ? (mA1 & ~mF1) : (mA0 & ~mF0);
+                    while (w) {                        /* only one column of the pair shows ground */
+                        u32 lb = w & -w; w &= w - 1;
+                        int i = (wd << 5) + ctz32(lb);
+                        int x = y >= gs[2 * i] ? 2 * i : 2 * i + 1;
+                        gen_span(row, x, x + 1, gu + su * x, gv + sv * x, su, sv, fe, fo, lanes);
+                    }
                 }
             }
         }
@@ -518,6 +701,7 @@ static void draw_ground(void)
     }
 }
 
+EWRAM_BSS static u32 cloud_bits[256][4];   /* clouds[y][a] packed 2 bits per row, per view angle a (built at start-up) */
 static void draw_sky(void)
 {
     /* sky: 6-level gradient into the haze, with clouds (palette 6 = white, 7 = shade) that
@@ -538,21 +722,26 @@ static void draw_sky(void)
         if (yb > HORIZON) yb = HORIZON;
         int ymin = ya < yb ? ya : yb, ymaxx = ya > yb ? ya : yb;
         if (ymaxx < 0) continue;
-        const u8 *cl = clouds + ((hang + col_ang[x]) & 255);
+        const u32 *cb = cloud_bits[(hang + col_ang[x]) & 255];   /* 2 bits per row: 0 sky, 1 shade, 2 white */
         u16 *p = FB + x;
         int y = 0;
-        for (; y <= ymin; y++, p += SCR_W) {
-            u32 v = grad[y];
-            if (y < 64) {
-                int k = cl[y << 8];
+        const int lim = ymin < 63 ? ymin : 63;                 /* rows where clouds can be */
+        while (y <= lim) {
+            int end = y | 15; if (end > lim) end = lim;
+            u32 w = cb[y >> 4] >> ((y & 15) * 2);
+            if (!w) { for (; y <= end; y++, p += SCR_W) *(u32 *)p = grad[y]; continue; }   /* clear sky */
+            for (; y <= end; y++, p += SCR_W, w >>= 2) {
+                u32 v = grad[y];
+                int k = w & 3;
                 if (k == 2) v = PIX2(6) * 0x10001u;
                 else if (k == 1) v = (y & 1) ? ((v & 0xFFFF0000u) | PIX2(7)) : ((v & 0xFFFFu) | ((u32)PIX2(7) << 16));
+                *(u32 *)p = v;
             }
-            *(u32 *)p = v;
         }
+        for (; y <= ymin; y++, p += SCR_W) *(u32 *)p = grad[y];
         for (; y <= ymaxx; y++, p += SCR_W) {             /* the taller of the pair */
             u32 v = grad[y];
-            if (y < 64) { int k = cl[y << 8]; if (k == 2) v = PIX2(6) * 0x10001u; }
+            if (y < 64 && ((cb[y >> 4] >> ((y & 15) * 2)) & 3) == 2) v = PIX2(6) * 0x10001u;
             if (ya >= y) p[0] = (u16)v; else p[1] = (u16)(v >> 16);
         }
     }
@@ -700,6 +889,9 @@ static void draw_sprites(const Sprite *spr, int n)
 
 __attribute__((section(".romcode"))) void render_init(void)   /* runs once: lives in ROM, not IWRAM */
 {
+    for (int t = 0; t < 128 * 8; t++) zone_of_t[t] = (u8)lane_zone(t);
+    for (int a = 0; a < 256; a++)
+        for (int y = 0; y < 64; y++) cloud_bits[a][y >> 4] |= (u32)(clouds[(y << 8) + a] & 3) << ((y & 15) * 2);
     for (int i = 0; i < 128 * 128; i++) tile_pal[i] = tile_base[ground_tile[i]];
     for (int x = 0; x < SCR_W; x++) {
         col_ang[x] = (u8)(-(iatan2(2 * x + 1 - SCR_W, 2 * FX) >> 4));

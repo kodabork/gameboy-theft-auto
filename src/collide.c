@@ -37,6 +37,11 @@ int isqrt(u32 v)
    (q10) pointing uphill, toward the shore. */
 #define MAP_LO (TMAP_ORIGIN + M(6))
 #define MAP_HI (TMAP_ORIGIN + TMAP_W * 16 - M(6))
+#ifdef HOST
+#define ROM_THUMB
+#else
+#define ROM_THUMB __attribute__((section(".romcode"), target("thumb")))   /* compact Thumb code in ROM: frees IWRAM */
+#endif
 static int water_push(int x, int y, int *nx, int *ny)
 {
     if (x < MAP_LO || x > MAP_HI || y < MAP_LO || y > MAP_HI || ground_mat(x, y) == TM_WATER) {
@@ -66,7 +71,7 @@ static int water_push(int x, int y, int *nx, int *ny)
 
 /* Push a circle (x,y,radius; units) out of buildings and the sea.
    Returns 1 if a collision happened. */
-int world_collide(int *px, int *py, int rad)
+ROM_THUMB int world_collide(int *px, int *py, int rad)
 {
     int x = *px, y = *py, hit = 0;
     int bx = x >> 10, by = y >> 10;
