@@ -1617,7 +1617,7 @@ EWRAM_BSS static u16 pk_start[NBLK + 1];
 static int npk_out;
 static void pk_index(void)
 {
-    u16 cnt[NBLK + 1];
+    EWRAM_BSS static u16 cnt[NBLK + 1];
     for (int b = 0; b <= NBLK; b++) cnt[b] = 0;
     npk_out = 0;
     for (int i = 0; i < MAX_PICKUPS; i++) {
@@ -1663,7 +1663,7 @@ static void update_pickups(int dt)
             k->timer -= dt >> 6; if (k->timer <= 0) { k->avail = 1; pk_taken--; fresh[i >> 5] |= 1u << (i & 31); }
         }
     if (pl.in_car >= 0 || pl.dead_t > 0) return;
-    u8 nearl[MAX_PICKUPS]; int nn = pk_near(plx(), ply(), M(2), nearl);
+    EWRAM_BSS static u8 nearl[MAX_PICKUPS]; int nn = pk_near(plx(), ply(), M(2), nearl);
     for (int q = 0; q < nn; q++) {
         Pickup *k = &pickups[nearl[q]];
         if (!k->avail || (fresh[nearl[q] >> 5] >> (nearl[q] & 31) & 1)) continue;
@@ -3295,7 +3295,7 @@ void game_update(u16 keys, int dt)
     g_hud.nblips = nb;
     /* pickups within radar range (about 70 m): drawn as icons, guns and health */
     int np = 0;
-    u8 pkl[MAX_PICKUPS]; int npl = pk_near(g_hud.px, g_hud.py, M(72), pkl);
+    EWRAM_BSS static u8 pkl[MAX_PICKUPS]; int npl = pk_near(g_hud.px, g_hud.py, M(72), pkl);
     for (int q = 0; q < npl && np < MAX_PK_BLIPS; q++) {
         int i = pkl[q];
         if (!pickups[i].avail) continue;
@@ -3719,7 +3719,7 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         if (view_dist(booms[i].x, booms[i].y, 0) < 0) continue;
         push_h(booms[i].x, booms[i].y, FX_EXPL + booms[i].t * 6 / BOOM_LEN, M(0.5) + booms[i].t * M(2) / BOOM_LEN);
     }
-    u8 pkl[MAX_PICKUPS]; int npl = pk_near(cm->x, cm->y, M(51), pkl);
+    EWRAM_BSS static u8 pkl[MAX_PICKUPS]; int npl = pk_near(cm->x, cm->y, M(51), pkl);
     for (int q = 0; q < npl; q++) {
         int i = pkl[q];
         if (!pickups[i].avail) continue;
