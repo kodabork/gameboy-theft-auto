@@ -301,26 +301,6 @@ EWRAM_BSS static u8 fogpair[128][2][2];                  /* palette fog offsets 
 static const u8 tm_b8[10] = { 8 + MAT_GRASS * 8, 8 + MAT_WATER * 8, 8 + MAT_SAND * 8, 8 + MAT_GRASS * 8, 8 + MAT_BROWN * 8,
                               8 + MAT_ASPHALT * 8, 8 + MAT_YELLOW * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_CONCRETE * 8 };
 
-/* road cell seen close up: lane lines from the interpolated lateral road coordinate, crisp at any
-   angle. u,v: 16.16 units from the map origin; idx, m: the terrain cell. Returns a palette base. */
-static __attribute__((noinline)) int lane_base(u32 u, u32 v, int idx, int m)
-{
-    int uu = (int)(u >> 16) - 8, vv = (int)(v >> 16) - 8;
-    int fx = uu & 15, fy = vv & 15;
-    const u8 *r = terrain_r + (vv >> 4) * TMAP_W + (uu >> 4);
-    int r0 = r[0], r1 = r[1], r2 = r[TMAP_W], r3 = r[TMAP_W + 1];
-    if (r0 && r1 && r2 && r3) {
-        int la = (r0 & 127) * (16 - fx) + (r1 & 127) * fx;
-        int lb = (r2 & 127) * (16 - fx) + (r3 & 127) * fx;
-        int d = ((la * (16 - fy) + lb * fy) >> 5) - 512;      /* 1/64 m */
-        if (d < 0) d = -d;
-        if (d <= 13 && (terrain_r[idx] >> 7)) return 8 + MAT_YELLOW * 8 + 1;
-        if (d <= 294) return (d > 250 && d <= 282) ? 8 + MAT_SIDEWALK * 8 + 1 : 8 + MAT_ASPHALT * 8 + 1;
-        return 8 + MAT_CONCRETE * 8 + (m >> 7);
-    }
-    return tm_b8[m & 127] + (m >> 7);
-}
-
 /* palette base (8 + mat*8 + light) per street tile code; 0xFF/0xFE = the block's lot surface */
 static const u8 tile_base[11] = {
     0xFF, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_YELLOW * 8 + 1, 8 + MAT_SILVER * 8 + 1,
@@ -338,36 +318,131 @@ static inline __attribute__((always_inline)) int grid_px(int gu, int gv, const u
     if (b >= 0xFE) b = lb[(gv >> 23) * LOTW + (gu >> 23)] + (b & 1);
     return b;
 }
-/* any ground texel: street grid, island terrain map or open sea (16.16 texels; texel = 0.5 m) */
-static inline __attribute__((always_inline)) int gen_base(int gu, int gv, int lanes)
+/* Off-grid ground spans. Everything except the lane lines is constant inside one terrain cell
+   (1 m; the street grid's edges and the map's edges fall on cell edges), so a run of pixels in
+   the same cell reuses the last result: the per-pixel work is two adds and a compare. Lane
+   lines are worked out per pixel, with the four road samples cached per sample block. The
+   result is exactly gen_base's. u, v: terrain-map units (cell = 1 << 20). */
+static struct { u32 cu, cv; int cb; int rk, rr, lanes, rz; u32 lu, lv; int lb; } gc = { 0, 0, 0, 0x7FFFFFFF, -1, 0, -1, 0x80000000u, 0x80000000u, 0 };
+#define GRID_U0 ((u32)(-TMAP_ORIGIN) << 16)          /* u of street-grid texel 0 */
+/* lane-line zones of the interpolated road coordinate t (1/64 m + 512 at the centre line):
+   0 concrete, 1 asphalt, 2 sidewalk-coloured edge line, 3 asphalt, 4 centre line, 5 asphalt,
+   6 edge line, 7 asphalt, 8 concrete */
+static inline int lane_zone(int t)
 {
-    if ((unsigned)(gu >> 16) < GRID_TX && (unsigned)(gv >> 16) < GRID_TX) return grid_px(gu, gv, tile_pal, lot_base);
-    u32 u = (u32)(gu << 3) - ((u32)TMAP_ORIGIN << 16), v = (u32)(gv << 3) - ((u32)TMAP_ORIGIN << 16);
+    return (t >= 218) + (t >= 230) + (t >= 262) + (t >= 499) + (t >= 526) + (t >= 763) + (t >= 795) + (t >= 807);
+}
+/* an off-grid texel (callers handle the street grid); sets the reuse cell gc.cu, gc.cv. Lane-line
+   pixels also set gc.lu, gc.lv, gc.lb when the whole half-cell they lie in has one colour. */
+static __attribute__((noinline)) int gen_slow(u32 u, u32 v, int lanes)
+{
     const u32 lim = (TMAP_W - 2) << 20;
-    if (u >= lim || v >= lim) return 8 + MAT_WATER * 8 + (((u ^ v) >> 21) & 1);
+    gc.cu = u; gc.cv = v;
+    if (u >= lim || v >= lim) return gc.cb = 8 + MAT_WATER * 8 + (((u ^ v) >> 21) & 1);
     int idx = (v >> 20) * TMAP_W + (u >> 20);
     int m = terrain_m[idx], mt = m & 127;
-    if (lanes && mt >= TM_ROAD && mt != TM_PATH) return lane_base(u, v, idx, m);
-    return tm_b8[mt] + (m >> 7);
-}
-#define ground_base gen_base
-/* off-grid ground, columns x..x1-1 of one row */
-static __attribute__((noinline)) void gen_span(u16 *row, int x, int x1, int gu, int gv, int su, int sv, int fe, int fo, int lanes)
-{
-    for (; x < x1; x++, gu += su, gv += sv) {
-        int b = gen_base(gu, gv, lanes);
-        row[x] = (u16)((b + ((x & 1) ? fo : fe)) * 0x0101);
+    if (!(lanes && mt >= TM_ROAD && mt != TM_PATH)) return gc.cb = tm_b8[mt] + (m >> 7);
+    gc.cu = ~u;                                        /* lane lines: per pixel */
+    int uu = (int)(u >> 16) - 8, vv = (int)(v >> 16) - 8;
+    int rk = (vv >> 4) * TMAP_W + (uu >> 4);
+    if (rk != gc.rk) {
+        const u8 *r = terrain_r + rk;
+        int r0 = r[0], r1 = r[1], r2 = r[TMAP_W], r3 = r[TMAP_W + 1];
+        gc.rk = rk;
+        if (r0 && r1 && r2 && r3) {
+            r0 &= 127; r1 &= 127; r2 &= 127; r3 &= 127;
+            gc.rr = (int)(r0 | (r1 << 8) | (r2 << 16) | ((u32)r3 << 24));
+            int lo = r0, hi = r0;
+            if (r1 < lo) lo = r1; if (r1 > hi) hi = r1;
+            if (r2 < lo) lo = r2; if (r2 > hi) hi = r2;
+            if (r3 < lo) lo = r3; if (r3 > hi) hi = r3;
+            int z = lane_zone(lo * 8);                 /* the interpolated t always lies in [8 lo, 8 hi] */
+            gc.rz = z == lane_zone(hi * 8) ? z : -1;
+        } else { gc.rr = -1; gc.rz = -1; }
     }
+    int rr = gc.rr, b;
+    static const u8 zone_base[9] = { 0, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_ASPHALT * 8 + 1,
+                                     8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 0 };
+    if (rr == -1) b = tm_b8[mt] + (m >> 7);
+    else if (gc.rz >= 0) {                             /* one colour for this whole sample block */
+        int z = gc.rz;
+        if (z == 0 || z == 8) b = 8 + MAT_CONCRETE * 8 + (m >> 7);
+        else if (z == 4 && (terrain_r[idx] >> 7)) b = 8 + MAT_YELLOW * 8 + 1;
+        else b = zone_base[z];
+    } else {
+        int fx = uu & 15, fy = vv & 15;
+        int la = (rr & 127) * (16 - fx) + ((rr >> 8) & 127) * fx;
+        int lb = ((rr >> 16) & 127) * (16 - fx) + ((u32)rr >> 24) * fx;
+        int d = ((la * (16 - fy) + lb * fy) >> 5) - 512;      /* 1/64 m */
+        if (d < 0) d = -d;
+        if (d <= 13 && (terrain_r[idx] >> 7)) return 8 + MAT_YELLOW * 8 + 1;
+        if (d <= 294) return (d > 250 && d <= 282) ? 8 + MAT_SIDEWALK * 8 + 1 : 8 + MAT_ASPHALT * 8 + 1;
+        return 8 + MAT_CONCRETE * 8 + (m >> 7);
+    }
+    gc.lu = u; gc.lv = v; gc.lb = b;                   /* the half-cell is one terrain cell and one sample block */
+    return b;
+}
+/* grid texel (the street grid's texels are smaller than a terrain cell, so no reuse) */
+static inline __attribute__((always_inline)) int grid_uv(u32 g, u32 h)
+{
+    int b = tile_pal[((h >> 12) & (127 << 7)) | ((g >> 19) & 127)];
+    if (b >= 0xFE) b = lot_base[(h >> 26) * LOTW + (g >> 26)] + (b & 1);
+    return b;
+}
+#define ROR16(x) (((x) >> 16) | ((x) << 16))
+/* one texel that is not in the current reuse cell: street grid, open sea, plain terrain, or a lane-line
+   pixel (gen_slow). Updates the reuse cell (*cu, *cv) and returns the palette base. */
+static inline __attribute__((always_inline)) u32 gen_miss(u32 u, u32 v, u32 *cu, u32 *cv)
+{
+    u32 g = u - GRID_U0, h = v - GRID_U0;
+    if (g < ((u32)GRID_TX << 19) && h < ((u32)GRID_TX << 19)) { *cu = ~u; return (u32)grid_uv(g, h); }
+    const u32 lim = (TMAP_W - 2) << 20;
+    *cu = u; *cv = v;
+    if (u >= lim || v >= lim) return 8 + MAT_WATER * 8 + (((u ^ v) >> 21) & 1);
+    int m = terrain_m[(v >> 20) * TMAP_W + (u >> 20)], mt = m & 127;
+    if (mt < TM_ROAD || mt == TM_PATH || !gc.lanes) return (u32)(tm_b8[mt] + (m >> 7));
+    *cu = ~u;                                          /* lane lines: no whole-cell reuse */
+    if (((u ^ gc.lu) | (v ^ gc.lv)) < (1u << 19)) return (u32)gc.lb;   /* same one-colour half-cell as before */
+    return (u32)gen_slow(u, v, 1);
+}
+/* off-grid ground: logical pixels p..e-1 of one row (pp: fog offsets of this pixel and the next) */
+static __attribute__((noinline)) void gen_run(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp)
+{
+    u32 cu = ~u, cv = v, cb = 0;
+    for (; p < e; p++, u += su8, v += sv8, pp = ROR16(pp)) {
+        if (((u ^ cu) | (v ^ cv)) >= (1u << 20)) cb = gen_miss(u, v, &cu, &cv) * 0x0101;
+        *p = (u16)(cb + pp);
+    }
+}
+/* the same into two rows (pp0, pp1: fog offsets of the two rows) */
+static __attribute__((noinline)) void gen_run2(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp0, u32 pp1)
+{
+    u32 cu = ~u, cv = v, cb = 0;
+    for (; p < e; p++, u += su8, v += sv8, pp0 = ROR16(pp0), pp1 = ROR16(pp1)) {
+        if (((u ^ cu) | (v ^ cv)) >= (1u << 20)) cb = gen_miss(u, v, &cu, &cv) * 0x0101;
+        p[SCR_W] = (u16)(cb + pp1);
+        p[0] = (u16)(cb + pp0);
+    }
+}
+/* off-grid ground, columns x..x1-1 of one row */
+static void gen_span(u16 *row, int x, int x1, int gu, int gv, int su, int sv, int fe, int fo, int lanes)
+{
+    gc.lanes = lanes;
+    u32 pe = (u32)fe * 0x0101, po = (u32)fo * 0x0101;
+    u32 pp = (x & 1) ? po | (pe << 16) : pe | (po << 16);
+    gen_run(row + x, row + x1, (u32)(gu << 3) + GRID_U0, (u32)(gv << 3) + GRID_U0, (u32)su << 3, (u32)sv << 3, pp);
 }
 /* off-grid ground, n column pairs into rows y and y+1 (one sample per column, both rows) */
-static __attribute__((noinline)) void gen_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1, int lanes)
+static void gen_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1, int lanes)
 {
-    u16 *d = (u16 *)dst, *end = d + 2 * n;
-    for (int k = 0; d < end; d++, k ^= 16, gu += su, gv += sv) {
-        int b = gen_base(gu, gv, lanes) * 0x0101;
-        d[SCR_W] = (u16)(b + (pp1 >> k));
-        d[0] = (u16)(b + (pp0 >> k));
-    }
+    gc.lanes = lanes;
+    gen_run2((u16 *)dst, (u16 *)dst + 2 * n, (u32)(gu << 3) + GRID_U0, (u32)(gv << 3) + GRID_U0, (u32)su << 3, (u32)sv << 3, pp0, pp1);
+}
+/* any ground texel (16.16 texels), for the odd single pixels */
+static __attribute__((noinline)) int ground_base(int gu, int gv, int lanes)
+{
+    if ((unsigned)(gu >> 16) < GRID_TX && (unsigned)(gv >> 16) < GRID_TX) return grid_px(gu, gv, tile_pal, lot_base);
+    return gen_slow((u32)(gu << 3) + GRID_U0, (u32)(gv << 3) + GRID_U0, lanes);
 }
 /* Tight span loops, kept out of draw_ground so every variable stays in a register:
    n column pairs of on-grid ground, one texture sample per column. */

@@ -2788,7 +2788,11 @@ static void new_game_state(void)
     for (int i = 0; i < MAX_ROCKETS; i++) rockets[i].active = 0;
     Car *p = &cars[0];
     p->model = CAR_HATCH_LIME; p->ai = AI_NONE; p->speed = 0; p->vx = p->vy = 0; p->active = 1; p->kx = p->ky = p->spin = 0; p->dmg = 0; p->burn = 0;
+#ifdef DEBUG_RX                                /* test builds: start the car on road DEBUG_RY at cross street DEBUG_RX */
+    p->x = Q8(ROAD_C(DEBUG_RX) + M(18)); p->y = Q8(ROAD_C(DEBUG_RY) - LANE_OFS); p->head = 0;
+#else
     p->x = Q8(ROAD_C(3) + M(18)); p->y = Q8(ROAD_C(4) - LANE_OFS); p->head = 0;
+#endif
     pl.x = p->x; pl.y = p->y; pl.head = 0; cam_ang = 0;
     wanted = 0; wanted_cool = 0;
     for (int i = 0; i < NPOLICE; i++) cars[SLOT_POLICE0 + i].active = 0;
