@@ -187,7 +187,9 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
             int SH = S->storey;
             cr = band(col, cr, re, ROW(hb), cw0, cw1);
             int bay = bq + seed;
-            for (int fl = nfl - 1; fl >= 0 && cr <= re; fl--) {
+            int fl = nfl - 1;
+            while (fl >= 0 && ROW(64 + fl * SH) <= cr) fl--;      /* floors wholly above the rows still to fill draw nothing */
+            for (; fl >= 0 && cr <= re; fl--) {
                 int base = 64 + fl * SH;
                 if (wincol) {
                     int hsh = (bay * 7 + fl * 13) * 2654435761u >> 29;
