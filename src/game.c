@@ -3861,3 +3861,27 @@ void game_debug_set(int w, int give_guns)
     if (give_guns) { pl.owned = 31; pl.ammo[1] = 50; pl.ammo[2] = 200; pl.ammo[3] = 20; pl.ammo[4] = 40; pl.ammo[5] = 10; pl.weapon = 2; }
 }
 #endif
+
+#ifdef DEBUG_SWEEP
+/* test builds: put the player's car at sweep sample s (every crossing of the grid in 4 directions, then
+   every 6th coast-road waypoint). Returns 0 past the last sample. */
+int game_sweep_place(int s)
+{
+    int i = pl.in_car >= 0 ? pl.in_car : 0;
+    Car *c = &cars[i];
+    if (s < (NB + 1) * (NB + 1) * 4) {
+        int cell = s >> 2, dir = s & 3;
+        place_on_lane(c, dir, cell / (NB + 1), cell % (NB + 1), 20);
+        c->vx = c->vy = 0; c->speed = 0; cam_ang = c->head; c->ai = AI_NONE;
+        return 1;
+    }
+    int k = (s - (NB + 1) * (NB + 1) * 4) * 6;
+    if (k >= NCOAST_WP) return 0;
+    int nx = coast_wp[(k + 1) % NCOAST_WP][0], ny = coast_wp[(k + 1) % NCOAST_WP][1];
+    int a = iatan2(ny - coast_wp[k][1], nx - coast_wp[k][0]);
+    int ox = (isin(a) * M(2)) >> 14, oy = -(icos(a) * M(2)) >> 14;
+    c->x = Q8(coast_wp[k][0] + ox); c->y = Q8(coast_wp[k][1] + oy);
+    c->head = Q8(a); c->vx = c->vy = 0; c->speed = 0; cam_ang = Q8(a);
+    return 1;
+}
+#endif

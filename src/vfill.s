@@ -104,10 +104,12 @@ glot_\rd:
     .pool
 
 @ Off-grid ground runs (C versions gen_run / gen_run2 in render.c, used by the PC build; render.c
-@ checks the constants below with static asserts). u, v: terrain-map units (cell = 1 << 20). Pixels
-@ in the same terrain cell as the last one reuse its colour (r8, r9 = that cell's u, v; r10 = colour
-@ * 0x0101); gmiss works out a new one: street grid texel, open sea, plain terrain or (C, gen_lane)
-@ a lane-line pixel.
+@ checks the constants below with static asserts). u, v: terrain-map units (cell = 1 << 20).
+@ A pixel inside the current reuse square uses its colour: r8, r9 = u, v of the pixel that set it,
+@ r10 = colour * 0x0101 << 16 | (square size >> 16). The square is a whole terrain cell (size 1 << 20)
+@ for plain terrain and the open sea, half a cell (1 << 19: one cell and one block of road samples)
+@ for road with no lane line through that block; r8 = ~u (no reuse) for street-grid texels and
+@ pixels with a lane line nearby. gmiss works out a new colour.
 @ void gen_run(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp)
 @ void gen_run2(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp0, u32 pp1)   rows y and y+1
     .global gen_run, gen_run2
@@ -117,17 +119,17 @@ gen_run2:
     ldmia   r12, {r4-r7}
     mvn     r8, r2
     mov     r9, r3
-    mov     r10, #0
+    mov     r10, #16
     cmp     r0, r1
     bhs     9f
 1:  eor     r11, r2, r8
     eor     r12, r3, r9
     orr     r11, r11, r12
-    cmp     r11, #0x100000
+    cmp     r11, r10, lsl #16
     blhs    gmiss
-    add     r11, r10, r7
+    add     r11, r7, r10, lsr #16
     strh    r11, [r0, #240]
-    add     r11, r10, r6
+    add     r11, r6, r10, lsr #16
     strh    r11, [r0], #2
     add     r2, r2, r4
     add     r3, r3, r5
@@ -143,15 +145,15 @@ gen_run:
     ldmia   r12, {r4-r6}
     mvn     r8, r2
     mov     r9, r3
-    mov     r10, #0
+    mov     r10, #16
     cmp     r0, r1
     bhs     9f
 1:  eor     r11, r2, r8
     eor     r12, r3, r9
     orr     r11, r11, r12
-    cmp     r11, #0x100000
+    cmp     r11, r10, lsl #16
     blhs    gmiss
-    add     r11, r10, r6
+    add     r11, r6, r10, lsr #16
     strh    r11, [r0], #2
     add     r2, r2, r4
     add     r3, r3, r5
@@ -160,7 +162,13 @@ gen_run:
     blo     1b
 9:  ldmfd   sp!, {r4-r11, lr}
     bx      lr
-@ in: r2 u, r3 v (r0-r7 preserved); out: r10 = palette base * 0x0101, r8, r9 = reuse cell (r8 = ~u: none)
+@ r10 = palette base (in r10) * 0x0101 << 16 | size
+.macro PACK size
+    mov     r10, r10, lsl #16
+    orr     r10, r10, r10, lsl #8
+    orr     r10, r10, #\size
+.endm
+@ in: r2 u, r3 v (r0-r7 preserved); out: r10, r8, r9 as above
 gmiss:
     stmfd   sp!, {lr}
     sub     r11, r2, #0x04000000        @ g = gu << 3 (street-grid texel coordinates)
@@ -178,7 +186,7 @@ gmiss:
     ldrb    r10, [r10, lr]
     cmp     r10, #0xFE
     bhs     5f
-4:  add     r10, r10, r10, lsl #8
+4:  PACK    16
     mvn     r8, r2                      @ grid texels are smaller than a cell: no reuse
     ldmfd   sp!, {pc}
 5:  and     r10, r10, #1                @ lot surface: lot_base[(h >> 26) * 21 + (g >> 26)] + (b & 1)
@@ -230,6 +238,7 @@ gmiss:
     ldr     r5, [r4, #8]                @ zone of the whole block, or -1
     cmp     r5, #0
     bge     10f
+    mvn     r8, r2                      @ a lane line crosses this block: per pixel
     mov     r5, r10, lsr #16
     and     r5, r5, #15                 @ fx
     ldr     r6, [r4, #16]
@@ -269,8 +278,7 @@ gmiss:
     ldrb    r10, [r6, r5]
     add     r10, r10, r12, lsr #7
 13: ldmfd   sp!, {r4-r6}
-    mvn     r8, r2                      @ lane lines: per pixel
-    add     r10, r10, r10, lsl #8
+    PACK    8                           @ reuse over the half-cell (when r8 = u)
     ldmfd   sp!, {pc}
 6:  stmfd   sp!, {r0-r3, r12, lr}       @ a new sample block (lr holds sv)
     mov     r0, r6
@@ -280,12 +288,12 @@ gmiss:
 2:  ldr     r10, =tm_b8                 @ plain terrain: tm_b8[material] + lit
     ldrb    r10, [r10, lr]
     add     r10, r10, r12, lsr #7
-    add     r10, r10, r10, lsl #8
+    PACK    16
     ldmfd   sp!, {pc}
 3:  eor     r10, r2, r3                 @ open sea beyond the map: 2 m checker
     mov     r10, r10, lsr #21
     and     r10, r10, #1
     add     r10, r10, #80               @ 8 + MAT_WATER * 8
-    add     r10, r10, r10, lsl #8
+    PACK    16
     ldmfd   sp!, {pc}
     .pool

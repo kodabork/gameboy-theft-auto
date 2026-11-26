@@ -203,7 +203,7 @@ int main(void)
     static const u16 radar_pal[16] = { 0, 0x1484, 0x318C, 0x5145, 0x7FFF, 0x7FFF, 0x13FF, 0x13E4, 0x033F, 0x7D08, 0x2529, 0x1A46, 0x3ED8, 0x7FE4, 0x0C7F, 0x7FFF };
     for (int i = 0; i < 16; i++) PAL_OBJ[16 + i] = radar_pal[i];
     REG_DISPCNT = 0x0004 | 0x0400 | 0x1000 | 0x0040;   /* mode 4, BG2, OBJ, 1D */
-#ifdef BENCH
+#if defined(BENCH) || defined(DEBUG_SWEEP)
     /* benchmark build: drives a fixed route with a fixed game clock (the same game on any hardware),
        times displayed frames BENCH_F0..BENCH_F1 with the real timer, then shows fps x 10 top left */
     static const short bench_n[] = { BENCH_N };
@@ -213,7 +213,7 @@ int main(void)
     for (;;) {
         u16 keys = (u16)((~REG_KEYINPUT & 0x03FF) | key_seen);
         key_seen = 0;
-#ifdef BENCH
+#if defined(BENCH) || defined(DEBUG_SWEEP)
         {   int f = (int)frame_n, acc = 0; keys = 0;
             for (unsigned i = 0; i < sizeof bench_n / sizeof bench_n[0]; i++) { acc += bench_n[i]; if (f < acc) { keys = (u16)bench_k[i]; break; } }
         }
@@ -230,6 +230,29 @@ int main(void)
         if ((int)frame_n > BENCH_F0 && (int)frame_n <= BENCH_F1) bench_acc += (u32)dt;
         if ((int)frame_n == BENCH_F1 + 1) bench_res = (int)((u32)(BENCH_F1 - BENCH_F0) * 163840u / bench_acc);
         dt = 819;                                   /* fixed game clock */
+#endif
+#ifdef DEBUG_SWEEP
+        {   /* sweep build: 8 frames per sample, frames 4..7 timed; ticks / 4 per sample into SRAM (u16) */
+            int game_sweep_place(int s);
+            static int ss = -1, sf, sacc;
+            volatile u8 *sr = (volatile u8 *)0x0E000000;
+            int f = (int)frame_n;
+            keys = f < 313 ? keys : 0;
+            if (f >= 330) {
+#ifdef SWEEP_ONLY
+                if (ss < 0) { ss = SWEEP_ONLY; game_sweep_place(ss); sf = 0; }
+                else if (0)
+#endif
+                if (ss < 0 || sf == 8) {
+                    if (ss >= 0) { int v = sacc / 4; sr[2 * ss] = (u8)v; sr[2 * ss + 1] = (u8)(v >> 8); }
+                    ss++; sf = 0; sacc = 0;
+                    if (!game_sweep_place(ss)) { sr[0x7FF0] = 'D'; sr[0x7FF1] = 'O'; sr[0x7FF2] = 'N'; sr[0x7FF3] = 'E'; for (;;) ; }
+                }
+                if (sf >= 4) sacc += dt;
+                sf++;
+            }
+            dt = 819;
+        }
 #endif
         /* game logic runs while the previous frame waits for its VBlank flip */
         game_update(keys, dt);
