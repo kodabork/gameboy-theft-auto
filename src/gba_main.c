@@ -176,6 +176,9 @@ int main(void)
 #define WAITCNT_VAL 0x431B                    /* ROM wait states 2/1 (first/sequential access), prefetch on; the owner's EZ-Flash Omega handles it */
 #endif
     REG_WAITCNT = WAITCNT_VAL;
+#ifdef EWRAM_FAST                             /* test builds: EWRAM 1 wait state (GBA / GBA SP only) */
+    *(volatile u32 *)0x04000800 = 0x0E000020;
+#endif
     REG_DISPCNT = 0x0080;                     /* forced blank during setup */
     u16 pal[256];
     palette_build(pal);

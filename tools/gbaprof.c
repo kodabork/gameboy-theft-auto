@@ -23,7 +23,7 @@ static u32 bank_sp[3], bank_lr[3], spsr_irq, spsr_svc;   /* 0 usr/sys, 1 irq, 2 
 static u64 cycles;
 static int seqfetch;            /* next code fetch sequential */
 static int pf, pfacc;           /* ROM prefetch buffer model */
-static u32 waitcnt;
+static u32 waitcnt; static int ew_fast;
 static int romN16 = 5, romS16 = 3;
 
 /* timers */
@@ -45,7 +45,7 @@ static void fatal(const char *m, u32 a) { fprintf(stderr, "gbaprof: %s %08x at p
 static int wait_of(u32 a, int w32, int seq)
 {
     switch (a >> 24) {
-    case 0x02: return w32 ? 6 : 3;
+    case 0x02: return ew_fast ? (w32 ? 4 : 2) : (w32 ? 6 : 3);
     case 0x05: case 0x06: return w32 ? 2 : 1;
     case 0x08: case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D:
         if (w32) return (seq ? romS16 : romN16) + romS16;
@@ -128,6 +128,7 @@ static void do_dma(int n)
 }
 static void io_wr16(u32 a, u16 v)
 {
+    if ((a & 0xFFFC) == 0x800) { if (a & 2) ew_fast = ((v >> 8) & 0xF) == 0xE; return; }   /* memory control: EWRAM wait states */
     a &= 0x3FE;
     if (a == 0x202) { *(u16 *)&io[0x202] &= ~v; return; }
     if (a == 0x000) {
