@@ -1563,6 +1563,8 @@ static void update_cats(int dt)
 }
 
 /* ------------------------------------------------------------ pickups */
+static void pk_index(void);
+static int pk_taken;                       /* listed pickups waiting to come back */
 static void setup_pickups(void)
 {
     /* block x, block y, type (0 pistol 1 SMG 2 health 3 shotgun 4 rifle); 9,y = out of town */
@@ -1603,15 +1605,70 @@ static void setup_pickups(void)
         n++;
     }
     for (; n < MAX_PICKUPS; n++) pickups[n].avail = 0, pickups[n].timer = 0x7fff, pickups[n].x = pickups[n].y = -M(500);
+    pk_index(); pk_taken = 0;
 }
 
+/* Pickups never move, so they are listed by city block once (pk_index) and the per-frame loops visit
+   only the blocks in range. pk_near gathers the indices in ascending order, so every loop sees the
+   pickups in exactly the order a scan of the whole array would. Unused slots (parked far outside the
+   map) are left out: nothing can ever come within range of them. */
+EWRAM_BSS static u8 pk_idx[MAX_PICKUPS], pk_out[MAX_PICKUPS];
+EWRAM_BSS static u16 pk_start[NBLK + 1];
+static int npk_out;
+static void pk_index(void)
+{
+    u16 cnt[NBLK + 1];
+    for (int b = 0; b <= NBLK; b++) cnt[b] = 0;
+    npk_out = 0;
+    for (int i = 0; i < MAX_PICKUPS; i++) {
+        if (pickups[i].x == -M(500) && pickups[i].y == -M(500)) continue;
+        int bx = pickups[i].x >> 10, by = pickups[i].y >> 10;
+        if ((unsigned)bx < NB && (unsigned)by < NB) cnt[by * NB + bx]++; else pk_out[npk_out++] = (u8)i;
+    }
+    int at = 0;
+    for (int b = 0; b < NBLK; b++) { pk_start[b] = (u16)at; at += cnt[b]; cnt[b] = pk_start[b]; }
+    pk_start[NBLK] = (u16)at;
+    for (int i = 0; i < MAX_PICKUPS; i++) {
+        if (pickups[i].x == -M(500) && pickups[i].y == -M(500)) continue;
+        int bx = pickups[i].x >> 10, by = pickups[i].y >> 10;
+        if ((unsigned)bx < NB && (unsigned)by < NB) pk_idx[cnt[by * NB + bx]++] = (u8)i;
+    }
+}
+/* indices (ascending) of the listed pickups in the blocks within r units of (x, y), plus those outside the grid */
+static int pk_near(int x, int y, int r, u8 *out)
+{
+    int bx0 = (x - r) >> 10, bx1 = (x + r) >> 10, by0 = (y - r) >> 10, by1 = (y + r) >> 10;
+    if (bx0 < 0) bx0 = 0; if (by0 < 0) by0 = 0; if (bx1 > NB - 1) bx1 = NB - 1; if (by1 > NB - 1) by1 = NB - 1;
+    int n = 0;
+    for (int j = by0; j <= by1; j++)
+        for (int k = pk_start[j * NB + bx0], e = pk_start[j * NB + bx1 + 1]; k < e; k++) {
+            int v = pk_idx[k], m = n++;
+            while (m > 0 && out[m - 1] > v) { out[m] = out[m - 1]; m--; }
+            out[m] = (u8)v;
+        }
+    for (int k = 0; k < npk_out; k++) {
+        int v = pk_out[k], m = n++;
+        while (m > 0 && out[m - 1] > v) { out[m] = out[m - 1]; m--; }
+        out[m] = (u8)v;
+    }
+    return n;
+}
 static void update_pickups(int dt)
 {
-    for (int i = 0; i < MAX_PICKUPS; i++) {
-        Pickup *k = &pickups[i];
-        if (!k->avail) { k->timer -= dt >> 6; if (k->timer <= 0) k->avail = 1; continue; }
-        if (pl.in_car >= 0 || pl.dead_t > 0) continue;
+    u32 fresh[(MAX_PICKUPS + 31) / 32] = { 0 };    /* back this frame: not collectable until the next */
+    if (pk_taken)
+        for (int i = 0; i < MAX_PICKUPS; i++) {
+            Pickup *k = &pickups[i];
+            if (k->avail || (k->x == -M(500) && k->y == -M(500))) continue;
+            k->timer -= dt >> 6; if (k->timer <= 0) { k->avail = 1; pk_taken--; fresh[i >> 5] |= 1u << (i & 31); }
+        }
+    if (pl.in_car >= 0 || pl.dead_t > 0) return;
+    u8 nearl[MAX_PICKUPS]; int nn = pk_near(plx(), ply(), M(2), nearl);
+    for (int q = 0; q < nn; q++) {
+        Pickup *k = &pickups[nearl[q]];
+        if (!k->avail || (fresh[nearl[q] >> 5] >> (nearl[q] & 31) & 1)) continue;
         if (dist_approx(k->x - plx(), k->y - ply()) > M(1.6)) continue;
+        pk_taken++;
         k->avail = 0; k->timer = 60 * 256;
         if (k->type == 0) { pl.owned |= 1; pl.ammo[1] += 36; pl.weapon = 1; msg("PISTOL", "", 2); }
         else if (k->type == 1) { pl.owned |= 2; pl.ammo[2] += 120; pl.weapon = 2; msg("SMG", "", 2); }
@@ -3238,7 +3295,9 @@ void game_update(u16 keys, int dt)
     g_hud.nblips = nb;
     /* pickups within radar range (about 70 m): drawn as icons, guns and health */
     int np = 0;
-    for (int i = 0; i < MAX_PICKUPS && np < MAX_PK_BLIPS; i++) {
+    u8 pkl[MAX_PICKUPS]; int npl = pk_near(g_hud.px, g_hud.py, M(72), pkl);
+    for (int q = 0; q < npl && np < MAX_PK_BLIPS; q++) {
+        int i = pkl[q];
         if (!pickups[i].avail) continue;
         int dx = pickups[i].x - g_hud.px, dy = pickups[i].y - g_hud.py;
         if (iabs(dx) > M(72) || iabs(dy) > M(72)) continue;
@@ -3660,7 +3719,9 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
         if (view_dist(booms[i].x, booms[i].y, 0) < 0) continue;
         push_h(booms[i].x, booms[i].y, FX_EXPL + booms[i].t * 6 / BOOM_LEN, M(0.5) + booms[i].t * M(2) / BOOM_LEN);
     }
-    for (int i = 0; i < MAX_PICKUPS; i++) {
+    u8 pkl[MAX_PICKUPS]; int npl = pk_near(cm->x, cm->y, M(51), pkl);
+    for (int q = 0; q < npl; q++) {
+        int i = pkl[q];
         if (!pickups[i].avail) continue;
         int dd = view_dist(pickups[i].x, pickups[i].y, 0);
         if (dd < 0 || dd > M(50)) continue;

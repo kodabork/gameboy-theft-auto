@@ -30,7 +30,7 @@ static int romN16 = 5, romS16 = 3;
 static u16 tm_reload[4], tm_ctl[4]; static u64 tm_start[4];
 static u64 frame_start;         /* cycle when current video frame started */
 static int vblank_done;
-static long flips; static u64 flip_cyc[100000];
+static long flips; static u64 flip_cyc[100000], wait_cyc[100000]; static u64 wait_acc; static u32 wait_lo, wait_hi;
 static u32 min_sp = 0xFFFFFFFF, min_isp = 0xFFFFFFFF, min_sp_pc, min_sp_lr; static u8 min_stack[0x800];
 static u32 callee_addr; static u32 call_hist[1000000]; static long ncall_hist;
 static u32 keys_now;
@@ -134,7 +134,7 @@ static void io_wr16(u32 a, u16 v)
         u16 old = *(u16 *)&io[0];
         *(u16 *)&io[0] = v;
         if ((old ^ v) & 0x10) {
-            if (flips < 100000) flip_cyc[flips] = cycles;
+            if (flips < 100000) { flip_cyc[flips] = cycles; wait_cyc[flips] = wait_acc; }
             flips++;
             for (int i = 0; i < ndump; i++) if (dump_list[i] == flips) dump_page(flips);
         }
@@ -720,6 +720,7 @@ int main(int argc, char **argv)
     long vframe = 0;
     keys_now = keys_for_frame(0);
     u64 icount = 0;
+    if (getenv("WAITPC")) { wait_lo = (u32)strtoul(getenv("WAITPC"), 0, 16); wait_hi = wait_lo + 16; }
     if (getenv("CALLEE")) callee_addr = (u32)strtoul(getenv("CALLEE"), 0, 16) & ~1u;
     const char *profp = getenv("PROF");
     u64 *hrom = profp ? calloc(romsize / 2 + 1, 8) : 0, *hiw = profp ? calloc(0x4000, 8) : 0;
@@ -757,6 +758,7 @@ int main(int argc, char **argv)
             r[15] = pc + 4; seqfetch = 1;
             arm_step(op, pc);
         }
+        if (wait_hi && pc >= wait_lo && pc < wait_hi) wait_acc += cycles - c0;
         if (profp && c0 >= prof_from) {
             if ((pc >> 24) >= 8) { u32 o = (pc & 0x1FFFFFF) >> 1; if (o <= romsize / 2) hrom[o] += cycles - c0; }
             else if ((pc >> 24) == 3) hiw[(pc & 0x7FFF) >> 1] += cycles - c0;
@@ -790,6 +792,15 @@ int main(int argc, char **argv)
             if (flip_cyc[i - 1] < from || i <= f0 || i > f1) continue;
             if (!c0) c0 = flip_cyc[i - 1]; c1 = flip_cyc[i];
             long v = (long)((flip_cyc[i] - flip_cyc[i - 1] + FRAME_CYC / 2) / FRAME_CYC); if (v > 15) v = 15; h[v]++;
+        }
+        if (wait_hi) {   /* busy time per frame (flip to flip minus waiting), in 1/10 VBlank steps */
+            long bh[80] = {0};
+            for (long i = 1; i < flips && i < 100000; i++) {
+                if (flip_cyc[i - 1] < from || i <= f0 || i > f1) continue;
+                u64 busy = (flip_cyc[i] - flip_cyc[i - 1]) - (wait_cyc[i] - wait_cyc[i - 1]);
+                long b = (long)(busy * 10 / FRAME_CYC); if (b > 79) b = 79; bh[b]++;
+            }
+            printf("busy per frame (VBlanks): "); for (int b = 0; b < 80; b++) if (bh[b]) printf(" %d.%d:%ld", b / 10, b % 10, bh[b]); printf("\n");
         }
         long nf = 0; for (int i = 1; i < 16; i++) nf += h[i];
         printf("vblanks per frame:"); for (int i = 1; i < 16; i++) if (h[i]) printf(" %d:%ld", i, h[i]);
