@@ -172,7 +172,10 @@ int main(void)
 #ifdef DIV_TEST
     div_test();
 #endif
-    REG_WAITCNT = 0x4317;                     /* faster ROM access + prefetch */
+#ifndef WAITCNT_VAL
+#define WAITCNT_VAL 0x4317                    /* ROM wait states 3/1 (first/sequential access), prefetch on */
+#endif
+    REG_WAITCNT = WAITCNT_VAL;
     REG_DISPCNT = 0x0080;                     /* forced blank during setup */
     u16 pal[256];
     palette_build(pal);
@@ -200,9 +203,21 @@ int main(void)
     static const u16 radar_pal[16] = { 0, 0x1484, 0x318C, 0x5145, 0x7FFF, 0x7FFF, 0x13FF, 0x13E4, 0x033F, 0x7D08, 0x2529, 0x1A46, 0x3ED8, 0x7FE4, 0x0C7F, 0x7FFF };
     for (int i = 0; i < 16; i++) PAL_OBJ[16 + i] = radar_pal[i];
     REG_DISPCNT = 0x0004 | 0x0400 | 0x1000 | 0x0040;   /* mode 4, BG2, OBJ, 1D */
+#ifdef BENCH
+    /* benchmark build: drives a fixed route with a fixed game clock (the same game on any hardware),
+       times displayed frames BENCH_F0..BENCH_F1 with the real timer, then shows fps x 10 top left */
+    static const short bench_n[] = { BENCH_N };
+    static const short bench_k[] = { BENCH_K };
+    u32 bench_acc = 0; int bench_res = -1;
+#endif
     for (;;) {
         u16 keys = (u16)((~REG_KEYINPUT & 0x03FF) | key_seen);
         key_seen = 0;
+#ifdef BENCH
+        {   int f = (int)frame_n, acc = 0; keys = 0;
+            for (unsigned i = 0; i < sizeof bench_n / sizeof bench_n[0]; i++) { acc += bench_n[i]; if (f < acc) { keys = (u16)bench_k[i]; break; } }
+        }
+#endif
         if (((keys & ~prev) & KEY_START) && (keys & KEY_SELECT)) show_fps ^= 1;
         prev = keys;
         u16 now = REG_TM2D;
@@ -211,6 +226,11 @@ int main(void)
         fps_acc += dt; fps_frames++;
         if (fps_acc >= 16384) { fps = fps_frames * 16384 / fps_acc; fps_acc = 0; fps_frames = 0; }
 
+#ifdef BENCH
+        if ((int)frame_n > BENCH_F0 && (int)frame_n <= BENCH_F1) bench_acc += (u32)dt;
+        if ((int)frame_n == BENCH_F1 + 1) bench_res = (int)((u32)(BENCH_F1 - BENCH_F0) * 163840u / bench_acc);
+        dt = 819;                                   /* fixed game clock */
+#endif
         /* game logic runs while the previous frame waits for its VBlank flip */
         game_update(keys, dt);
         {   /* day and night: re-tint the palette whenever the minute changes (daylight on the 2D screens) */
@@ -233,6 +253,9 @@ int main(void)
 
         flip_req = 1;                             /* the VBlank interrupt flips the page */
         /* HUD */
+#ifdef BENCH
+        if (bench_res >= 0) { set_sprite(0, 4, 4, 11); draw_number(1, 12, 4, bench_res, 3); } else
+#endif
         if (show_fps && !g_hud.title && !g_hud.mini && !g_hud.map) { set_sprite(0, 4, 4, 11); draw_number(1, 12, 4, fps, 2); }
         else for (int i = 0; i < 3; i++) set_sprite(i, 0, 0, -1);
         int hide = g_hud.title || g_hud.dlg_l1 || g_hud.menu_n || g_hud.shop || g_hud.mini || g_hud.stats_n || g_hud.map;
