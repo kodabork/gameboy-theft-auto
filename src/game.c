@@ -2514,6 +2514,9 @@ static void respawn_player(void)
     if (arrested) { pl.owned = 0; pl.weapon = 0; pl.ammo[1] = pl.ammo[2] = pl.ammo[3] = pl.ammo[4] = pl.ammo[5] = 0; pl.money -= pl.money / 10; }
     else { pl.money -= 100; if (pl.money < 0) pl.money = 0; }
     wanted = 0; wanted_cool = 0;
+#ifdef DEBUG_WANTED                            /* test builds: start with the police after you */
+    wanted = DEBUG_WANTED;
+#endif
     for (int i = 0; i < NPOLICE; i++) cars[SLOT_POLICE0 + i].active = 0;
     for (int i = PED_CREW0; i < PED_MISSION0; i++) peds[i].active = 0;
     if (mstate == 1) mission_fail(arrested ? "BUSTED" : "WASTED");
@@ -2795,6 +2798,9 @@ static void new_game_state(void)
 #endif
     pl.x = p->x; pl.y = p->y; pl.head = 0; cam_ang = 0;
     wanted = 0; wanted_cool = 0;
+#ifdef DEBUG_WANTED                            /* test builds: start with the police after you */
+    wanted = DEBUG_WANTED;
+#endif
     for (int i = 0; i < NPOLICE; i++) cars[SLOT_POLICE0 + i].active = 0;
     for (int i = PED_CREW0; i < MAX_PEDS; i++) peds[i].active = 0;
     cars[SLOT_MISSION].active = 0; cars[SLOT_RIVAL0].active = cars[SLOT_RIVAL0 + 1].active = 0;

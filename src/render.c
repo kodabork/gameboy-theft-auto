@@ -659,6 +659,7 @@ static void draw_ground(void)
     }
 }
 
+EWRAM_BSS static u32 cloud_bits[256][4];   /* clouds[y][a] packed 2 bits per row, per view angle a (built at start-up) */
 static void draw_sky(void)
 {
     /* sky: 6-level gradient into the haze, with clouds (palette 6 = white, 7 = shade) that
@@ -679,21 +680,26 @@ static void draw_sky(void)
         if (yb > HORIZON) yb = HORIZON;
         int ymin = ya < yb ? ya : yb, ymaxx = ya > yb ? ya : yb;
         if (ymaxx < 0) continue;
-        const u8 *cl = clouds + ((hang + col_ang[x]) & 255);
+        const u32 *cb = cloud_bits[(hang + col_ang[x]) & 255];   /* 2 bits per row: 0 sky, 1 shade, 2 white */
         u16 *p = FB + x;
         int y = 0;
-        for (; y <= ymin; y++, p += SCR_W) {
-            u32 v = grad[y];
-            if (y < 64) {
-                int k = cl[y << 8];
+        const int lim = ymin < 63 ? ymin : 63;                 /* rows where clouds can be */
+        while (y <= lim) {
+            int end = y | 15; if (end > lim) end = lim;
+            u32 w = cb[y >> 4] >> ((y & 15) * 2);
+            if (!w) { for (; y <= end; y++, p += SCR_W) *(u32 *)p = grad[y]; continue; }   /* clear sky */
+            for (; y <= end; y++, p += SCR_W, w >>= 2) {
+                u32 v = grad[y];
+                int k = w & 3;
                 if (k == 2) v = PIX2(6) * 0x10001u;
                 else if (k == 1) v = (y & 1) ? ((v & 0xFFFF0000u) | PIX2(7)) : ((v & 0xFFFFu) | ((u32)PIX2(7) << 16));
+                *(u32 *)p = v;
             }
-            *(u32 *)p = v;
         }
+        for (; y <= ymin; y++, p += SCR_W) *(u32 *)p = grad[y];
         for (; y <= ymaxx; y++, p += SCR_W) {             /* the taller of the pair */
             u32 v = grad[y];
-            if (y < 64) { int k = cl[y << 8]; if (k == 2) v = PIX2(6) * 0x10001u; }
+            if (y < 64 && ((cb[y >> 4] >> ((y & 15) * 2)) & 3) == 2) v = PIX2(6) * 0x10001u;
             if (ya >= y) p[0] = (u16)v; else p[1] = (u16)(v >> 16);
         }
     }
@@ -842,6 +848,8 @@ static void draw_sprites(const Sprite *spr, int n)
 __attribute__((section(".romcode"))) void render_init(void)   /* runs once: lives in ROM, not IWRAM */
 {
     for (int t = 0; t < 128 * 8; t++) zone_of_t[t] = (u8)lane_zone(t);
+    for (int a = 0; a < 256; a++)
+        for (int y = 0; y < 64; y++) cloud_bits[a][y >> 4] |= (u32)(clouds[(y << 8) + a] & 3) << ((y & 15) * 2);
     for (int i = 0; i < 128 * 128; i++) tile_pal[i] = tile_base[ground_tile[i]];
     for (int x = 0; x < SCR_W; x++) {
         col_ang[x] = (u8)(-(iatan2(2 * x + 1 - SCR_W, 2 * FX) >> 4));
