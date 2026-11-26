@@ -348,7 +348,7 @@ static const u8 tile_base[11] = {
     8 + MAT_ASPHALT * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_CONCRETE * 8, 0xFE,
     8 + MAT_TRIM * 8 + 1, 8 + MAT_GRASS * 8
 };
-u8 lot_base[LOTW * LOTW];                /* palette base (no light) of each block's lot */
+EWRAM_BSS u8 lot_base[LOTW * LOTW];      /* palette base (no light) of each block's lot (EWRAM: read only for lot texels) */
 EWRAM_BSS u8 tile_pal[128 * 128];            /* tile_base[ground_tile[i]], resolved once at start-up */
 #define GRID_TX (GRID_LIM >> 3)
 
@@ -384,7 +384,7 @@ const u8 zone_base[9] = { 0, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 
 typedef struct { int rk, ok, zone, a0, da, b0, db; } LaneBlock;
 LaneBlock lane_blk = { 0x7FFFFFFF, 0, 0, 0, 0, 0, 0 };
 #define lk lane_blk
-__attribute__((noinline)) void lane_block(int rk)
+__attribute__((noinline, section(".romcode"))) void lane_block(int rk)   /* ROM: a new block of road samples is rare */
 {
     LaneBlock *L = &lk;
     const u8 *r = terrain_r + rk;
@@ -588,7 +588,7 @@ static void draw_ground(void)
             const int y1 = y + 1;
             const int fe1 = fogpair[z >> 5][0][y1 & 1], fo1 = fogpair[z >> 5][1][y1 & 1];
             const u32 pp0 = (u32)(fe * 0x0101) | ((u32)(fo * 0x0101) << 16), pp1 = (u32)(fe1 * 0x0101) | ((u32)(fo1 * 0x0101) << 16);
-            u32 *r0 = (u32 *)row, *r1 = (u32 *)(row + SCR_W);
+            u32 *r0 = (u32 *)row;
             const int gur = gu, gvr = gv;
             const u32 f0 = mF0, f1 = mF1;              /* ground in both rows of the pair (row y) */
             MASK_ROW(y1);                              /* either row (row y + 1) */

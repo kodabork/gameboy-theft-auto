@@ -339,7 +339,7 @@ static const GunRecipe recipes[7] = {
 typedef struct { int ec, eb, ebo, et, lb, lt; u32 ph, f, f1; u8 kc, kb, kbo, kt, lpb, lpt; } GunVoice;
 static GunVoice gv[2]; static int gv_next;
 
-static void gun_trigger(int type, int vol)
+__attribute__((noinline, section(".romcode"))) static void gun_trigger(int type, int vol)   /* once per shot: ROM */
 {
     const GunRecipe *r = &recipes[type];
     GunVoice *v = &gv[gv_next]; gv_next ^= 1;
