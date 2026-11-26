@@ -21,14 +21,30 @@ vfill:
     strh    r3, [r0], #240
     subs    r1, r1, #8
     bge     1b
-2:  adds    r1, r1, #8
+2:  adds    r1, r1, #8                  @ 0..7 rows left: jump into an unrolled run that starts with c0
     bxeq    lr
-3:  strh    r2, [r0], #240
-    subs    r1, r1, #1
-    bxeq    lr
+    tst     r1, #1
+    bne     4f
+    rsb     r1, r1, #6                  @ even count: enter a 6-store run at 6 - n
+    add     pc, pc, r1, lsl #2
+    nop
+    strh    r2, [r0], #240
     strh    r3, [r0], #240
-    subs    r1, r1, #1
-    bne     3b
+    strh    r2, [r0], #240
+    strh    r3, [r0], #240
+    strh    r2, [r0], #240
+    strh    r3, [r0], #240
+    bx      lr
+4:  rsb     r1, r1, #7                  @ odd count: enter a 7-store run at 7 - n
+    add     pc, pc, r1, lsl #2
+    nop
+    strh    r2, [r0], #240
+    strh    r3, [r0], #240
+    strh    r2, [r0], #240
+    strh    r3, [r0], #240
+    strh    r2, [r0], #240
+    strh    r3, [r0], #240
+    strh    r2, [r0], #240
     bx      lr
 
 @ Street-grid ground spans (the C versions are in render.c, used by the PC build).
