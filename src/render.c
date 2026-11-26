@@ -339,7 +339,7 @@ EWRAM_BSS static u8 fogpair[128][2][2];                  /* palette fog offsets 
 #define LOTW (NB + 1)
 
 /* palette base (8 + mat*8, no light) per terrain material code */
-static const u8 tm_b8[10] = { 8 + MAT_GRASS * 8, 8 + MAT_WATER * 8, 8 + MAT_SAND * 8, 8 + MAT_GRASS * 8, 8 + MAT_BROWN * 8,
+const u8 tm_b8[10] = { 8 + MAT_GRASS * 8, 8 + MAT_WATER * 8, 8 + MAT_SAND * 8, 8 + MAT_GRASS * 8, 8 + MAT_BROWN * 8,
                               8 + MAT_ASPHALT * 8, 8 + MAT_YELLOW * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_SIDEWALK * 8, 8 + MAT_CONCRETE * 8 };
 
 /* palette base (8 + mat*8 + light) per street tile code; 0xFF/0xFE = the block's lot surface */
@@ -364,7 +364,8 @@ static inline __attribute__((always_inline)) int grid_px(int gu, int gv, const u
    the same cell reuses the last result: the per-pixel work is two adds and a compare. Lane
    lines are worked out per pixel, with the four road samples cached per sample block. The
    result is exactly gen_base's. u, v: terrain-map units (cell = 1 << 20). */
-static struct { u32 cu, cv; int lanes; } gc;
+static struct { u32 cu, cv; } gc;
+int gen_lanes;                                     /* lane lines on for the current row (read by vfill.s too) */
 #define GRID_U0 ((u32)(-TMAP_ORIGIN) << 16)          /* u of street-grid texel 0 */
 /* Lane lines: t, the road coordinate (1/64 m, 512 at the centre line) bilinearly interpolated from the
    four road samples around the pixel (terrain_r, every metre, offset by half a cell), picks the colour:
@@ -445,10 +446,15 @@ static inline __attribute__((always_inline)) u32 gen_miss(u32 u, u32 v, u32 *cu,
     if (u >= lim || v >= lim) return 8 + MAT_WATER * 8 + (((u ^ v) >> 21) & 1);
     int idx = (v >> 20) * TMAP_W + (u >> 20);
     int m = terrain_m[idx], mt = m & 127;
-    if (mt < TM_ROAD || mt == TM_PATH || !gc.lanes) return (u32)(tm_b8[mt] + (m >> 7));
+    if (mt < TM_ROAD || mt == TM_PATH || !gen_lanes) return (u32)(tm_b8[mt] + (m >> 7));
     *cu = ~u;                                          /* lane lines: no whole-cell reuse */
     return (u32)lane_px(u, v, idx, m);
 }
+/* a lane-line pixel, for vfill.s */
+__attribute__((noinline)) int gen_lane(u32 u, u32 v, int idx, int m) { return lane_px(u, v, idx, m); }
+_Static_assert(GRID_TX == 2590 && TMAP_W == 1424 && TMAP_ORIGIN == -1024 && 8 + MAT_WATER * 8 == 80 &&
+               TM_ROAD == 5 && TM_PATH == 8 && TM_ROADE == 7, "vfill.s gen_run constants");
+#ifdef HOST
 /* off-grid ground: logical pixels p..e-1 of one row (pp: fog offsets of this pixel and the next) */
 static __attribute__((noinline)) void gen_run(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp)
 {
@@ -468,10 +474,14 @@ static __attribute__((noinline)) void gen_run2(u16 *p, u16 *e, u32 u, u32 v, u32
         p[0] = (u16)(cb + pp0);
     }
 }
+#else
+void gen_run(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp);               /* vfill.s */
+void gen_run2(u16 *p, u16 *e, u32 u, u32 v, u32 su8, u32 sv8, u32 pp0, u32 pp1);
+#endif
 /* off-grid ground, columns x..x1-1 of one row */
 static void gen_span(u16 *row, int x, int x1, int gu, int gv, int su, int sv, int fe, int fo, int lanes)
 {
-    gc.lanes = lanes;
+    gen_lanes = lanes;
     u32 pe = (u32)fe * 0x0101, po = (u32)fo * 0x0101;
     u32 pp = (x & 1) ? po | (pe << 16) : pe | (po << 16);
     gen_run(row + x, row + x1, (u32)(gu << 3) + GRID_U0, (u32)(gv << 3) + GRID_U0, (u32)su << 3, (u32)sv << 3, pp);
@@ -479,7 +489,7 @@ static void gen_span(u16 *row, int x, int x1, int gu, int gv, int su, int sv, in
 /* off-grid ground, n column pairs into rows y and y+1 (one sample per column, both rows) */
 static void gen_span2(u32 *dst, int n, int gu, int gv, int su, int sv, u32 pp0, u32 pp1, int lanes)
 {
-    gc.lanes = lanes;
+    gen_lanes = lanes;
     gen_run2((u16 *)dst, (u16 *)dst + 2 * n, (u32)(gu << 3) + GRID_U0, (u32)(gv << 3) + GRID_U0, (u32)su << 3, (u32)sv << 3, pp0, pp1);
 }
 /* any ground texel (16.16 texels), for the odd single pixels */
