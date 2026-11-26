@@ -211,17 +211,72 @@ gmiss:
     ldr     r10, [r10]
     cmp     r10, #0
     beq     2f
-    stmfd   sp!, {r0-r3}
-    mov     r0, r2
-    mov     r1, r3
-    mov     r2, r11
-    mov     r3, r12
-    bl      gen_lane                    @ int gen_lane(u32 u, u32 v, int idx, int m)
-    mov     r10, r0
-    ldmfd   sp!, {r0-r3}
+    @ lane lines (lane_px in render.c): the 2x2 road samples around the pixel, cached per sample
+    @ block in lane_blk { rk, ok, zone, a0, da, b0, db }
+    stmfd   sp!, {r4-r6}
+    sub     r10, r2, #0x80000           @ su = u - (8 << 16)
+    sub     lr, r3, #0x80000            @ sv
+    mov     r4, lr, asr #20
+    ldr     r5, =1424
+    mul     r6, r4, r5
+    add     r6, r6, r10, asr #20        @ rk
+    ldr     r4, =lane_blk
+    ldr     r5, [r4]
+    cmp     r5, r6
+    bne     6f
+7:  ldr     r5, [r4, #4]                @ ok: every sample on a road
+    cmp     r5, #0
+    beq     8f
+    ldr     r5, [r4, #8]                @ zone of the whole block, or -1
+    cmp     r5, #0
+    bge     10f
+    mov     r5, r10, lsr #16
+    and     r5, r5, #15                 @ fx
+    ldr     r6, [r4, #16]
+    mul     r6, r5, r6
+    ldr     r10, [r4, #12]
+    add     r10, r10, r6                @ la = a0 + fx * da
+    ldr     r6, [r4, #24]
+    mul     r6, r5, r6
+    ldr     r5, [r4, #20]
+    add     r6, r6, r5                  @ lb = b0 + fx * db
+    sub     r6, r6, r10
+    mov     r5, lr, lsr #16
+    and     r5, r5, #15                 @ fy
+    mul     r6, r5, r6
+    add     r6, r6, r10, lsl #4
+    mov     r6, r6, asr #5              @ t
+    ldr     r5, =zone_of_t
+    ldrb    r5, [r5, r6]
+10: cmp     r5, #0
+    cmpne   r5, #8
+    beq     12f
+    cmp     r5, #4
+    bne     11f
+    ldr     r6, =terrain_r
+    ldrb    r6, [r6, r11]
+    tst     r6, #0x80
+    movne   r10, #25                    @ dashed centre line: 8 + MAT_YELLOW * 8 + 1
+    bne     13f
+11: ldr     r6, =zone_base
+    ldrb    r10, [r6, r5]
+    b       13f
+12: mov     r10, #56                    @ concrete: 8 + MAT_CONCRETE * 8 + lit
+    add     r10, r10, r12, lsr #7
+    b       13f
+8:  ldr     r6, =tm_b8                  @ not all samples on a road: plain terrain
+    and     r5, r12, #127
+    ldrb    r10, [r6, r5]
+    add     r10, r10, r12, lsr #7
+13: ldmfd   sp!, {r4-r6}
     mvn     r8, r2                      @ lane lines: per pixel
     add     r10, r10, r10, lsl #8
     ldmfd   sp!, {pc}
+6:  stmfd   sp!, {r0-r3, r12, lr}       @ a new sample block (lr holds sv)
+    mov     r0, r6
+    bl      lane_block
+    ldmfd   sp!, {r0-r3, r12, lr}
+    b       7b
 2:  ldr     r10, =tm_b8                 @ plain terrain: tm_b8[material] + lit
     ldrb    r10, [r10, lr]
     add     r10, r10, r12, lsr #7

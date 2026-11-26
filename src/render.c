@@ -375,15 +375,16 @@ static inline int lane_zone(int t)
 {
     return (t >= 218) + (t >= 230) + (t >= 262) + (t >= 499) + (t >= 526) + (t >= 763) + (t >= 795) + (t >= 807);
 }
-EWRAM_BSS static u8 zone_of_t[128 * 8];          /* lane_zone(t) for every t the samples can give */
-static const u8 zone_base[9] = { 0, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_ASPHALT * 8 + 1,
+EWRAM_BSS u8 zone_of_t[128 * 8];          /* lane_zone(t) for every t the samples can give */
+const u8 zone_base[9] = { 0, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 8 + MAT_ASPHALT * 8 + 1,
                                  8 + MAT_ASPHALT * 8 + 1, 8 + MAT_SIDEWALK * 8 + 1, 8 + MAT_ASPHALT * 8 + 1, 0 };
 /* the sample block (2x2 road samples) of the last lane pixel, as interpolation coefficients:
    la = a0 + fx * da, lb = b0 + fx * db, t = (16 la + fy (lb - la)) >> 5. zone >= 0: the block has
    one zone throughout; ok = 0: not every sample is on a road (plain terrain colour). */
 typedef struct { int rk, ok, zone, a0, da, b0, db; } LaneBlock;
-static LaneBlock lk = { 0x7FFFFFFF, 0, 0, 0, 0, 0, 0 };
-static __attribute__((noinline)) void lane_block(int rk)
+LaneBlock lane_blk = { 0x7FFFFFFF, 0, 0, 0, 0, 0, 0 };
+#define lk lane_blk
+__attribute__((noinline)) void lane_block(int rk)
 {
     LaneBlock *L = &lk;
     const u8 *r = terrain_r + rk;
@@ -450,8 +451,7 @@ static inline __attribute__((always_inline)) u32 gen_miss(u32 u, u32 v, u32 *cu,
     *cu = ~u;                                          /* lane lines: no whole-cell reuse */
     return (u32)lane_px(u, v, idx, m);
 }
-/* a lane-line pixel, for vfill.s */
-__attribute__((noinline)) int gen_lane(u32 u, u32 v, int idx, int m) { return lane_px(u, v, idx, m); }
+_Static_assert(8 + MAT_YELLOW * 8 + 1 == 25 && 8 + MAT_CONCRETE * 8 == 56 && sizeof(LaneBlock) == 28, "vfill.s lane constants");
 _Static_assert(GRID_TX == 2590 && TMAP_W == 1424 && TMAP_ORIGIN == -1024 && 8 + MAT_WATER * 8 == 80 &&
                TM_ROAD == 5 && TM_PATH == 8 && TM_ROADE == 7, "vfill.s gen_run constants");
 #ifdef HOST
