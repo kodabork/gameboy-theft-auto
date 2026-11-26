@@ -25,7 +25,8 @@ typedef struct {
     int timer_s, pressure, car_hp;              /* car_hp: 0..100, -1 on foot */                       /* mission clock (s, -1 none), chase pressure % (-1 none) */
     int title;                                   /* title screen */
     const char *menu_title, *menu_item[8], *menu_note; int menu_n, menu_sel;
-    int shop, shop_pose, shop_cash, mini;        /* mini: a minigame is on screen */
+    int shop, shop_pose, shop_cash, mini;
+    int club_fr, club_booth, club_dancer;        /* the club: dance frame, private booth on, which dancer */        /* mini: a minigame is on screen */
                  /* shop interior: 1 + type (0 = outside), clerk pose, hold-up cash */
     const char *shop_name, *shop_note, *shop_line, *shop_big;
     const char *stats_line[16]; int stats_n;
@@ -46,7 +47,7 @@ extern TxtObj g_txt[MAX_TXT]; extern int g_ntxt;
 void hud_glyph_tile(int g, u32 *tile); int hud_nglyphs(void); void radar_init(void);
 void radar_build(u32 *tiles4bpp, int part);      /* 64x64, 4bpp, 1D tile order; part 0..3 per frame */
 extern GameHud g_hud;
-extern const u16 map_marker_rgb[6];            /* palette entries 1..6 while the city map is up */
+extern const u16 map_marker_rgb[7];            /* palette entries 1..6 while the city map is up */
 
 void game_init(void);
 void game_update(u16 keys, int dt);           /* keys: 1 = pressed; dt in 1/16384 s */

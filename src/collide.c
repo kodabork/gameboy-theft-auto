@@ -3,6 +3,17 @@
 #include "world.h"
 #include "ground.h"
 
+#ifndef HOST
+int tm_cell(int u, int v)                         /* packed terrain_m (ground.h) */
+{
+    unsigned b = (unsigned)(u - TRING_A), r = (unsigned)(v - TRING_A);
+    if (b < TRING_B - TRING_A && r < TRING_B - TRING_A)  /* inside the grid (the usual case): the water bit */
+        return (tring_water[r * 162 + (b >> 3)] >> (b & 7)) & 1 ? TM_WATER : TM_GRID;
+    return tring_m[tring_index(u, v)];
+}
+int tr_cell(int u, int v) { int i = tring_index(u, v); return i >= 0 ? tring_r[i] : 0; }
+#endif
+
 
 /* atan2 without division: normalise to 9 bits, then multiply by a reciprocal table */
 int iatan2(int y, int x)

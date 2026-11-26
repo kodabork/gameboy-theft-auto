@@ -65,6 +65,13 @@ OUTFITS = {
                    skin=(0.62, 0.43, 0.31), hair=(0.12, 0.08, 0.05), long=True, female=True, skirt=True),
     'woman_b': dict(top=(0.15, 0.48, 0.50), shirt=(0.92, 0.92, 0.90), legs=(0.36, 0.37, 0.40), shoes=(0.85, 0.84, 0.80),
                    skin=(0.88, 0.71, 0.60), hair=(0.80, 0.66, 0.38), long=True, female=True, skirt=True),
+    # club dancers (v0.49): bikini=True leaves the body bare apart from a small top and bottom (in 'top') and heels
+    'dancer_a': dict(top=(0.90, 0.10, 0.45), shirt=(0.90, 0.10, 0.45), legs=(0.90, 0.10, 0.45), shoes=(0.85, 0.08, 0.30),
+                   skin=(0.84, 0.64, 0.52), hair=(0.14, 0.08, 0.05), long=True, female=True, bikini=True),
+    'dancer_b': dict(top=(0.15, 0.80, 0.85), shirt=(0.15, 0.80, 0.85), legs=(0.15, 0.80, 0.85), shoes=(0.92, 0.92, 0.95),
+                   skin=(0.50, 0.33, 0.23), hair=(0.05, 0.04, 0.04), long=True, female=True, bikini=True),
+    'dancer_c': dict(top=(0.10, 0.08, 0.10), shirt=(0.10, 0.08, 0.10), legs=(0.10, 0.08, 0.10), shoes=(0.08, 0.06, 0.08),
+                   skin=(0.90, 0.74, 0.64), hair=(0.92, 0.80, 0.50), long=True, female=True, bikini=True),
 }
 
 def wrapa(a): return (a + np.pi) % (2 * np.pi) - np.pi
@@ -86,10 +93,12 @@ GAIT = {   # hip flexion, knee flexion curves (radians) for one leg over its cyc
 class Human:
     def __init__(self, outfit, phase=0.0, moving=True, down=False, down_seed=0, mode=None, gun=False, tumble=0.0, weapon='pistol'):
         o = OUTFITS[outfit]
-        self.o = {k: np.array(v, f32) for k, v in o.items() if k not in ('long', 'cap', 'female', 'skirt', 'bob', 'older')}
+        self.o = {k: np.array(v, f32) for k, v in o.items() if k not in ('long', 'cap', 'female', 'skirt', 'bob', 'older', 'bikini')}
         self.older = o.get('older', False)
         self.long = o['long']; self.cap = o.get('cap', False)
         self.fem = o.get('female', False); self.skirt = o.get('skirt', False); self.bob = o.get('bob', False)
+        self.bikini = o.get('bikini', False)
+        sway = 0.0
         if mode is None: mode = 'down' if down else ('walk' if moving else 'idle')
         self.down = down or mode == 'down'
         self.mode = mode
@@ -126,6 +135,12 @@ class Human:
                 th = 0.10 * sg; kn = 0.10; push = 0.0; spread = 0.05
                 if sg < 0:  ar_fwd, ar_out, eb = 1.50, -0.12, 0.02      # right arm straight out
                 else:       ar_fwd, ar_out, eb = 1.15, -0.55, 0.45      # left hand supports
+            elif mode == 'dance':     # club dance: weight shifts side to side, knees dip in turn, arms up and round
+                ph = phase + (0.0 if sg > 0 else np.pi)
+                th = 0.05 * np.sin(phase) * sg; kn = 0.10 + 0.22 * max(0.0, np.sin(ph)); push = 0.0; spread = 0.075
+                if sg > 0:  ar_fwd, ar_out, eb = 2.55 + 0.30 * np.sin(phase), 0.35 + 0.15 * np.cos(phase), 0.55 + 0.25 * np.sin(phase)   # left arm up
+                else:       ar_fwd, ar_out, eb = 1.20 + 1.10 * max(0.0, np.sin(phase + 1.2)), 0.45, 1.10 - 0.5 * max(0.0, np.sin(phase + 1.2))  # right: hip to overhead
+                sway = 0.055 * np.sin(phase); twist = 0.10 * np.sin(phase * 2.0); lean = -0.03
             else:   # idle: a slow breath and weight shift over the cycle (phase 0 = the old still pose)
                 bs = np.sin(phase)
                 th = 0.03 * sg + 0.025 * bs; kn = (0.06 if sg > 0 else 0.02) + 0.03 * max(0.0, sg * bs); push = 0.0; spread = 0.045
@@ -144,6 +159,10 @@ class Human:
             legs_rel.append([hip, knee, ankle, heel, toe])
             arms_spec.append((sg, ar_fwd, ar_out, eb))
         self.twist = twist
+        if sway:                                     # hips shift sideways over planted feet
+            for l in legs_rel:
+                l[1] = l[1] - np.array((0, sway * 0.5, 0), f32)
+                for k in (2, 3, 4): l[k] = l[k] - np.array((0, sway, 0), f32)
         # pelvis height: put the lowest foot on the ground (plus flight lift when running)
         if mode in ('down', 'tumble'):
             hz = 0.95
@@ -151,10 +170,10 @@ class Human:
             lowest = min(min(l[3][2], l[4][2]) for l in legs_rel)
             hz = -lowest + 0.035 + lift
         self.hz = hz
-        P = np.array((0, 0, hz), f32)
+        P = np.array((0, sway, hz), f32)
         def leaned(v):
             x, z = v[0], v[2]
-            return np.array((x * np.cos(lean) + z * np.sin(lean), v[1], -x * np.sin(lean) + z * np.cos(lean)), f32) + P
+            return np.array((x * np.cos(lean) + z * np.sin(lean), v[1] - sway * 0.6 * z / 0.7, -x * np.sin(lean) + z * np.cos(lean)), f32) + P
         J = {}
         J['pelvis'] = P.copy()
         J['waist'] = leaned(np.array((0.005, 0, 0.18), f32))
@@ -265,10 +284,20 @@ class Human:
         J = self.J
         if self.fem:                                 # women: a defined waist, fuller hips, a bust
             pelvis = sd_ellipsoid(p, J['pelvis'], (0.118, 0.186, 0.122))
+            if self.bikini:                          # club dancers: curvier, with wider hips and a full, round rear
+                pelvis = sd_ellipsoid(p, J['pelvis'], (0.124, 0.205, 0.126))
+                glutes = np.minimum(sd_ellipsoid(p, J['pelvis'] + np.array((-0.072, 0.064, -0.035), f32), (0.092, 0.084, 0.098)),
+                                    sd_ellipsoid(p, J['pelvis'] + np.array((-0.072, -0.064, -0.035), f32), (0.092, 0.084, 0.098)))
+                pelvis = smin(pelvis, glutes, 0.035)
             waist = sd_ellipsoid(p, J['waist'], (0.094, 0.132, 0.12))
             chest = sd_ellipsoid(p, J['chest'], (0.116, 0.158, 0.150))
-            bust = np.minimum(sd_ellipsoid(p, J['chest'] + np.array((0.068, 0.052, -0.012), f32), (0.058, 0.056, 0.056)),
-                              sd_ellipsoid(p, J['chest'] + np.array((0.068, -0.052, -0.012), f32), (0.058, 0.056, 0.056)))
+            if self.bikini:                          # club dancers: a fuller bust
+                bust = np.minimum(sd_ellipsoid(p, J['chest'] + np.array((0.082, 0.058, -0.022), f32), (0.074, 0.068, 0.070)),
+                                  sd_ellipsoid(p, J['chest'] + np.array((0.082, -0.058, -0.022), f32), (0.074, 0.068, 0.070)))
+            else:
+                bust = np.minimum(sd_ellipsoid(p, J['chest'] + np.array((0.068, 0.052, -0.012), f32), (0.058, 0.056, 0.056)),
+                                  sd_ellipsoid(p, J['chest'] + np.array((0.068, -0.052, -0.012), f32), (0.058, 0.056, 0.056)))
+            self._bust = bust
             chest = smin(chest, bust, 0.04)
             torso = smin(smin(waist, chest, 0.06), pelvis, 0.06)
         else:
@@ -313,7 +342,7 @@ class Human:
         legd = np.full(p.shape[:-1], 9, f32); shoe = legd.copy(); arm = legd.copy(); hand = legd.copy()
         lk = 0.92 if self.fem else 1.0               # women: slimmer limbs
         for hip, knee, ankle, heel, toe in self.legs:
-            thigh = sd_round_cone(p, hip, knee, 0.096 * lk, 0.064 * lk)
+            thigh = sd_round_cone(p, hip, knee, (0.106 if self.bikini else 0.096) * lk, 0.064 * lk)
             shin = sd_round_cone(p, knee, ankle, 0.060 * lk, 0.044 * lk)
             calf = sd_ellipsoid(p, knee + (ankle - knee) * 0.30 + np.array((-0.012, 0, 0), f32), (0.056, 0.055, 0.12))
             legd = np.minimum(legd, smin(smin(thigh, shin, 0.03), calf, 0.04))
@@ -351,7 +380,8 @@ class Human:
         elif self.gun:
             grip = sd_round_cone(p, self.gun_a, self.gun_a + np.array((0, 0, -0.08), f32), 0.018, 0.016)
             gun = np.minimum(gun, grip)
-        return dict(top=top, legs=hips_legs, shoes=np.minimum(shoe, gun) if False else shoe, gun=gun, skin=np.minimum(np.minimum(smin(face, neck, 0.03), hand), bare),
+        bustd = self._bust if self.fem else np.full(p.shape[:-1], 9, f32)
+        return dict(bust=bustd, top=top, legs=hips_legs, shoes=np.minimum(shoe, gun) if False else shoe, gun=gun, skin=np.minimum(np.minimum(smin(face, neck, 0.03), hand), bare),
                     hair=hair, torso=torso, pelvis=pelvis, arm=arm, local=p, bare=bare)
 
     def sdf(self, p):
@@ -393,6 +423,19 @@ class Human:
         alb[eyes] = alb[eyes] * 0.35
         alb[brow] = o['hair'] * 0.9 + alb[brow] * 0.1
         alb[mouth] = alb[mouth] * 0.62
+        if self.bikini:                              # bare skin apart from a small top round the bust and a bottom at the hips
+            cz = self.J['chest'][2]
+            body = (idx == 0) | (idx == 1)
+            # a narrow bandeau over the bust and a small low-cut bottom
+            onbody = body & (d['torso'] <= d['arm'] + 0.004)
+            cups = onbody & (d['bust'] < 0.012) & (z > cz - 0.095) & (z < cz + 0.040)       # bikini cups over the bust
+            strap = onbody & (z > cz + 0.004) & (z < cz + 0.020)                               # thin strap round the back
+            topband = cups | strap
+            bottom = body & (d['pelvis'] < 0.010) & (z < hz + 0.010) & (z > hz - 0.115) & ((x > -0.05) | (z < hz - 0.025) | (np.abs(y) < 0.03))
+            covered = topband | bottom
+            alb[body & ~covered] = o['skin']
+            alb[covered] = o['top']
+            idx = np.where(body & ~covered, 3, idx)
         # subtle cloth folds
         cloth = (idx == 0) | (idx == 1)
         fold = 0.93 + 0.07 * np.sin(z * 55 + np.sin(y * 30) * 2) * np.sin(x * 40 + z * 13)

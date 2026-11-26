@@ -43,7 +43,9 @@ typedef struct {
     u16 model; u8 ai, dir, road, cross; s16 wait;
     int tx, ty;      /* AI target (units) */
     int vx, vy;      /* player physics velocity */
-    u8 active, police, crew, cp;
+    u8 active, police, crew;
+    u16 cp;          /* coast-road traffic: next waypoint (0..NCOAST_WP-1, more than a byte holds) */
+    s16 flee;        /* traffic scared by gunfire or an explosion: time left (1/256 s); tx, ty = the danger */
     s16 stuck, rev;
     int kx, ky;      /* knock-back velocity from collisions (q8 units/s) */
     int spin;        /* yaw rate from collisions (q8 angle units/s) */
@@ -191,7 +193,7 @@ static void spawn_traffic_near(Car *c)
     /* near the edge of the grid or out of town: some of the traffic uses the coastal road */
     int out = plx() < M(90) || ply() < M(90) || plx() > GRID_U - M(90) || ply() > GRID_U - M(90);
     if (out && (rnd() & 1) && spawn_coast_near(c)) {
-        c->speed = Q8(M(9)); c->ai = AI_TRAFFIC; c->active = 1; c->police = 0; c->wait = 1; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
+        c->speed = Q8(M(9)); c->ai = AI_TRAFFIC; c->active = 1; c->police = 0; c->wait = 1; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0; c->flee = 0;
         return;
     }
     for (int tries = 0; tries < 12; tries++) {
@@ -202,7 +204,7 @@ static void spawn_traffic_near(Car *c)
         int d = dist_approx((c->x >> 8) - plx(), (c->y >> 8) - ply());
         if (d > M(60) && d < M(130)) break;
     }
-    c->speed = Q8(M(6)); c->ai = AI_TRAFFIC; c->active = 1; c->police = 0; c->wait = 1; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
+    c->speed = Q8(M(6)); c->ai = AI_TRAFFIC; c->active = 1; c->police = 0; c->wait = 1; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0; c->flee = 0;
 }
 
 static int obstacle_ahead(int self, const Car *c)
@@ -244,10 +246,61 @@ static void approach_speed(Car *c, int target, int acc, int dec, int dt)
 
 static int tail_mode;
 static int crim_ped = -1, crim_car = -1, crim_police = -1;   /* the current street crime */
+/* Gunfire or an explosion at (x, y): ordinary traffic within range floors it away from the danger for
+   a few seconds, over sidewalks and grass if that is the way out, then finds its road again. */
+static void car_panic(int x, int y, int range)
+{
+    for (int i = 0; i < ncars; i++) {
+        Car *c = &cars[i];
+        if (!c->active || c->ai != AI_TRAFFIC || i == pl.in_car || i == SLOT_MISSION || i == crim_car || IS_WRECK(c)) continue;
+        if (dist_approx((c->x >> 8) - x, (c->y >> 8) - y) > range) continue;
+        c->flee = 4 * 256; c->tx = x; c->ty = y; c->wait = 1;
+    }
+}
+/* after fleeing: back to the lane (or coast-road waypoint) ahead in the direction the car now faces */
+static void traffic_rejoin(Car *c)
+{
+    int x = c->x >> 8, y = c->y >> 8, h = c->head >> 8;
+    if (c->road == ROAD_COAST) {
+        int best = 0, bd = 0x7FFFFFFF;
+        for (int k = 0; k < NCOAST_WP; k++) {
+            int d = dist_approx(coast_wp[k][0] - x, coast_wp[k][1] - y);
+            if (d < bd) { bd = d; best = k; }
+        }
+        int n = (best + 1) % NCOAST_WP;
+        int a = iatan2(coast_wp[n][1] - coast_wp[best][1], coast_wp[n][0] - coast_wp[best][0]);
+        c->dir = iabs(angdiff(a, h)) < 1024 ? 0 : 1;
+        c->cp = c->dir ? (best + NCOAST_WP - 1) % NCOAST_WP : n;
+        coast_target(c);
+        return;
+    }
+    for (int tries = 0; tries < 2; tries++) {
+        int dir = ((h + 512) >> 10) & 3;               /* 0 +x, 1 +y, 2 -x, 3 -y */
+        int along = (dir & 1) ? y : x, across = (dir & 1) ? x : y;
+        int road = clampi((across - M(6) + 512) >> 10, 0, NB);
+        int cross = ((along - M(6)) >> 10) + (dir == 0 || dir == 1);
+        if (cross >= 0 && cross <= NB) { c->dir = dir; c->road = road; c->cross = cross; break; }
+        h += 2048;                                     /* past the edge of the grid: turn back */
+        c->dir = (dir + 2) & 3; c->road = road; c->cross = clampi(cross, 0, NB);
+    }
+    lane_point(c->dir, c->road, c->cross, &c->tx, &c->ty);
+}
 static void update_traffic(int i, int dt)
 {
     Car *c = &cars[i];
     int x = c->x >> 8, y = c->y >> 8;
+    if (c->flee > 0) {
+        c->flee -= dt >> 6;
+        int away = iatan2(y - c->ty, x - c->tx), h = c->head >> 8;
+        int dh = angdiff(away, h);
+        int go = iabs(dh) < 1024 ? h + dh / 4 : away;  /* already heading away: keep going, bending off */
+        int diff; steer_to(c, x + ((icos(go & 4095) * M(20)) >> 14), y + ((isin(go & 4095) * M(20)) >> 14), 1800, dt, &diff);
+        int target = Q8(M(15));
+        if (dist_approx(x - plx(), y - ply()) < M(70) && obstacle_ahead(i, c)) target = Q8(M(3));
+        approach_speed(c, target, Q8(M(8)), Q8(M(14)), dt);
+        if (c->flee <= 0) { c->flee = 0; traffic_rejoin(c); }
+        return;
+    }
     int dx = c->tx - x, dy = c->ty - y;
     int coast = c->road == ROAD_COAST;
     if (coast) {
@@ -532,10 +585,12 @@ static void car_damage(Car *c, int d, int by_player)
     }
 }
 
+static void panic(int x, int y, int range);
 static void explode_at(int x, int y, Car *src)
 {
     for (int i = 0; i < MAX_BOOMS; i++) if (booms[i].t <= 0 || booms[i].t >= BOOM_LEN) { booms[i].x = x; booms[i].y = y; booms[i].t = 1; break; }
     g_snd.shot = 5; g_snd.shot_vol = 64; g_snd.crash = 64;
+    panic(x, y, M(40));
     int d = dist_approx(x - plx(), y - ply());
     if (d < M(28)) g_hud.hurt_t = TICKS / 4;
     for (int i = 0; i < ncars; i++) {                          /* blast: nearby cars catch it too */
@@ -877,6 +932,7 @@ static void panic(int x, int y, int range)
         if (dist_approx((p->x >> 8) - x, (p->y >> 8) - y) > range) continue;
         p->state = S_FLEE; p->timer = 8 * 256; p->fx = x; p->fy = y;
     }
+    car_panic(x, y, range < M(40) ? range : M(40));
 }
 
 static void ped_move(Ped *p, int head_target, int speed, int dt, int collide)
@@ -908,6 +964,7 @@ static void ped_shoot_at_player(Ped *p, int dt, int d)
     if (p->cd <= 0) {
         p->cd = 230 + (int)(rnd() % 80);
         muzzle(p->x >> 8, p->y >> 8, want, M(1.35));
+        car_panic(p->x >> 8, p->y >> 8, M(30));                /* gunfire: nearby traffic gets out of there */
         g_snd.shot = 1; g_snd.shot_vol = d < M(8) ? 56 : d < M(20) ? 40 : 26;
         int chance = d < M(10) ? 55 : 35;
         if (pl.in_car >= 0) chance -= 15;
@@ -1094,7 +1151,8 @@ static void street_mug(Ped *p, int i, int dt)
         street_say(cx, cy, "CARJACKING!", "SOMEBODY CALL THE COPS");
         int hit_msg = g_hud.msg_t; eject_driver(c); g_hud.msg_t = hit_msg;   /* the driver runs; keep our line */
         c->ai = AI_TRAFFIC; c->wait = 1; c->speed = Q8(M(6));
-        lane_point(c->dir, c->road, c->cross, &c->tx, &c->ty);
+        if (c->road == ROAD_COAST) coast_target(c);   /* a coast-road car carries on along the coast */
+        else lane_point(c->dir, c->road, c->cross, &c->tx, &c->ty);
         crim_car = p->tgt - 100; crim_ped = -1; crim_age = 0; st_carjacks++;
         place_ped_near(p, M(50));                    /* he's in the car now */
         panic(cx, cy, M(14));
@@ -1773,7 +1831,8 @@ enum { GS_TITLE, GS_PLAY, GS_PAUSE, GS_DIALOG, GS_SHOP, GS_MINI };
 /* ------------------------------------------------------------ shops */
 /* Walk-in shops: a door marker on the east sidewalk of a block. Inside is a 2D room (interiors.c)
    with a buy menu. Any shop can be held up at gunpoint in free roam (never during a job). */
-enum { SHOP_GUN, SHOP_STORE, SHOP_PAWN, SHOP_CARS, SHOP_BOWL, SHOP_POOL };
+enum { SHOP_GUN, SHOP_STORE, SHOP_PAWN, SHOP_CARS, SHOP_BOWL, SHOP_POOL, SHOP_CLUB };
+#define NSHOP_TYPES 7
 typedef struct { s16 x, y; u8 type, bx, by; int cd; } Shop;        /* cd: ticks until it can be robbed again */
 #define MAX_SHOPS 40
 EWRAM_BSS static Shop shops[MAX_SHOPS];
@@ -1781,9 +1840,9 @@ static int nshops, shop_cur = -1, shop_away = 1, shop_rob, shop_take, shop_goal,
 static const char *shop_note; static int shop_note_t;
 static const char *shop_big; static int shop_big_t;          /* a big "+$200" after a win */
 static char *num_str(char *q, int v) { char t[10]; int n = 0; do { t[n++] = (char)('0' + v % 10); v /= 10; } while (v); while (n) *q++ = t[--n]; *q = 0; return q; }
-static const char *const shop_names[6] = { "NY GUNS", "CORNER MART", "PAWN & LOAN", "MOTOR SALES", "HARBOR LANES", "EIGHT BALL CLUB" };
+static const char *const shop_names[NSHOP_TYPES] = { "NY GUNS", "CORNER MART", "PAWN & LOAN", "MOTOR SALES", "HARBOR LANES", "EIGHT BALL CLUB", "THE VELVET ROOM" };
 static int mini_bet, mini_paused, mini_sel;
-enum { K_GUN, K_HEAL, K_SELL, K_CAR, K_ROB, K_PLAY };
+enum { K_GUN, K_HEAL, K_SELL, K_CAR, K_ROB, K_PLAY, K_WATCH, K_TIP, K_DANCE, K_TROUBLE };
 typedef struct { const char *label; s16 price; u8 kind, arg; u16 amt; } ShopItem;
 static const ShopItem gun_items[] = {
     { "PISTOL + 36", 200, K_GUN, 1, 36 }, { "SMG + 120", 600, K_GUN, 2, 120 }, { "SHOTGUN + 16", 800, K_GUN, 3, 16 },
@@ -1800,9 +1859,17 @@ static const ShopItem bowl_items[] = { { "FRIENDLY GAME      FREE", 0, K_PLAY, M
                                        { "BOWL A GAME", 100, K_PLAY, MINI_BOWL, 0 }, { "HIGH STAKES GAME", 500, K_PLAY, MINI_BOWL, 0 } };
 static const ShopItem pool_items[] = { { "FRIENDLY 8-BALL    FREE", 0, K_PLAY, MINI_POOL, 0 },
                                        { "PLAY 8-BALL", 100, K_PLAY, MINI_POOL, 0 }, { "HIGH STAKES 8-BALL", 500, K_PLAY, MINI_POOL, 0 } };
+static const ShopItem club_items[] = { { "WATCH THE SHOW     FREE", 0, K_WATCH, 0, 0 }, { "TIP THE DANCER", 20, K_TIP, 0, 0 },
+                                       { "PRIVATE DANCE", 200, K_DANCE, 0, 0 }, { "BUY A DRINK  +25 HP", 15, K_HEAL, 25, 0 },
+                                       { "START TROUBLE", 0, K_TROUBLE, 0, 0 } };
 static const ShopItem rob_item = { "ROB THE PLACE", 0, K_ROB, 0, 0 };
-static const ShopItem *const shop_items[6] = { gun_items, store_items, pawn_items, car_items, bowl_items, pool_items };
-static const u8 shop_nitems[6] = { 5, 3, 3, 5, 3, 3 };
+static const ShopItem *const shop_items[NSHOP_TYPES] = { gun_items, store_items, pawn_items, car_items, bowl_items, pool_items, club_items };
+static const u8 shop_nitems[NSHOP_TYPES] = { 5, 3, 3, 5, 3, 3, 5 };
+/* the club: a private dance in progress (time left), which dancer, the stage animation clock, and the
+   radio as it was before you walked in (the club plays KICK 104.5) */
+static int club_booth, club_dancer, club_t, club_radio_on, club_station;
+/* club tallies, kept in their own SRAM record (so older saved stats stay valid) */
+static struct { u32 magic; s32 tips, dances; u32 sum; } cst;
 static const s16 resale[6] = { 0, 60, 180, 240, 360, 900 };
 
 static void setup_shops(void)
@@ -1815,7 +1882,8 @@ static void setup_shops(void)
         {10,2,SHOP_STORE}, {13,6,SHOP_STORE}, {16,3,SHOP_GUN}, {11,8,SHOP_PAWN}, {18,5,SHOP_CARS}, {15,9,SHOP_STORE}, /* Downtown */
         {12,12,SHOP_GUN}, {17,11,SHOP_STORE}, {10,16,SHOP_PAWN}, {13,17,SHOP_CARS}, {11,13,SHOP_STORE},          /* Industrial */
         {2,11,SHOP_STORE}, {5,15,SHOP_STORE}, {3,18,SHOP_PAWN}, {6,13,SHOP_GUN}, {1,16,SHOP_STORE},              /* the Heights */
-        {17,17,SHOP_STORE}, {18,18,SHOP_GUN} };                                                                  /* Gull Island */
+        {17,17,SHOP_STORE}, {18,18,SHOP_GUN},                                                                    /* Gull Island */
+        {5,2,SHOP_CLUB}, {12,4,SHOP_CLUB}, {15,12,SHOP_CLUB}, {6,11,SHOP_CLUB} };                                /* clubs: Docks, Downtown, Industrial, the Heights */
     nshops = 0;
     for (unsigned i = 0; i < sizeof tab / sizeof tab[0] && nshops < MAX_SHOPS; i++) {
         int bx = tab[i][0], by = tab[i][1];
@@ -1828,7 +1896,7 @@ static void setup_shops(void)
 
 static int shop_can_rob(void)
 {
-    return shop_cur >= 0 && shops[shop_cur].cd <= 0 && mstate != 1 && pl.weapon >= 1 && pl.ammo[pl.weapon] > 0;
+    return shop_cur >= 0 && shops[shop_cur].type != SHOP_CLUB && shops[shop_cur].cd <= 0 && mstate != 1 && pl.weapon >= 1 && pl.ammo[pl.weapon] > 0;
 }
 static int shop_menu(const ShopItem **out)       /* this shop's menu, plus the hold-up when allowed */
 {
@@ -1852,6 +1920,7 @@ static void shop_leave(void)
         big(buf, 1, 3);
         g_snd.sfx |= SFX_CASH;
     }
+    if (h->type == SHOP_CLUB) { g_snd.radio_on = (u8)club_radio_on; g_snd.station = (u8)club_station; club_booth = 0; g_hud.club_booth = 0; }
     pl.x = Q8(h->x + M(1.8)); pl.y = Q8(h->y); pl.head = 0; pl.moving = 0;
     gstate = GS_PLAY; shop_cur = -1; shop_rob = 0; g_hud.shop = 0;
 }
@@ -1896,7 +1965,19 @@ static void shop_update(u16 keys, u16 pressed, int dt)
         if (pressed & KEY_B) shop_leave();
         return;
     }
-    g_hud.shop_pose = 0; g_hud.shop_line = "A: BUY   B: LEAVE";
+    if (h->type == SHOP_CLUB) {
+        club_t += dt;
+        g_hud.club_fr = (int)(((u32)club_t * 6) >> 14) & 7;      /* 6 dance frames a second */
+        if (club_booth > 0) {                                    /* a private dance */
+            club_booth -= dt;
+            g_hud.club_booth = 1; g_hud.club_dancer = club_dancer; g_hud.menu_n = 0;
+            g_hud.shop_line = "B: LEAVE THE BOOTH";
+            if (club_booth <= 0 || (pressed & KEY_B)) { club_booth = 0; g_hud.club_booth = 0; shop_say("THANKS, HONEY. COME BACK SOON"); }
+            return;
+        }
+        g_hud.club_booth = 0;
+    }
+    g_hud.shop_pose = 0; g_hud.shop_line = h->type == SHOP_CLUB ? "A: CHOOSE   B: LEAVE" : "A: BUY   B: LEAVE";
     const ShopItem *items[8];
     int n = shop_menu(items);
     if (menu_sel >= n) menu_sel = n - 1;
@@ -1933,6 +2014,27 @@ static void shop_update(u16 keys, u16 pressed, int dt)
         if (pl.money < it->price) { shop_say("YOU CAN'T COVER THE BET"); g_snd.sfx |= SFX_DRY; return; }
         pl.money -= it->price; mini_bet = it->price;              /* 0: a friendly game, nothing on it */
         gstate = GS_MINI; mini_start(it->arg); mini_paused = 0; if (it->price) g_snd.sfx |= SFX_CASH;
+        return;
+    }
+    if (it->kind == K_WATCH) {
+        static const char *const cheer[4] = { "THE CROWD GOES WILD", "WHAT A SHOW", "THE DJ TURNS IT UP", "SHE WINKS AT YOU" };
+        shop_say(cheer[rnd() & 3]);
+        return;
+    }
+    if (it->kind == K_TROUBLE) {                                 /* the bouncer throws you out */
+        h->cd = 120 * TICKS;                                     /* and won't let you back in for two minutes */
+        shop_leave();
+        pl.hp -= 15; if (pl.hp < 5) pl.hp = 5; g_hud.hurt_t = TICKS / 2; g_snd.hit = 1;
+        msg("THE BOUNCER THREW YOU OUT", "STAY AWAY FOR A WHILE", 4);
+        return;
+    }
+    if (it->kind == K_TIP || it->kind == K_DANCE) {
+        if (pl.money < it->price) { shop_say("NO CASH, NO SHOW"); g_snd.sfx |= SFX_DRY; return; }
+        pl.money -= it->price; g_snd.sfx |= SFX_CASH;
+        if (it->kind == K_TIP) {
+            static const char *const thanks[4] = { "SHE BLOWS YOU A KISS", "SHE DANCES JUST FOR YOU", "THE DANCERS LOVE YOU", "SHE TUCKS IT AWAY" };
+            cst.tips += it->price; shop_say(thanks[rnd() & 3]);
+        } else { cst.dances++; club_booth = 15 * TICKS; club_dancer = (int)(rnd() % 3); club_t = 0; }
         return;
     }
     if (it->kind == K_SELL) {
@@ -2801,6 +2903,20 @@ static void stats_write(void)
     const u8 *b = (const u8 *)&st;
     for (unsigned i = 0; i < sizeof st; i++) SRAM_B(STATS_AT + i) = b[i];
 }
+#define CLUB_MAGIC 0x42554C43u                 /* "CLUB" */
+#define CLUB_AT 448                            /* SRAM offset, after the stats */
+static void club_write(void)
+{
+    cst.magic = CLUB_MAGIC; cst.sum = (u32)cst.tips * 31u + (u32)cst.dances * 7u + 0x5A5Au;
+    const u8 *b = (const u8 *)&cst;
+    for (unsigned i = 0; i < sizeof cst; i++) SRAM_B(CLUB_AT + i) = b[i];
+}
+static void club_read(void)
+{
+    u8 *b = (u8 *)&cst;
+    for (unsigned i = 0; i < sizeof cst; i++) b[i] = SRAM_B(CLUB_AT + i);
+    if (cst.magic != CLUB_MAGIC || cst.sum != (u32)cst.tips * 31u + (u32)cst.dances * 7u + 0x5A5Au) cst.magic = 0, cst.tips = 0, cst.dances = 0;
+}
 static void stats_read(void)
 {
     Stats t; u8 *b = (u8 *)&t;
@@ -2833,11 +2949,13 @@ static void save_write(void)
     const u8 *b = (const u8 *)&d;
     for (unsigned i = 0; i < sizeof d; i++) SRAM_B(i) = b[i];
     stats_write();
+    club_write();
 }
 
 /* ------------------------------------------------------------ title / pause / dialog */
 static void new_game_state(void)
 {
+    cst.tips = 0; cst.dances = 0;
     { u8 *z = (u8 *)&st; for (unsigned i = 0; i < sizeof st; i++) z[i] = 0; }
 #ifdef DEBUG_HOUR                              /* test builds: a new game starts at this hour */
     st.play_s = (DEBUG_HOUR + 15) % 24 * 60;
@@ -2858,6 +2976,9 @@ static void new_game_state(void)
 #ifdef DEBUG_WANTED                            /* test builds: start with the police after you */
     wanted = DEBUG_WANTED;
 #endif
+#ifdef DEBUG_SHOP                              /* test builds: start on foot at shop DEBUG_SHOP's door */
+    { void game_debug_shop(int); game_debug_shop(DEBUG_SHOP); }
+#endif
     for (int i = 0; i < NPOLICE; i++) cars[SLOT_POLICE0 + i].active = 0;
     for (int i = PED_CREW0; i < MAX_PEDS; i++) peds[i].active = 0;
     cars[SLOT_MISSION].active = 0; cars[SLOT_RIVAL0].active = cars[SLOT_RIVAL0 + 1].active = 0;
@@ -2869,6 +2990,7 @@ static void load_game(const SaveData *d)
 {
     new_game_state();
     stats_read();                                  /* after the reset, which clears the stats */
+    club_read();
     mission = d->mission & 255; story_flags = d->mission >> 8; pl.money = d->money; pl.hp = d->hp > 0 ? d->hp : 100;
     pl.owned = d->owned; pl.weapon = d->weapon;
     for (int i = 1; i < 5; i++) pl.ammo[i] = d->ammo[i];
@@ -2887,7 +3009,7 @@ static void load_game(const SaveData *d)
 static int stats_page, map_page;
 static void stats_show(void)                       /* fills g_hud.stats_line[] for the STATS page */
 {
-    EWRAM_BSS static char lines[15][32];
+    EWRAM_BSS static char lines[16][32];
     int n = 0;
     #define LINE(label) do { char *q_ = lines[n]; const char *a_ = label; while (*a_) *q_++ = *a_++; while (q_ - lines[n] < 22) *q_++ = ' '; cur = q_; } while (0)
     char *cur;
@@ -2904,6 +3026,7 @@ static void stats_show(void)                       /* fills g_hud.stats_line[] f
     LINE("WASTED / BUSTED"); cur = num_str(cur, st.wasted); *cur++ = ' '; *cur++ = '/'; *cur++ = ' '; num_str(cur, st.busted); n++;
     LINE("STORES ROBBED"); cur = num_str(cur, st.robs); *cur++ = ' '; *cur++ = '$'; num_str(cur, st.robbed); n++;
     LINE("POOL / BOWLING WINS"); cur = num_str(cur, st.pool_wins); *cur++ = ' '; *cur++ = '/'; *cur++ = ' '; num_str(cur, st.bowl_wins); n++;
+    LINE("CLUB TIPS / DANCES"); *cur++ = '$'; cur = num_str(cur, cst.tips); *cur++ = ' '; *cur++ = '/'; *cur++ = ' '; num_str(cur, cst.dances); n++;
     LINE("CASH"); *cur++ = '$'; num_str(cur, pl.money < 0 ? 0 : pl.money); n++;
     #undef LINE
     for (int i = 0; i < n; i++) g_hud.stats_line[i] = lines[i];
@@ -3084,7 +3207,15 @@ void game_update(u16 keys, int dt)
         else if (shop_away && dist_approx(shops[near].x - plx(), shops[near].y - ply()) < M(1.3)) {
             shop_away = 0;
             if (wanted > 0) msg("THE DOOR IS LOCKED.", "LOSE THE COPS FIRST", 3);
-            else { shop_cur = near; gstate = GS_SHOP; menu_sel = 0; shop_rob = 0; shop_note_t = 0; g_snd.door = 1; return; }
+            else if (shops[near].type == SHOP_CLUB && shops[near].cd > 0) msg("THE BOUNCER WON'T", "LET YOU BACK IN YET", 3);
+            else {
+                shop_cur = near; gstate = GS_SHOP; menu_sel = 0; shop_rob = 0; shop_note_t = 0; g_snd.door = 1;
+                if (shops[near].type == SHOP_CLUB) {               /* the club plays club house */
+                    club_radio_on = g_snd.radio_on; club_station = g_snd.station; g_snd.radio_on = 1; g_snd.station = 1;
+                    club_booth = 0; club_t = 0;
+                }
+                return;
+            }
         }
     }
     impact = 0;
@@ -3806,6 +3937,14 @@ void game_build_scene(Camera *cam, Sprite *out, int *nout)
     *nout = nsp;
 }
 
+#if defined(HOST) || defined(DEBUG_SHOP)
+void game_debug_shop(int i)            /* stand 3 m in front of shop i's door, facing it */
+{
+    if (pl.in_car >= 0) { cars[pl.in_car].ai = AI_NONE; pl.in_car = -1; }
+    i %= nshops;
+    pl.x = Q8(shops[i].x + M(3)); pl.y = Q8(shops[i].y); pl.head = Q8(2048); cam_ang = pl.head; wanted = 0; pl.money += 5000;
+}
+#endif
 #ifdef HOST
 #include <stdio.h>
 void game_debug(void)
@@ -3897,12 +4036,6 @@ void game_debug_block(int bx, int by, int dir)   /* drop the player's car on roa
     place_on_lane(c, dir, by, bx, 20);
     c->vx = c->vy = 0; c->speed = 0; cam_ang = c->head; c->ai = AI_NONE;
     if (pl.in_car < 0) { pl.x = c->x; pl.y = c->y; }
-}
-void game_debug_shop(int i)            /* stand 3 m in front of shop i's door, facing it */
-{
-    if (pl.in_car >= 0) { cars[pl.in_car].ai = AI_NONE; pl.in_car = -1; }
-    i %= nshops;
-    pl.x = Q8(shops[i].x + M(3)); pl.y = Q8(shops[i].y); pl.head = Q8(2048); cam_ang = pl.head; wanted = 0; pl.money += 5000;
 }
 void game_debug_mission(int m)         /* jump to mission m, standing next to its marker */
 {

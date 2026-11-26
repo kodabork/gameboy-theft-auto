@@ -5,6 +5,7 @@
 #include "logo.h"
 #include "portraits.h"
 #include "interiors.h"
+#include "club_art.h"
 #include "minigames.h"
 #define SHOW_PORTRAITS 0
 #include "ground.h"
@@ -248,9 +249,9 @@ static int pal_near(const u16 *pal, int r, int g, int b)    /* closest day-palet
     return best;
 }
 EWRAM_BSS static u16 map_img[MAP_PX * (MAP_PX / 2)];
-/* bowling orange, pool cyan, guns red, store green, pawn gold, car lot lilac (BGR555) */
-const u16 map_marker_rgb[6] = { 0x025F, 0x7F40, 0x10DF, 0x1BE6, 0x0F7E, 0x7EBA };
-static u8 map_icol[8];          /* you, job, bowling, pool, guns, store, pawn, cars */
+/* bowling orange, pool cyan, guns red, store green, pawn gold, car lot lilac, club magenta (BGR555) */
+const u16 map_marker_rgb[7] = { 0x025F, 0x7F40, 0x10DF, 0x1BE6, 0x0F7E, 0x7EBA, 0x7C1F };
+static u8 map_icol[9];          /* you, job, bowling, pool, guns, store, pawn, cars, clubs */
 static int map_ready;
 static void map_build(void)
 {
@@ -260,8 +261,8 @@ static void map_build(void)
     lut[0] = lut[3];                                        /* outside the map: sea */
     /* marker colours: you white, job yellow (HUD colours), the shops in sky entries 1..6, which the map
        screen does not use and gba_main loads with map_marker_rgb while the map is up */
-    static const u8 icol[8] = { COL_WHITE, COL_YELLOW, 1, 2, 3, 4, 5, 6 };
-    for (int i = 0; i < 8; i++) map_icol[i] = icol[i];
+    static const u8 icol[9] = { COL_WHITE, COL_YELLOW, 1, 2, 3, 4, 5, 6, 7 };
+    for (int i = 0; i < 9; i++) map_icol[i] = icol[i];
     for (int y = 0; y < MAP_PX; y++) {
         int ty = y * RADAR_MAP_W / MAP_PX;
         for (int x = 0; x < MAP_PX; x += 2) {
@@ -296,13 +297,13 @@ static void map_draw(void)
         const u16 *src = map_img + y * (MAP_PX / 2);
         for (int x = 0; x < MAP_PX / 2; x++) r[MAP_X0 / 2 + x] = src[x];
     }
-    static const u8 shop_icon[6] = { 4, 5, 6, 7, 2, 3 };   /* SHOP_GUN, STORE, PAWN, CARS, BOWL, POOL -> colour slot */
+    static const u8 shop_icon[7] = { 4, 5, 6, 7, 2, 3, 8 };   /* SHOP_GUN, STORE, PAWN, CARS, BOWL, POOL, CLUB -> colour slot */
     static int tick; tick++;
     int blink = (tick >> 3) & 1;
     for (int i = 0; i < g_hud.map_n; i++) {
         int x, y; map_to_screen(g_hud.map_x[i], g_hud.map_y[i], &x, &y);
         int t = g_hud.map_t[i];
-        if (t >= 10) { int k = shop_icon[(t - 10) % 6]; map_mark(x, y, k <= 3 ? 2 : 1, map_icol[k]); }
+        if (t >= 10) { int k = shop_icon[(t - 10) % 7]; map_mark(x, y, k <= 3 || k == 8 ? 2 : 1, map_icol[k]); }
         else if (t == 1 || t == 2) { if (blink) map_mark(x, y, 2, map_icol[1]); }
     }
     {   /* you: a blinking marker with a short line for your heading */
@@ -312,10 +313,10 @@ static void map_draw(void)
         for (int k = 3; k <= 6; k++) put_px(x + ((c * k) >> 14), y + ((s * k) >> 14), COL_WHITE);
     }
     /* legend down the two side panels */
-    static const char *names[8] = { "YOU", "JOB", "BOWL", "POOL", "GUNS", "STORE", "PAWN", "CARS" };
+    static const char *names[9] = { "YOU", "JOB", "BOWL", "POOL", "GUNS", "STORE", "PAWN", "CARS", "CLUBS" };
     text(4, 4, "MAP", COL_YELLOW, 1);
-    for (int i = 0; i < 8; i++) {
-        int px = i < 4 ? 4 : MAP_X0 + MAP_PX + 4, py = 22 + (i & 3) * 14;
+    for (int i = 0; i < 9; i++) {
+        int px = i < 4 ? 4 : MAP_X0 + MAP_PX + 4, py = 22 + (i < 4 ? i : i - 4) * 14;
         rect(px, py, 5, 5, i == 0 ? COL_WHITE : map_icol[i]);
         text(px + 8, py, names[i], COL_WHITE, 1);
     }
@@ -376,7 +377,22 @@ void hud_draw(u16 *fb)
     }
     if (g_hud.shop) {                            /* shop interior: room, clerk, counter, then the menu */
         int t = g_hud.shop - 1, pose = g_hud.shop_pose;
+        if (g_hud.club_booth) {                  /* the club's private booth: the dancer up close */
+            int d = g_hud.club_dancer, f = g_hud.club_fr;
+            blit_img(&booth_img, 0, 0);
+            blit_img(priv_img[d][f], priv_pos[d][f][0], priv_pos[d][f][1]);
+            text_f(120 - text_width("PRIVATE DANCE", 1) / 2, 4, "PRIVATE DANCE", COL_YELLOW, 1);
+            if (g_hud.shop_line) text_f(120 - text_width(g_hud.shop_line, 1) / 2, 151, g_hud.shop_line, COL_WHITE, 1);
+            return;
+        }
         blit_img(room_img[t], 0, 0);
+        if (t == NROOMS - 1) {                   /* the club: dancers on the stage (out of step) and the bouncer */
+            int f = g_hud.club_fr;
+            blit_img(stage_img[0][f], stage_pos[0][f][0], stage_pos[0][f][1]);
+            int g = (f + 3) & (NCLUB_FR - 1);
+            blit_img(stage_img[1][g], stage_pos[1][g][0], stage_pos[1][g][1]);
+            blit_img(&bouncer_img, bouncer_pos[0], bouncer_pos[1]);
+        }
         blit_img(clerk_img[t][pose], clerk_pos[t][pose][0], clerk_pos[t][pose][1]);
         blit_img(front_img[t], 0, front_y[t]);
         shade_band(98, 160);

@@ -36,7 +36,7 @@ TILT = math.radians(4)
 FOCAL = 0.78 * W
 HZ = 0.36                            # horizon row as a fraction of the height                     # pixels (logical 240-wide screen)
 CLERK_Y = 4.75                       # depth of the clerk's feet
-CLERK_X = {'gun': 0.0, 'store': 0.3, 'pawn': -0.3, 'cars': 2.0, 'bowl': 0.0, 'pool': 1.6}
+CLERK_X = {'gun': 0.0, 'store': 0.3, 'pawn': -0.3, 'cars': 2.0, 'bowl': 0.0, 'pool': 1.6, 'club': 2.2}
 
 def rays():
     j, i = np.mgrid[0:H * SS, 0:W * SS].astype(f32)
@@ -325,7 +325,56 @@ def pool_room():
     r.box((-1.0, 7.12, 2.2), (0.6, 7.15, 2.7), (0.95, 0.30, 0.25), 'emit')            # neon
     return r
 
-ROOMS = [('gun', gun_room), ('store', store_room), ('pawn', pawn_room), ('cars', car_room), ('bowl', bowl_room), ('pool', pool_room)]
+STAGE_Y0, STAGE_Y1, STAGE_Z = 4.9, 6.9, 0.42      # the club stage (depth range, height)
+POLES = (-1.15, 0.95)                               # x of the two dance poles (at y = 5.9)
+def club_room():
+    """the strip club: a lit stage with two poles at the back, the bar on the right, lounge tables in front"""
+    r = Room(7)
+    shell(r, (0.16, 0.06, 0.18), (0.10, 0.06, 0.12), 'checker', 'plain', ceil=(0.06, 0.04, 0.07))
+    r.boxes = [b for b in r.boxes if b[3] != 'emit']
+    for x in (-3.15, 3.13):                                                          # neon strips along the side walls
+        r.box((x, -0.5, 2.55), (x + 0.04, 7.2, 2.63), (1.0, 0.25, 0.75), 'emit')
+        r.box((x, -0.5, 0.55), (x + 0.04, 7.2, 0.6), (0.30, 0.75, 1.0), 'emit')
+    r.box((-2.6, STAGE_Y0, 0), (2.4, STAGE_Y1, STAGE_Z), (0.20, 0.08, 0.22), 'gloss')   # stage
+    r.box((-2.6, STAGE_Y0 - 0.04, STAGE_Z - 0.06), (2.4, STAGE_Y0, STAGE_Z), (1.0, 0.55, 0.85), 'emit')   # lit stage edge
+    r.box((-2.2, STAGE_Y0 + 0.2, STAGE_Z), (2.0, STAGE_Y1 - 0.1, STAGE_Z + 0.005), (0.62, 0.30, 0.55), 'gloss')   # spotlit floor
+    for x in POLES:                                                                  # chrome poles
+        r.box((x - 0.035, 5.865, STAGE_Z), (x + 0.035, 5.935, 3.0), (0.92, 0.92, 0.96), 'gloss')
+    r.box((-2.8, 7.15, 0.4), (2.6, 7.2, 2.9), (0.30, 0.05, 0.25))                    # stage curtain
+    for k in range(14):
+        r.box((-2.8 + k * 0.385, 7.1, 0.4), (-2.62 + k * 0.385, 7.15, 2.9), (0.40, 0.07, 0.32))
+    r.box((-1.4, 7.08, 2.35), (1.2, 7.1, 2.75), (1.0, 0.30, 0.80), 'emit')           # neon sign
+    r.box((-1.25, 7.07, 2.42), (1.05, 7.08, 2.68), (1.0, 0.85, 0.95), 'emit')
+    counter(r, top=(0.12, 0.10, 0.14), front=(0.30, 0.08, 0.28), x0=1.25, x1=3.15, ftex='plain')   # the bar, right
+    r.boxes = [b for b in r.boxes if not (b[3] == 'emit' and abs(float(b[0][1]) - 3.9) < 0.01)]    # (no till light)
+    r.box((1.25, 3.70, 0.92), (3.15, 3.75, 0.96), (0.30, 0.75, 1.0), 'emit', True)   # bar-front neon
+    shelf_unit(r, 1.4, 3.1, 6.8, 7.15, (1.0, 1.4, 1.8), None, palette=[(0.85, 0.65, 0.20), (0.20, 0.55, 0.30), (0.75, 0.15, 0.20), (0.60, 0.60, 0.70)],
+               col=(0.10, 0.08, 0.12), tex='plain')
+    for (x, y) in ((-2.3, 1.6), (-0.6, 1.2), (-1.6, 3.0)):                           # lounge tables with candles
+        r.box((x - 0.35, y - 0.35, 0.68), (x + 0.35, y + 0.35, 0.72), (0.08, 0.06, 0.08), 'gloss')
+        r.box((x - 0.05, y - 0.05, 0.0), (x + 0.05, y + 0.05, 0.68), (0.25, 0.25, 0.28))
+        r.box((x - 0.03, y - 0.03, 0.72), (x + 0.03, y + 0.03, 0.80), (1.0, 0.75, 0.35), 'emit')
+    return r
+
+def booth_room():
+    """a private dance booth: red velvet seating round a small floor, dim pink light"""
+    r = Room(8)
+    r.box((-3.4, -1, -0.2), (3.4, 7.4, 0.0), (0.14, 0.05, 0.10), 'checker')         # floor
+    r.box((-3.4, -1, 3.0), (3.4, 7.4, 3.2), (0.05, 0.02, 0.05))                      # ceiling
+    r.box((-3.4, 4.4, 0), (3.4, 4.6, 3), (0.32, 0.05, 0.12))                         # back wall
+    for k in range(18):                                                              # quilted velvet
+        r.box((-3.4 + k * 0.38, 4.35, 0.4), (-3.25 + k * 0.38, 4.4, 2.6), (0.42, 0.07, 0.16))
+    r.box((-3.4, -1, 0), (-2.0, 4.4, 3), (0.32, 0.05, 0.12))                         # side walls
+    r.box((2.0, -1, 0), (3.4, 4.4, 3), (0.32, 0.05, 0.12))
+    r.box((-2.0, 3.7, 0), (2.0, 4.35, 0.45), (0.55, 0.08, 0.18))                     # the seat along the back
+    r.box((-2.0, 4.0, 0.45), (2.0, 4.35, 1.05), (0.50, 0.07, 0.16))
+    r.box((-1.95, 4.3, 2.2), (1.95, 4.35, 2.28), (1.0, 0.35, 0.75), 'emit')          # neon line
+    r.box((-0.5, 1.0, 2.96), (0.5, 1.6, 3.0), (1.0, 0.55, 0.80), 'emit')             # soft overhead light
+    return r
+
+BOOTH_Y = 3.05                                      # where the private dancer stands
+
+ROOMS = [('gun', gun_room), ('store', store_room), ('pawn', pawn_room), ('cars', car_room), ('bowl', bowl_room), ('pool', pool_room), ('club', club_room)]
 
 # ------------------------------------------------------------------ minigame art
 LANE_CAM = (np.array((0.0, -2.5, 1.6), f32), math.radians(-6), 300.0, 0.30)   # camera, tilt, focal, horizon
@@ -520,7 +569,7 @@ def car_layer():
 
 if __name__ == '__main__':
     imgs = []; prev = []
-    outfits = {'gun': 'green', 'store': 'grey', 'pawn': 'suit', 'cars': 'white', 'bowl': 'red', 'pool': 'navy'}
+    outfits = {'gun': 'green', 'store': 'grey', 'pawn': 'suit', 'cars': 'white', 'bowl': 'red', 'pool': 'navy', 'club': 'dee'}
     for name, fn in ROOMS:
         rgb, fgm = render_room(fn())
         if name == 'cars':                                   # the car on the showroom floor
@@ -541,7 +590,7 @@ if __name__ == '__main__':
             imgs.append(('clerkpos_%s_%d' % (name, up), (x0, y0)))
     L = ['/* generated by tools/make_interiors.py: shop rooms, counters and clerks as palette indices, 0 = transparent */',
          '#include "engine.h"', '#include "interiors.h"']
-    Hh = ['#ifndef INTERIORS_H', '#define INTERIORS_H', '#include "logo.h"', '/* per shop type (0 gun, 1 store, 2 pawn, 3 cars, 4 bowling, 5 pool) */', '#define NROOMS 6',
+    Hh = ['#ifndef INTERIORS_H', '#define INTERIORS_H', '#include "logo.h"', '/* per shop type (0 gun, 1 store, 2 pawn, 3 cars, 4 bowling, 5 pool, 6 club) */', '#define NROOMS 7',
           'extern const Img *const room_img[NROOMS], *const front_img[NROOMS], *const clerk_img[NROOMS][2];', 'extern const s16 clerk_pos[NROOMS][2][2];']
     pos = {}
     for name, a in imgs:
@@ -615,4 +664,71 @@ if __name__ == '__main__':
             a = d[nm]; im = Image.fromarray(lut[a]); S.paste(im, (x if x < 2 * W - 30 else 2, 2), Image.fromarray(((a > 0) * 255).astype(np.uint8)))
             x += a.shape[1] + 2
         S.resize((W * 4, H * 2), Image.NEAREST).save(sys.argv[3].replace('.png', '_mg.png'))
+    # club art -> club_art.c / .h: stage dancers, the bouncer, the private booth and its dancers
+    def char_layer(model, yaw, pos, elev=4):
+        fx, fy, ppm = project(pos)
+        up, w = int(2.35 * ppm) + 6, int(1.7 * ppm) + 8
+        rgb, m, sm, ox, oy, upx = render_frame(model, yaw, math.radians(elev), 1.0 / ppm, w, up, 4, shadow=False, ss=2, outline=True)
+        return to_idx(rgb, m), int(round(fx + ox)), int(round(fy + oy))
+    from sprites_people import Human as _H
+    NDF = 8
+    club = []                                        # (name, image or position)
+    stage = [('dancer_a', POLES[0] + 0.32, 0.0), ('dancer_b', POLES[1] + 0.32, math.pi)]
+    for d, (outfit, x, ph0) in enumerate(stage):
+        for k in range(NDF):
+            ph = ph0 + k * 2 * math.pi / NDF
+            yaw = math.pi + 0.55 * math.sin(k * 2 * math.pi / NDF) + (0.0 if d == 0 else -0.3)
+            a, x0, y0 = char_layer(_H(outfit, ph, mode='dance'), yaw, (x, 5.9, STAGE_Z))
+            club.append(('stage_%d_%d' % (d, k), a)); club.append(('stagepos_%d_%d' % (d, k), (x0, y0)))
+    a, x0, y0 = char_layer(_H('suit', 0.0, mode='idle'), math.radians(160), (-1.95, 3.6, 0.0))
+    club.append(('bouncer', a)); club.append(('bouncerpos', (x0, y0)))
+    brgb, _ = render_room(booth_room())
+    club.append(('booth', to_idx(brgb, np.ones((H, W), bool))))
+    for d, outfit in enumerate(('dancer_a', 'dancer_b', 'dancer_c')):
+        for k in range(NDF):
+            ph = k * 2 * math.pi / NDF
+            yaw = math.pi + [0.0, 0.35, 0.9, 1.7, 3.14, -1.7, -0.9, -0.35][k]     # turns round as she dances
+            a, x0, y0 = char_layer(_H(outfit, ph, mode='dance'), yaw, (0.0, BOOTH_Y, 0.0), elev=8)
+            club.append(('priv_%d_%d' % (d, k), a)); club.append(('privpos_%d_%d' % (d, k), (x0, y0)))
+    L = ['/* generated by tools/make_interiors.py: club dancers, bouncer, private booth (palette indices, 0 = transparent) */',
+         '#include "engine.h"', '#include "club_art.h"']
+    Hh = ['#ifndef CLUB_ART_H', '#define CLUB_ART_H', '#include "logo.h"', '#define NCLUB_FR %d' % NDF,
+          'extern const Img *const stage_img[2][NCLUB_FR], *const priv_img[3][NCLUB_FR], booth_img, bouncer_img;',
+          'extern const s16 stage_pos[2][NCLUB_FR][2], priv_pos[3][NCLUB_FR][2], bouncer_pos[2];', '#endif']
+    cpos = {}
+    for nm, a in club:
+        if 'pos' in nm: cpos[nm] = a; continue
+        h, w = a.shape
+        L.append('static const u8 %s_px[%d] __attribute__((aligned(4))) = {' % (nm, w * h))
+        flat = a.reshape(-1)
+        for k in range(0, len(flat), 40): L.append('  ' + ','.join(str(int(v)) for v in flat[k:k + 40]) + ',')
+        L.append('};')
+        L.append('%sconst Img %s%s = { %d, %d, %s_px };' % ('' if nm in ('booth', 'bouncer') else 'static ', nm, '_img' if nm in ('booth', 'bouncer') else '', w, h, nm))
+    L.append('const Img *const stage_img[2][NCLUB_FR] = { %s };' % ', '.join('{ %s }' % ', '.join('&stage_%d_%d' % (d, k) for k in range(NDF)) for d in range(2)))
+    L.append('const Img *const priv_img[3][NCLUB_FR] = { %s };' % ', '.join('{ %s }' % ', '.join('&priv_%d_%d' % (d, k) for k in range(NDF)) for d in range(3)))
+    L.append('const s16 stage_pos[2][NCLUB_FR][2] = { %s };' % ', '.join('{ %s }' % ', '.join('{%d,%d}' % cpos['stagepos_%d_%d' % (d, k)] for k in range(NDF)) for d in range(2)))
+    L.append('const s16 priv_pos[3][NCLUB_FR][2] = { %s };' % ', '.join('{ %s }' % ', '.join('{%d,%d}' % cpos['privpos_%d_%d' % (d, k)] for k in range(NDF)) for d in range(3)))
+    L.append('const s16 bouncer_pos[2] = { %d, %d };' % cpos['bouncerpos'])
+    co = out.replace('interiors.c', 'club_art.c')
+    open(co, 'w').write('\n'.join(L) + '\n'); open(co.replace('.c', '.h'), 'w').write('\n'.join(Hh) + '\n')
+    if len(sys.argv) > 3:                            # preview: the club with its dancers, and the booth
+        lut = np.zeros((256, 3), np.uint8)
+        for k, i in enumerate(IDX): lut[i] = (P[k] * 255).astype(np.uint8)
+        dd = dict((n, a) for n, a in imgs); cd = dict(club)
+        def put(im, a, x0, y0):
+            hh, ww = a.shape
+            for yy in range(hh):
+                for xx in range(ww):
+                    if a[yy, xx] and 0 <= x0 + xx < W and 0 <= y0 + yy < H: im[y0 + yy, x0 + xx] = lut[a[yy, xx]]
+        S = Image.new('RGB', (W * 3, H))
+        for f, k in enumerate((0, 3)):
+            im = lut[dd['room_club']].copy()
+            for d in range(2): put(im, cd['stage_%d_%d' % (d, k)], *cpos['stagepos_%d_%d' % (d, k)])
+            put(im, cd['bouncer'], *cpos['bouncerpos'])
+            put(im, dd['clerk_club_0'], *pos['clerkpos_club_0'])
+            fr = dd['front_club']; im[fr > 0] = lut[fr[fr > 0]]
+            S.paste(Image.fromarray(im), (f * W, 0))
+        im = lut[cd['booth']].copy(); put(im, cd['priv_0_1'], *cpos['privpos_0_1'])
+        S.paste(Image.fromarray(im), (2 * W, 0))
+        S.resize((W * 6, H * 2), Image.NEAREST).save(sys.argv[3].replace('.png', '_club.png'))
     print('interiors done')

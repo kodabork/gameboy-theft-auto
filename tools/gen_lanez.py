@@ -7,7 +7,7 @@
 #       0xFFF0 + z  one lane zone z (0..8, see lane_zone in render.c) for every pixel of the block
 #       0xFFFE      not every sample is on a road: the plain terrain colour
 #       0xFFFD      more than 4 zones: worked out per pixel
-#       k           zones per 1/16 m texel in laneside.bin entry k
+#       k           zones per 1/16 m texel in laneside.bin entry k (identical entries shared)
 #   laneside.bin: 68 bytes per entry: a 4-zone palette, then 16x16 2-bit palette codes (row fy, 4
 #     texels per byte, texel fx in bits (fx & 3) * 2).
 #   python3 tools/gen_lanez.py build/terrain.bin build/lanering.bin build/laneside.bin
@@ -28,7 +28,7 @@ zl, zh = zone(lo), zone(hi)
 inner = np.where(ok, np.where(zl == zh, 0xFFF0 + zl, 0x10000), 0xFFFE)
 ring[:-1, :-1] = inner
 fx = np.arange(16)[None, :]; fy = np.arange(16)[:, None]
-side = bytearray(); k = 0; many = 0
+side = bytearray(); k = 0; many = 0; seen = {}
 for j, i in zip(*np.nonzero(ring == 0x10000)):
     a0, a1, b0, b1 = q[0][j, i], q[1][j, i], q[2][j, i], q[3][j, i]
     la = a0 * 16 + fx * (a1 - a0); lb = b0 * 16 + fx * (b1 - b0)
@@ -45,7 +45,9 @@ for j, i in zip(*np.nonzero(ring == 0x10000)):
             b = 0
             for e in range(4): b |= int(code[y, x4 * 4 + e]) << (2 * e)
             ent.append(b)
-    side += ent; ring[j, i] = k; k += 1
+    ent = bytes(ent)
+    if ent not in seen: seen[ent] = k; side += ent; k += 1      # identical maps are stored once
+    ring[j, i] = seen[ent]
 assert k < 0xFFF0
 rows = []
 for y in range(W):
