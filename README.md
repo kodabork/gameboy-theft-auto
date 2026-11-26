@@ -22,6 +22,24 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.49
+- **Strip clubs.** Four "Velvet Room" clubs around the city (Docks, Downtown, Industrial and the
+  Heights), shown in magenta on the pause map. Walk in from the street and:
+  - **watch the show** for free: two dancers on the pole stage, a bartender and a bouncer;
+  - **tip the dancer** ($20);
+  - **buy a private dance** ($200): a velvet booth view for 15 seconds (B leaves early);
+  - **buy a drink** ($15, +25 health);
+  - **start trouble**: the bouncer throws you out, it hurts a little, and that club won't let you
+    back in for 2 minutes. Clubs can't be robbed.
+  - Inside, the radio switches to KICK 104.5; your own station comes back when you leave.
+  - Tips and private dances are counted on the stats page and saved.
+- **Coast traffic stays on the road.** Cars on the coast road no longer cut across the grass.
+  Only the police drive on grass and sidewalks, or ordinary drivers who get knocked there.
+- **Drivers flee danger.** Gunfire or an explosion nearby makes drivers swerve away, over sidewalks
+  and grass if they have to, then rejoin the road when it's safe.
+- **Smaller ROM** (29.1 MB down to about 24.7 MB with the clubs) with no change to the picture or
+  frame rate: the coast terrain is stored packed, and identical lane-line tables are shared.
+
 ## What's new in v0.48
 - **Faster, with exactly the same picture.** About 25% more frames per second in the city and about
   35% on the coast road compared with v0.47 (measured on the same drives). Every frame is drawn

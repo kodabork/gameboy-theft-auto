@@ -263,7 +263,7 @@ int main(void)
             int m = game_daylight_screen() ? 12 * 60 : game_tod();
             if (m != tod_shown) { tod_shown = m; palette_tod(PAL_BG, day_pal, m); }
             static int map_pal;                  /* the city map borrows sky entries 1..6 for its markers */
-            if (g_hud.map) { for (int i = 0; i < 6; i++) PAL_BG[1 + i] = map_marker_rgb[i]; map_pal = 1; }
+            if (g_hud.map) { for (int i = 0; i < 7; i++) PAL_BG[1 + i] = map_marker_rgb[i]; map_pal = 1; }
             else if (map_pal) { map_pal = 0; palette_tod(PAL_BG, day_pal, m); }
         }
         Camera cam; int nobj;

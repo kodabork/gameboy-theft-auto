@@ -126,6 +126,13 @@ LOGO_ROM=/path/to/a/gba/rom/you/own.gba ./build.sh     # writes build/steelharbo
   close up (sprite overdraw). Ideas not done: front-to-back sprites with per-column solid spans,
   trimming transparent sprite rows (as v0.45 did; test on hardware first), the strip club (owner's idea).
 
+## Strip clubs (v0.49)
+- `SHOP_CLUB` (type 6, "THE VELVET ROOM"), shops 32-35 at blocks (5,2), (12,4), (15,12), (6,11). Menu `club_items`: `K_WATCH`, `K_TIP` ($20), `K_DANCE` ($200, booth view for 15 s: `club_booth`, B leaves), `K_HEAL` drink, `K_TROUBLE` (thrown out, -15 hp, shop `cd` = 120 s barred). No robbery in clubs. Entering switches the radio to KICK 104.5 and `shop_leave` restores it. Tips and dances: `cst` saved at SRAM offset 448 (`club_write`/`club_read`, own magic), shown on the stats page.
+- Art: `make_interiors.py` `club_room()` / `booth_room()` and `char_layer()` write `src/club_art.c/.h` (`stage_img[2][8]`, `priv_img[3][8]`, `booth_img`, `bouncer_img` plus positions) and `build/interiors_preview_club.png`. hud.c draws the stage dancers (frames f and f+3) and bouncer before the clerk, or the booth view when `g_hud.club_booth`. Re-run `make_interiors.py` by hand after changing `sprites_people.py`.
+- Dancers: `Human` outfits `dancer_a/b/c` (`bikini=True`: tiny top and bottom, the rest skin; fuller glutes, bust and thighs) and `mode='dance'` (hip sway with planted feet, arms overhead). The owner asked for very skimpy but never nude: keep the cups and bottom covered.
+- Test builds: `EXTRA_CF="-DDEBUG_SHOP=33"` starts on foot at shop 33's door (gbaprof/mGBA screenshots); host key `0xF10 + i` reaches every shop (0xF30-0xF33 are the clubs).
+- v0.49 also: coast traffic stays on the road (`Car.cp` is u16; only cops leave it), drivers flee gunfire and explosions (`car_panic`, `traffic_rejoin`, `Car.flee`), and the ROM trim (29.1 -> 24.7 MB): `tools/pack_terrain.py` packs the coast ring into `build/tring.bin` (`src/tring.s`, lookups `tm_cell`/`tr_cell` in collide.c, full arrays on HOST), `gen_lanez.py` dedupes texel maps. ROM wait states 2/1 (`0x431B`). `__bss_end` is 0x74FC, lowest stack 0x7850: fine, but check with `STACK=1` after IWRAM changes.
+
 ## Memory budget
 - **IWRAM:** the stack sits at 0x7E00. v0.48: `__bss_end` 0x739C, deepest stack about 0x77F0 (check both with `STACK=1` after any IWRAM change). Keep `__bss_end` (`llvm-nm build/steelharbor.elf | grep __bss_end`) at or below about 0x7400 (v0.20: 0x6A5C, after `g_world` moved to EWRAM; v0.31: 0x6CDC, after the radar icons moved to ROM). render.o, collide.o and sound.o code lives in IWRAM; code that runs once or rarely goes in ROM with `__attribute__((section(".romcode")))`.
 - Put big arrays in EWRAM with `EWRAM_BSS`.

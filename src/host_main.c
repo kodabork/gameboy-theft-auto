@@ -54,7 +54,7 @@ int main(int argc, char **argv)
             if (keys >= 0xB00 && keys < 0xC00) { void game_debug_street(int); game_debug_street(keys - 0xB00); keys = 0; }
             if (keys >= 0xC00 && keys < 0xD00) { void game_debug_coast(int); game_debug_coast(keys - 0xC00); keys = 0; }
             if (keys >= 0x10000) { void game_debug_block(int, int, int); game_debug_block((keys >> 8) & 255, keys & 255, (keys >> 16) - 1); keys = 0; }
-            if (keys >= 0xF10 && keys < 0xF30) { void game_debug_shop(int); game_debug_shop(keys - 0xF10); keys = 0; }
+            if (keys >= 0xF10 && keys < 0xF40) { void game_debug_shop(int); game_debug_shop(keys - 0xF10); keys = 0; }
             if (keys >= 0xE00 && keys < 0xE30) { void game_debug_mission(int); game_debug_mission(keys - 0xE00); keys = 0; }
             if (keys >= 0xD00 && keys < 0xD18) { void game_debug_time(int); game_debug_time(keys - 0xD00); keys = 0; }
             if (keys == 0xFFE) { game_debug_set(3, 1); keys = 0; }
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
             if (keys >= 0xFE0 && keys <= 0xFE8) { void game_debug_tp_mission(int); game_debug_tp_mission(keys - 0xFE0); keys = 0; }
             if (keys >= 0xFF0 && keys <= 0xFF3) { void game_debug_tp_mission(int); game_debug_tp_mission(keys - 0xFF0); keys = 0; }
             game_update((u16)keys, 16384 / 20);
-            { int game_tod(void), game_daylight_screen(void); palette_tod(pal, day_pal, game_daylight_screen() ? 720 : game_tod()); if (g_hud.map) for (int i = 0; i < 6; i++) pal[1 + i] = map_marker_rgb[i]; }
+            { int game_tod(void), game_daylight_screen(void); palette_tod(pal, day_pal, game_daylight_screen() ? 720 : game_tod()); if (g_hud.map) for (int i = 0; i < 7; i++) pal[1 + i] = map_marker_rgb[i]; }
             for (int k = 0; k < nd; k++) if (dumpat[k] == frame) {
                 Camera cam; int no;
                 game_build_scene(&cam, objs, &no);
