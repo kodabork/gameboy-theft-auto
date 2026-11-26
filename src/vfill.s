@@ -220,11 +220,14 @@ gmiss:
     cmp     r2, lr
     cmplo   r3, lr
     bhs     3f
-    mov     r11, r3, lsr #20            @ idx = (v >> 20) * TMAP_W + (u >> 20)
-    ldr     r12, =1424
-    mul     lr, r11, r12
-    add     r11, lr, r2, lsr #20
-    ldr     r12, =terrain_m
+    mov     r11, r3, lsr #20            @ idx = ring index of the cell (render.c ring_lo / ring_hi)
+    mov     lr, r2, lsr #20
+    cmp     lr, #712
+    ldrlo   r12, =ring_lo
+    ldrhs   r12, =ring_hi
+    ldr     r11, [r12, r11, lsl #2]
+    add     r11, r11, lr
+    ldr     r12, =tring_m
     ldrb    r12, [r12, r11]             @ m
     and     lr, r12, #127               @ material
     cmp     lr, #5                      @ TM_ROAD .. TM_ROADE get lane lines (when gen_lanes)
@@ -342,7 +345,7 @@ gmiss:
     beq     12f
     cmp     r5, #4
     bne     11f
-    ldr     r6, =terrain_r
+    ldr     r6, =tring_r
     ldrb    r6, [r6, r11]
     tst     r6, #0x80
     movne   r10, #25                    @ dashed centre line: 8 + MAT_YELLOW * 8 + 1
@@ -364,7 +367,9 @@ gmiss:
     ldmfd   sp!, {pc}
 6:  stmfd   sp!, {r0-r3, r12, lr}       @ a new sample block (lr holds sv)
     mov     r0, r6
-    bl      lane_block
+    mov     r1, r10, asr #20
+    mov     r2, lr, asr #20
+    bl      lane_block                  @ lane_block(rk, bx, by)
     ldmfd   sp!, {r0-r3, r12, lr}
     b       7b
 2:  ldr     r10, =tm_b8                 @ plain terrain: tm_b8[material] + lit

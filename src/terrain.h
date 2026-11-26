@@ -11,8 +11,7 @@ extern const unsigned char city_kind[400], city_district[400];
 #ifdef HOST
 extern unsigned char terrain_m[], terrain_r[], radar_map[];
 #else
-extern const unsigned char terrain_m[];     /* TMAP_W*TMAP_W, material code | lit<<7 */
-extern const unsigned char terrain_r[];     /* road lateral, 1/8 m + 64 (0 none) | dash<<7 */
+extern const unsigned char tring_m[], tring_r[], tring_water[];   /* packed terrain_m / terrain_r (tools/pack_terrain.py, ground.h) */
 extern const unsigned char radar_map[];     /* RADAR_MAP_W^2, 2 m texels, radar colours */
 #endif
 #define RADAR_MAP_W 712
