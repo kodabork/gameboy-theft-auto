@@ -22,6 +22,21 @@ read and learn from the code, change it and share it for free. You may **not** s
 cartridges or ROMs of it, or use it in anything commercial without written permission from the
 copyright holder (kodabork).
 
+## What's new in v0.48
+- **Faster, with exactly the same picture.** About 25% more frames per second in the city and about
+  35% on the coast road compared with v0.47 (measured on the same drives). Every frame is drawn
+  pixel-for-pixel the same as before; the speed comes from drawing it more efficiently:
+  - the coast, beach and sea ground reuses work between neighbouring pixels, and the coast road's
+    lane lines come from precomputed tables instead of being worked out pixel by pixel;
+  - street ground and the coast ground are drawn by hand-written ARM assembly loops;
+  - building walls skip storeys above the top of the screen and draw each storey with fewer steps;
+  - the sky reads its clouds from a packed table in RAM;
+  - the ground only visits screen columns that actually show ground;
+  - the radar is built while the game waits for the screen flip;
+  - pickups are looked up by city block, and engine-only sound is mixed in one pass;
+  - a faster division routine, and faster cartridge access (tested on the EZ-Flash Omega).
+- The ROM is about 2.8 MB larger (29.1 MB) because of the coast-road lane tables.
+
 ## What's new in v0.47
 - **Free games:** every bowling alley and pool hall now has a FRIENDLY GAME option that costs nothing.
   Win or lose, no money changes hands (wins still count on the stats screen).
