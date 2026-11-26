@@ -21,6 +21,7 @@ static const Camera *C;
 static u16 *FB;
 
 #define PIX2(i) ((u16)((i) | ((i) << 8)))
+#define ROR16(x) (((x) >> 16) | ((x) << 16))
 
 static const u8 bayer[4] = { 2, 10, 14, 6 };   /* index (x&1) | (y&1)<<1 */
 
@@ -66,6 +67,19 @@ static inline void vspan(u16 *col, int r0, int r1, u16 c0, u16 c1)
     vfill(p, r1 - r0 + 1, c0, c1);         /* hand-written ARM: 8 rows a pass, one instruction per pixel */
 #endif
 }
+#ifdef HOST
+static u16 *vfill2(u16 *p, int n, u32 c)
+{
+    for (int i = 0; i < n; i++, p += SCR_W) *p = (u16)((i & 1) ? c >> 16 : c);
+    return p;
+}
+#else
+u16 *vfill2(u16 *p, int n, u32 c);     /* vfill.s: n rows from p, colours alternating low/high half of c */
+#endif
+/* the facade's bands, top to bottom: fill the rows from cr down to (not including) 'until', clipped to
+   the last row re1 - 1; p points at row cr. Even rows take c0, odd rows c1 (a vertical dither). */
+#define BAND(until, c0, c1) do { int u_ = (until); if (u_ > re1) u_ = re1; \
+    if (u_ > cr) { u32 e_ = (u32)(c0) | ((u32)(c1) << 16); p = vfill2(p, u_ - cr, (cr & 1) ? ROR16(e_) : e_); cr = u_; } } while (0)
 /* fill from row cr down to (but not including) row 'until' (clipped to re); returns next row */
 static inline int band(u16 *col, int cr, int re, int until, u16 c0, u16 c1)
 {
@@ -181,11 +195,12 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
         u16 cs0 = PIX2(WPAL(MAT_SILVER, fe, light)), cs1 = PIX2(WPAL(MAT_SILVER, fo, light));
         /* the facade is a stack of horizontal bands; each maps to a run of rows */
         #define ROW(hh) (HORIZON - (((hh) - camh) * izc >> 16))
-        int cr = rs;
-        cr = band(col, cr, re, ROW(H - 16), ct0, ct1);                 /* cornice */
+        int cr = rs, re1 = re + 1;
+        u16 *p = col + rs * SCR_W;
+        BAND(ROW(H - 16), ct0, ct1);                 /* cornice */
         if (cr <= re) {
             int SH = S->storey;
-            cr = band(col, cr, re, ROW(hb), cw0, cw1);
+            BAND(ROW(hb), cw0, cw1);
             int bay = bq + seed;
             int fl = nfl - 1;
             while (fl >= 0 && ROW(64 + fl * SH) <= cr) fl--;      /* floors wholly above the rows still to fill draw nothing */
@@ -197,17 +212,17 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
                     u16 g0 = PIX2(WPAL(wmat, fe, gl)), g1 = PIX2(WPAL(wmat, fo, gl));
                     if (mullion) { g0 = ct0; g1 = ct1; }
                     if (S->lintel) {
-                        cr = band(col, cr, re, ROW(base + S->v1 + 3), cw0, cw1);
-                        cr = band(col, cr, re, ROW(base + S->v1), cs0, cs1);       /* stone lintel */
-                    } else cr = band(col, cr, re, ROW(base + S->v1), cw0, cw1);
-                    cr = band(col, cr, re, ROW(base + S->v0), g0, g1);
-                    if (S->sill) cr = band(col, cr, re, ROW(base + S->v0 - 2), S->sill == 2 ? cs0 : ct0, S->sill == 2 ? cs1 : ct1);
+                        BAND(ROW(base + S->v1 + 3), cw0, cw1);
+                        BAND(ROW(base + S->v1), cs0, cs1);       /* stone lintel */
+                    } else BAND(ROW(base + S->v1), cw0, cw1);
+                    BAND(ROW(base + S->v0), g0, g1);
+                    if (S->sill) BAND(ROW(base + S->v0 - 2), S->sill == 2 ? cs0 : ct0, S->sill == 2 ? cs1 : ct1);
                 } else if (style == 2) {
                     /* spandrel line between ribbon windows */
-                    cr = band(col, cr, re, ROW(base + S->v1), cw0, cw1);
-                    cr = band(col, cr, re, ROW(base + S->v0), ct0, ct1);
+                    BAND(ROW(base + S->v1), cw0, cw1);
+                    BAND(ROW(base + S->v0), ct0, ct1);
                 }
-                cr = band(col, cr, re, ROW(base), cw0, cw1);
+                BAND(ROW(base), cw0, cw1);
             }
             /* storefront level: optional striped awning, band, shop glass, plinth */
             int awning = (style < 2) && ((seed >> 3) & 1) && edge;
@@ -216,18 +231,18 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
                 int am = awn_mat[(seed >> 4) % 3];
                 int stripe = (u / 6) & 1;
                 u16 a0 = stripe ? cs0 : PIX2(WPAL(am, fe, 1)), a1 = stripe ? cs1 : PIX2(WPAL(am, fo, 1));
-                cr = band(col, cr, re, ROW(58), ct0, ct1);
-                cr = band(col, cr, re, ROW(48), a0, a1);
-                cr = band(col, cr, re, ROW(46), PIX2(WPAL(MAT_TRIM, fe, 0)), PIX2(WPAL(MAT_TRIM, fo, 0)));   /* shade under it */
-            } else cr = band(col, cr, re, ROW(56), ct0, ct1);
+                BAND(ROW(58), ct0, ct1);
+                BAND(ROW(48), a0, a1);
+                BAND(ROW(46), PIX2(WPAL(MAT_TRIM, fe, 0)), PIX2(WPAL(MAT_TRIM, fo, 0)));   /* shade under it */
+            } else BAND(ROW(56), ct0, ct1);
             if (shopcol) {
                 int gl = (seed >> 1) & 1;
                 u16 g0 = PIX2(WPAL(wmat, fe, gl)), g1 = PIX2(WPAL(wmat, fo, gl));
-                if (!awning) cr = band(col, cr, re, ROW(48), cw0, cw1);
-                cr = band(col, cr, re, ROW(6), g0, g1);
+                if (!awning) BAND(ROW(48), cw0, cw1);
+                BAND(ROW(6), g0, g1);
             }
-            cr = band(col, cr, re, ROW(4), cw0, cw1);
-            vspan(col, cr, re, ct0, ct1);                                  /* dark plinth at street level */
+            BAND(ROW(4), cw0, cw1);
+            BAND(re1, ct0, ct1);                                           /* dark plinth at street level */
         }
         #undef ROW
     }
@@ -395,7 +410,6 @@ static inline __attribute__((always_inline)) int grid_uv(u32 g, u32 h)
     if (b >= 0xFE) b = lot_base[(h >> 26) * LOTW + (g >> 26)] + (b & 1);
     return b;
 }
-#define ROR16(x) (((x) >> 16) | ((x) << 16))
 /* one texel that is not in the current reuse cell: street grid, open sea, plain terrain, or a lane-line
    pixel (gen_slow). Updates the reuse cell (*cu, *cv) and returns the palette base. */
 static inline __attribute__((always_inline)) u32 gen_miss(u32 u, u32 v, u32 *cu, u32 *cv)

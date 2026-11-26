@@ -1,10 +1,13 @@
 @ Fill one framebuffer column with a 2-colour vertical dither, 8 rows per pass.
 @ Each strh writes one row and steps down a row (post-increment of 240 bytes).
-@ void vfill(u16 *dst, int rows, u16 c0, u16 c1)   rows >= 1
+@ void vfill(u16 *dst, int rows, u16 c0, u16 c1)   rows >= 1 (r0 ends one line past the last row)
     .section .iwram, "ax", %progbits
     .arm
     .align 2
-    .global vfill
+    .global vfill, vfill2
+@ u16 *vfill2(u16 *dst, int rows, u32 c)   rows >= 1: c0 = low half (first row), c1 = high half; returns dst + rows lines
+vfill2:
+    mov     r3, r2, lsr #16
 vfill:
     subs    r1, r1, #8
     blt     2f
