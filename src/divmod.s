@@ -4,28 +4,55 @@
     .align 2
     .global __aeabi_idiv, __aeabi_idivmod, __aeabi_uidiv, __aeabi_uidivmod
 
-@ Fast shift-subtract division: only loops over the quotient's bits.
+@ Shift-subtract division, four quotient bits per pass of the main loop.
 @ r0 = numerator, r1 = denominator  ->  r0 = quotient, r1 = remainder
+@ The divisor is first shifted up (by 3 when there is room, then by 4s, then by 1s) until it passes
+@ the numerator, with r3 holding the matching quotient bit. Each pass then tries the divisor at
+@ shifts 0..3 below that. When the divisor could not take the first shift of 3, the last pass also
+@ tries shifts below quotient bit 0; those subtractions add nothing to the quotient (their bits are
+@ zero) but spoil the running remainder, so the remainder is worked out at the end as n - q * d.
 __aeabi_uidiv:
 __aeabi_uidivmod:
     cmp     r1, #0
     moveq   r0, #0
     bxeq    lr
-    mov     r2, r1                  @ shifted divisor
-    mov     r3, #1                  @ current quotient bit
-1:  cmp     r2, r0, lsr #1
-    movls   r2, r2, lsl #1
-    movls   r3, r3, lsl #1
-    bls     1b
+    stmfd   sp!, {r0, r1}               @ keep n and d for the remainder
+    mov     r2, r1                      @ shifted divisor
+    tst     r2, #0xE0000000
+    moveq   r2, r2, lsl #3
+    moveq   r3, #8
+    movne   r3, #1
+1:  cmp     r2, #0x10000000             @ coarse: 4 bits at a time while it stays below n and bit 28
+    cmplo   r2, r0
+    movlo   r2, r2, lsl #4
+    movlo   r3, r3, lsl #4
+    blo     1b
+2:  cmp     r2, #0x80000000             @ fine: 1 bit at a time
+    cmplo   r2, r0
+    movlo   r2, r2, lsl #1
+    movlo   r3, r3, lsl #1
+    blo     2b
     mov     r12, #0
-2:  cmp     r0, r2
-    subcs   r0, r0, r2
-    orrcs   r12, r12, r3
-    movs    r3, r3, lsr #1
-    movne   r2, r2, lsr #1
-    bne     2b
-    mov     r1, r0                  @ remainder
-    mov     r0, r12                 @ quotient
+3:  cmp     r0, r2
+    subhs   r0, r0, r2
+    orrhs   r12, r12, r3
+    cmp     r0, r2, lsr #1
+    subhs   r0, r0, r2, lsr #1
+    orrhs   r12, r12, r3, lsr #1
+    cmp     r0, r2, lsr #2
+    subhs   r0, r0, r2, lsr #2
+    orrhs   r12, r12, r3, lsr #2
+    cmp     r0, r2, lsr #3
+    subhs   r0, r0, r2, lsr #3
+    orrhs   r12, r12, r3, lsr #3
+    cmp     r0, #0                      @ nothing left to divide: the remaining bits are 0
+    movsne  r3, r3, lsr #4
+    movne   r2, r2, lsr #4
+    bne     3b
+    ldmfd   sp!, {r2, r3}               @ n, d
+    mov     r0, r12
+    mul     r1, r12, r3
+    sub     r1, r2, r1                  @ remainder = n - q * d
     bx      lr
 
 __aeabi_idiv:

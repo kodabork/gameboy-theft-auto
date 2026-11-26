@@ -130,8 +130,48 @@ void beam_vblank(int page)
     REG_DISPCNT |= 0x6000;
 }
 
+#ifdef DIV_TEST
+/* test build: checks the division helpers against a slow reference; result in SRAM bytes 0..7 */
+extern unsigned long long udm(unsigned, unsigned) __asm__("__aeabi_uidivmod");   /* r0 = q, r1 = r */
+extern unsigned long long sdm(int, int) __asm__("__aeabi_idivmod");
+typedef struct { unsigned q, r; } UQR;
+static UQR ref_udiv(unsigned n, unsigned d)
+{
+    UQR o = { 0, 0 };
+    for (int b = 31; b >= 0; b--) { o.r = (o.r << 1) | ((n >> b) & 1); if (o.r >= d) { o.r -= d; o.q |= 1u << b; } }
+    return o;
+}
+static void div_test(void)
+{
+    volatile unsigned char *sr = (volatile unsigned char *)0x0E000000;
+    unsigned fails = 0, x = 12345;
+    for (unsigned i = 0; i < 60000; i++) {
+        x = x * 1664525u + 1013904223u; unsigned n = x;
+        x = x * 1664525u + 1013904223u; unsigned d = x >> (x & 31);
+        if (i % 7 == 0) d = (x >> 8) & 0xFF; else if (i % 7 == 1) n >>= (x & 31); else if (i % 7 == 2) d = n - (x & 3);
+        if (i < 64) { n = 0xFFFFFFFFu - i; d = i + 1; }
+        if (d == 0) d = 1;
+        UQR rf = ref_udiv(n, d);
+        unsigned long long qr = udm(n, d);
+        if ((unsigned)qr != rf.q || (unsigned)(qr >> 32) != rf.r) fails++;
+        int sn = (int)n, sd = (int)d | 1; if (sd == -1) sd = 3;
+        unsigned long long sq = sdm(sn, sd);
+        /* reference for signed: truncate toward zero, remainder has the dividend's sign */
+        unsigned an = sn < 0 ? 0u - (unsigned)sn : (unsigned)sn, ad = sd < 0 ? 0u - (unsigned)sd : (unsigned)sd;
+        UQR ra = ref_udiv(an, ad);
+        int eq = ((sn < 0) != (sd < 0)) ? -(int)ra.q : (int)ra.q, er = sn < 0 ? -(int)ra.r : (int)ra.r;
+        if ((int)sq != eq || (int)(sq >> 32) != er) fails++;
+    }
+    for (int k = 0; k < 4; k++) sr[k] = (unsigned char)(fails >> (8 * k));
+    sr[4] = 'D'; sr[5] = 'O'; sr[6] = 'N'; sr[7] = 'E';
+    for (;;) ;
+}
+#endif
 int main(void)
 {
+#ifdef DIV_TEST
+    div_test();
+#endif
     REG_WAITCNT = 0x4317;                     /* faster ROM access + prefetch */
     REG_DISPCNT = 0x0080;                     /* forced blank during setup */
     u16 pal[256];
