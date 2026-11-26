@@ -80,6 +80,8 @@ u16 *vfill2(u16 *p, int n, u32 c);     /* vfill.s: n rows from p, colours altern
    the last row re1 - 1; p points at row cr. Even rows take c0, odd rows c1 (a vertical dither). */
 #define BAND(until, c0, c1) do { int u_ = (until); if (u_ > re1) u_ = re1; \
     if (u_ > cr) { u32 e_ = (u32)(c0) | ((u32)(c1) << 16); p = vfill2(p, u_ - cr, (cr & 1) ? ROR16(e_) : e_); cr = u_; } } while (0)
+#define BANDP(until, cc) do { int u_ = (until); if (u_ > re1) u_ = re1; \
+    if (u_ > cr) { u32 e_ = (cc); p = vfill2(p, u_ - cr, (cr & 1) ? ROR16(e_) : e_); cr = u_; } } while (0)
 /* fill from row cr down to (but not including) row 'until' (clipped to re); returns next row */
 static inline int band(u16 *col, int cr, int re, int until, u16 c0, u16 c1)
 {
@@ -192,58 +194,80 @@ static void draw_wall(int x0, int z0, int u0, int x1, int z1, int u1,
         int wincol = edge && um >= S->w0 && um < S->w1;
         int mullion = (style == 2) && (um % 16) < 2;
         int shopcol = edge && (u % 48) >= 4 && (u % 48) < 44;
-        u16 cs0 = PIX2(WPAL(MAT_SILVER, fe, light)), cs1 = PIX2(WPAL(MAT_SILVER, fo, light));
+        /* colour pairs (even row | odd row << 16) */
+        #define PAIR(m, l) ((u32)PIX2(WPAL(m, fe, l)) | ((u32)PIX2(WPAL(m, fo, l)) << 16))
+        const u32 cw = (u32)cw0 | ((u32)cw1 << 16), ct = (u32)ct0 | ((u32)ct1 << 16), cs = PAIR(MAT_SILVER, light);
         /* the facade is a stack of horizontal bands; each maps to a run of rows */
         #define ROW(hh) (HORIZON - (((hh) - camh) * izc >> 16))
         int cr = rs, re1 = re + 1;
         u16 *p = col + rs * SCR_W;
-        BAND(ROW(H - 16), ct0, ct1);                 /* cornice */
+        BANDP(ROW(H - 16), ct);                     /* cornice */
         if (cr <= re) {
             int SH = S->storey;
-            BAND(ROW(hb), cw0, cw1);
+            BANDP(ROW(hb), cw);
             int bay = bq + seed;
+            /* storeys, top down. v = (floor base - eye height) * izc, so a band edge at height base + o
+               is on row HORIZON - ((v + o * izc) >> 16), exactly ROW(base + o) */
             int fl = nfl - 1;
-            while (fl >= 0 && ROW(64 + fl * SH) <= cr) fl--;      /* floors wholly above the rows still to fill draw nothing */
-            for (; fl >= 0 && cr <= re; fl--) {
-                int base = 64 + fl * SH;
-                if (wincol) {
-                    int hsh = (bay * 7 + fl * 13) * 2654435761u >> 29;
-                    int gl = hsh < 3;
-                    u16 g0 = PIX2(WPAL(wmat, fe, gl)), g1 = PIX2(WPAL(wmat, fo, gl));
-                    if (mullion) { g0 = ct0; g1 = ct1; }
-                    if (S->lintel) {
-                        BAND(ROW(base + S->v1 + 3), cw0, cw1);
-                        BAND(ROW(base + S->v1), cs0, cs1);       /* stone lintel */
-                    } else BAND(ROW(base + S->v1), cw0, cw1);
-                    BAND(ROW(base + S->v0), g0, g1);
-                    if (S->sill) BAND(ROW(base + S->v0 - 2), S->sill == 2 ? cs0 : ct0, S->sill == 2 ? cs1 : ct1);
-                } else if (style == 2) {
-                    /* spandrel line between ribbon windows */
-                    BAND(ROW(base + S->v1), cw0, cw1);
-                    BAND(ROW(base + S->v0), ct0, ct1);
+            const int dv = SH * izc;
+            int v = (64 + fl * SH - camh) * izc;
+            const int K = HORIZON - cr;
+            while (fl >= 0 && (v >> 16) >= K) { fl--; v -= dv; }   /* floors wholly above the rows still to fill draw nothing */
+            #define ROWV(o) (HORIZON - ((v + (o)) >> 16))
+            if (wincol) {
+                const u32 glit = PAIR(wmat, 1), gdark = PAIR(wmat, 0);
+                const int o1 = S->v1 * izc, o0 = S->v0 * izc;
+                if (S->lintel) {
+                    const int o13 = o1 + 3 * izc, o02 = o0 - 2 * izc;
+                    const u32 sc = S->sill == 2 ? cs : ct;
+                    for (; fl >= 0 && cr <= re; fl--, v -= dv) {
+                        u32 g = mullion ? ct : ((((u32)(bay * 7 + fl * 13) * 2654435761u) >> 29) < 3 ? glit : gdark);
+                        BANDP(ROWV(o13), cw);
+                        BANDP(ROWV(o1), cs);                /* stone lintel */
+                        BANDP(ROWV(o0), g);
+                        if (S->sill) BANDP(ROWV(o02), sc);
+                        BANDP(ROWV(0), cw);
+                    }
+                } else {
+                    const int o02 = o0 - 2 * izc;
+                    const u32 sc = S->sill == 2 ? cs : ct;
+                    for (; fl >= 0 && cr <= re; fl--, v -= dv) {
+                        u32 g = mullion ? ct : ((((u32)(bay * 7 + fl * 13) * 2654435761u) >> 29) < 3 ? glit : gdark);
+                        BANDP(ROWV(o1), cw);
+                        BANDP(ROWV(o0), g);
+                        if (S->sill) BANDP(ROWV(o02), sc);
+                        BANDP(ROWV(0), cw);
+                    }
                 }
-                BAND(ROW(base), cw0, cw1);
+            } else if (style == 2) {
+                const int o1 = S->v1 * izc, o0 = S->v0 * izc;
+                for (; fl >= 0 && cr <= re; fl--, v -= dv) {   /* spandrel line between ribbon windows */
+                    BANDP(ROWV(o1), cw);
+                    BANDP(ROWV(o0), ct);
+                    BANDP(ROWV(0), cw);
+                }
+            } else {
+                for (; fl >= 0 && cr <= re; fl--, v -= dv) BANDP(ROWV(0), cw);
             }
+            #undef ROWV
             /* storefront level: optional striped awning, band, shop glass, plinth */
             int awning = (style < 2) && ((seed >> 3) & 1) && edge;
             if (awning) {
                 static const u8 awn_mat[3] = { MAT_BRICK, MAT_GRASS, MAT_GLASS };
                 int am = awn_mat[(seed >> 4) % 3];
                 int stripe = (u / 6) & 1;
-                u16 a0 = stripe ? cs0 : PIX2(WPAL(am, fe, 1)), a1 = stripe ? cs1 : PIX2(WPAL(am, fo, 1));
-                BAND(ROW(58), ct0, ct1);
-                BAND(ROW(48), a0, a1);
-                BAND(ROW(46), PIX2(WPAL(MAT_TRIM, fe, 0)), PIX2(WPAL(MAT_TRIM, fo, 0)));   /* shade under it */
-            } else BAND(ROW(56), ct0, ct1);
+                BANDP(ROW(58), ct);
+                BANDP(ROW(48), stripe ? cs : PAIR(am, 1));
+                BANDP(ROW(46), PAIR(MAT_TRIM, 0));          /* shade under it */
+            } else BANDP(ROW(56), ct);
             if (shopcol) {
-                int gl = (seed >> 1) & 1;
-                u16 g0 = PIX2(WPAL(wmat, fe, gl)), g1 = PIX2(WPAL(wmat, fo, gl));
-                if (!awning) BAND(ROW(48), cw0, cw1);
-                BAND(ROW(6), g0, g1);
+                if (!awning) BANDP(ROW(48), cw);
+                BANDP(ROW(6), PAIR(wmat, (seed >> 1) & 1));
             }
-            BAND(ROW(4), cw0, cw1);
-            BAND(re1, ct0, ct1);                                           /* dark plinth at street level */
+            BANDP(ROW(4), cw);
+            BANDP(re1, ct);                                 /* dark plinth at street level */
         }
+        #undef PAIR
         #undef ROW
     }
 }
