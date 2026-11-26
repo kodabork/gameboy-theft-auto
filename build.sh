@@ -16,7 +16,7 @@ CF="$EXTRA_CF -g --target=arm-none-eabi -mcpu=arm7tdmi -mfloat-abi=soft -O2 -ffr
 python3 tools/make_logo.py src/assets.c src/logo.c build/logo_preview.png > /dev/null
 python3 tools/make_portraits.py src/assets.c src/portraits.c > /dev/null
 [ src/interiors.c -nt tools/make_interiors.py ] && [ src/interiors.c -nt src/assets.c ] || python3 tools/make_interiors.py src/assets.c src/interiors.c build/interiors_preview.png > /dev/null
-for f in game world tables gba_main libc assets hud terrain logo portraits interiors minigames minigame_art; do clang $CF -mthumb -c src/$f.c -o build/$f.o; done
+for f in game world tables gba_main libc assets hud terrain logo portraits interiors minigames minigame_art; do clang $CF $ROMOPT -mthumb -c src/$f.c -o build/$f.o; done
 for f in render collide sound; do clang $CF -marm -c src/$f.c -o build/$f.o; done
 for f in crt0 divmod assets_bin; do :; done
 clang --target=arm-none-eabi -mcpu=arm7tdmi -c src/crt0.s -o build/crt0.o
