@@ -173,7 +173,7 @@ int main(void)
     div_test();
 #endif
 #ifndef WAITCNT_VAL
-#define WAITCNT_VAL 0x4317                    /* ROM wait states 3/1 (first/sequential access), prefetch on */
+#define WAITCNT_VAL 0x431B                    /* ROM wait states 2/1 (first/sequential access), prefetch on; the owner's EZ-Flash Omega handles it */
 #endif
     REG_WAITCNT = WAITCNT_VAL;
     REG_DISPCNT = 0x0080;                     /* forced blank during setup */
