@@ -45,6 +45,7 @@ typedef struct {
     int vx, vy;      /* player physics velocity */
     u8 active, police, crew;
     u16 cp;          /* coast-road traffic: next waypoint (0..NCOAST_WP-1, more than a byte holds) */
+    s16 flee;        /* traffic scared by gunfire or an explosion: time left (1/256 s); tx, ty = the danger */
     s16 stuck, rev;
     int kx, ky;      /* knock-back velocity from collisions (q8 units/s) */
     int spin;        /* yaw rate from collisions (q8 angle units/s) */
@@ -192,7 +193,7 @@ static void spawn_traffic_near(Car *c)
     /* near the edge of the grid or out of town: some of the traffic uses the coastal road */
     int out = plx() < M(90) || ply() < M(90) || plx() > GRID_U - M(90) || ply() > GRID_U - M(90);
     if (out && (rnd() & 1) && spawn_coast_near(c)) {
-        c->speed = Q8(M(9)); c->ai = AI_TRAFFIC; c->active = 1; c->police = 0; c->wait = 1; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
+        c->speed = Q8(M(9)); c->ai = AI_TRAFFIC; c->active = 1; c->police = 0; c->wait = 1; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0; c->flee = 0;
         return;
     }
     for (int tries = 0; tries < 12; tries++) {
@@ -203,7 +204,7 @@ static void spawn_traffic_near(Car *c)
         int d = dist_approx((c->x >> 8) - plx(), (c->y >> 8) - ply());
         if (d > M(60) && d < M(130)) break;
     }
-    c->speed = Q8(M(6)); c->ai = AI_TRAFFIC; c->active = 1; c->police = 0; c->wait = 1; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0;
+    c->speed = Q8(M(6)); c->ai = AI_TRAFFIC; c->active = 1; c->police = 0; c->wait = 1; c->kx = c->ky = c->spin = 0; c->dmg = 0; c->burn = 0; c->flee = 0;
 }
 
 static int obstacle_ahead(int self, const Car *c)
@@ -245,10 +246,61 @@ static void approach_speed(Car *c, int target, int acc, int dec, int dt)
 
 static int tail_mode;
 static int crim_ped = -1, crim_car = -1, crim_police = -1;   /* the current street crime */
+/* Gunfire or an explosion at (x, y): ordinary traffic within range floors it away from the danger for
+   a few seconds, over sidewalks and grass if that is the way out, then finds its road again. */
+static void car_panic(int x, int y, int range)
+{
+    for (int i = 0; i < ncars; i++) {
+        Car *c = &cars[i];
+        if (!c->active || c->ai != AI_TRAFFIC || i == pl.in_car || i == SLOT_MISSION || i == crim_car || IS_WRECK(c)) continue;
+        if (dist_approx((c->x >> 8) - x, (c->y >> 8) - y) > range) continue;
+        c->flee = 4 * 256; c->tx = x; c->ty = y; c->wait = 1;
+    }
+}
+/* after fleeing: back to the lane (or coast-road waypoint) ahead in the direction the car now faces */
+static void traffic_rejoin(Car *c)
+{
+    int x = c->x >> 8, y = c->y >> 8, h = c->head >> 8;
+    if (c->road == ROAD_COAST) {
+        int best = 0, bd = 0x7FFFFFFF;
+        for (int k = 0; k < NCOAST_WP; k++) {
+            int d = dist_approx(coast_wp[k][0] - x, coast_wp[k][1] - y);
+            if (d < bd) { bd = d; best = k; }
+        }
+        int n = (best + 1) % NCOAST_WP;
+        int a = iatan2(coast_wp[n][1] - coast_wp[best][1], coast_wp[n][0] - coast_wp[best][0]);
+        c->dir = iabs(angdiff(a, h)) < 1024 ? 0 : 1;
+        c->cp = c->dir ? (best + NCOAST_WP - 1) % NCOAST_WP : n;
+        coast_target(c);
+        return;
+    }
+    for (int tries = 0; tries < 2; tries++) {
+        int dir = ((h + 512) >> 10) & 3;               /* 0 +x, 1 +y, 2 -x, 3 -y */
+        int along = (dir & 1) ? y : x, across = (dir & 1) ? x : y;
+        int road = clampi((across - M(6) + 512) >> 10, 0, NB);
+        int cross = ((along - M(6)) >> 10) + (dir == 0 || dir == 1);
+        if (cross >= 0 && cross <= NB) { c->dir = dir; c->road = road; c->cross = cross; break; }
+        h += 2048;                                     /* past the edge of the grid: turn back */
+        c->dir = (dir + 2) & 3; c->road = road; c->cross = clampi(cross, 0, NB);
+    }
+    lane_point(c->dir, c->road, c->cross, &c->tx, &c->ty);
+}
 static void update_traffic(int i, int dt)
 {
     Car *c = &cars[i];
     int x = c->x >> 8, y = c->y >> 8;
+    if (c->flee > 0) {
+        c->flee -= dt >> 6;
+        int away = iatan2(y - c->ty, x - c->tx), h = c->head >> 8;
+        int dh = angdiff(away, h);
+        int go = iabs(dh) < 1024 ? h + dh / 4 : away;  /* already heading away: keep going, bending off */
+        int diff; steer_to(c, x + ((icos(go & 4095) * M(20)) >> 14), y + ((isin(go & 4095) * M(20)) >> 14), 1800, dt, &diff);
+        int target = Q8(M(15));
+        if (dist_approx(x - plx(), y - ply()) < M(70) && obstacle_ahead(i, c)) target = Q8(M(3));
+        approach_speed(c, target, Q8(M(8)), Q8(M(14)), dt);
+        if (c->flee <= 0) { c->flee = 0; traffic_rejoin(c); }
+        return;
+    }
     int dx = c->tx - x, dy = c->ty - y;
     int coast = c->road == ROAD_COAST;
     if (coast) {
@@ -533,10 +585,12 @@ static void car_damage(Car *c, int d, int by_player)
     }
 }
 
+static void panic(int x, int y, int range);
 static void explode_at(int x, int y, Car *src)
 {
     for (int i = 0; i < MAX_BOOMS; i++) if (booms[i].t <= 0 || booms[i].t >= BOOM_LEN) { booms[i].x = x; booms[i].y = y; booms[i].t = 1; break; }
     g_snd.shot = 5; g_snd.shot_vol = 64; g_snd.crash = 64;
+    panic(x, y, M(40));
     int d = dist_approx(x - plx(), y - ply());
     if (d < M(28)) g_hud.hurt_t = TICKS / 4;
     for (int i = 0; i < ncars; i++) {                          /* blast: nearby cars catch it too */
@@ -878,6 +932,7 @@ static void panic(int x, int y, int range)
         if (dist_approx((p->x >> 8) - x, (p->y >> 8) - y) > range) continue;
         p->state = S_FLEE; p->timer = 8 * 256; p->fx = x; p->fy = y;
     }
+    car_panic(x, y, range < M(40) ? range : M(40));
 }
 
 static void ped_move(Ped *p, int head_target, int speed, int dt, int collide)
@@ -909,6 +964,7 @@ static void ped_shoot_at_player(Ped *p, int dt, int d)
     if (p->cd <= 0) {
         p->cd = 230 + (int)(rnd() % 80);
         muzzle(p->x >> 8, p->y >> 8, want, M(1.35));
+        car_panic(p->x >> 8, p->y >> 8, M(30));                /* gunfire: nearby traffic gets out of there */
         g_snd.shot = 1; g_snd.shot_vol = d < M(8) ? 56 : d < M(20) ? 40 : 26;
         int chance = d < M(10) ? 55 : 35;
         if (pl.in_car >= 0) chance -= 15;
