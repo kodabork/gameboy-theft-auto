@@ -7,6 +7,7 @@ cd "$(dirname "$0")"
 mkdir -p build
 python3 tools/gen_tables.py src/tables.c
 [ -f build/terrain.bin ] && [ build/terrain.bin -nt tools/gen_terrain.py ] || python3 tools/gen_terrain.py build/terrain.bin src/terrain.c src/terrain.h
+[ -f build/lanez.bin ] && [ build/lanez.bin -nt build/terrain.bin ] && [ build/lanez.bin -nt tools/gen_lanez.py ] || python3 tools/gen_lanez.py build/terrain.bin build/lanez.bin
 if [ -n "$REGEN_ASSETS" ] || [ ! -f build/assets.bin ]; then
     python3 tools/make_assets.py src/assets.c build/assets.bin
     python3 tools/append_props.py src/assets.c src/assets.h build/assets.bin
@@ -24,8 +25,9 @@ clang --target=arm-none-eabi -mcpu=arm7tdmi -c src/divmod.s -o build/divmod.o
 clang --target=arm-none-eabi -mcpu=arm7tdmi -c src/vfill.s -o build/vfill.o
 clang --target=arm-none-eabi -mcpu=arm7tdmi -c src/assets.s -o build/assets_bin.o
 clang --target=arm-none-eabi -mcpu=arm7tdmi -c src/terrain.s -o build/terrain_bin.o
+clang --target=arm-none-eabi -mcpu=arm7tdmi -c src/lanez.s -o build/lanez_bin.o
 ld.lld -T src/gba.ld -o build/steelharbor.elf build/crt0.o build/vfill.o build/gba_main.o build/game.o build/world.o \
-    build/render.o build/tables.o build/divmod.o build/libc.o build/assets.o build/assets_bin.o build/sound.o build/hud.o build/collide.o build/terrain.o build/terrain_bin.o build/logo.o build/portraits.o build/interiors.o build/minigames.o build/minigame_art.o
+    build/render.o build/tables.o build/divmod.o build/libc.o build/assets.o build/assets_bin.o build/sound.o build/hud.o build/collide.o build/terrain.o build/terrain_bin.o build/lanez_bin.o build/logo.o build/portraits.o build/interiors.o build/minigames.o build/minigame_art.o
 llvm-objcopy -O binary build/steelharbor.elf build/steelharbor.gba
 python3 tools/fixrom.py build/steelharbor.gba "$LOGO_ROM"
 echo "built build/steelharbor.gba"

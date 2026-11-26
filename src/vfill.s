@@ -228,7 +228,15 @@ gmiss:
     ldr     r5, =1424
     mul     r6, r4, r5
     add     r6, r6, r10, asr #20        @ rk
-    ldr     r4, =lane_blk
+    ldr     r5, =2027776                @ TMAP_W * TMAP_W: inside the table?
+    cmp     r6, r5
+    bhs     14f
+    ldr     r5, =lane_zones             @ precomputed: one zone for the block, plain terrain, or varies
+    ldrb    r5, [r5, r6]
+    cmp     r5, #0xFE
+    blo     10f
+    beq     8f
+14: ldr     r4, =lane_blk
     ldr     r5, [r4]
     cmp     r5, r6
     bne     6f
